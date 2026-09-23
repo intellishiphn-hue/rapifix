@@ -1,3 +1,4 @@
+import { JustCreatedConfirm } from "./JustCreatedConfirm";
 import { useMemo, useState } from "react";
 import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_TYPE_LABELS, type Appointment } from "@rapifix/shared";
@@ -53,6 +54,7 @@ export function AgendaPage() {
   const [sunday, setSunday] = useState(false);
   const [tech, setTech] = useState<string>(isTech && user ? user.uid : "");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [justCreated, setJustCreated] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ appointment?: Appointment; preset?: AppointmentPreset } | null>(null);
 
   const today = todayKey();
@@ -180,7 +182,15 @@ export function AgendaPage() {
           setEditing({ appointment: a });
         }}
       />
-      <AppointmentDialog open={!!editing} onClose={() => setEditing(null)} appointment={editing?.appointment} preset={editing?.preset} />
+      <AppointmentDialog
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        appointment={editing?.appointment}
+        preset={editing?.preset}
+        // Cita nueva: se abre de una vez el WhatsApp de confirmación para avisarle al cliente
+        onSaved={(id) => { if (!editing?.appointment) setJustCreated(id); }}
+      />
+      {justCreated && <JustCreatedConfirm id={justCreated} colorOf={staff.colorOf} onClose={() => setJustCreated(null)} />}
     </>
   );
 }

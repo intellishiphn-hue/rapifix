@@ -45,6 +45,8 @@ export interface Appointment extends BaseDoc {
   technicianId: string | null;
   technicianName: string;
   notes: string;
+  reminderSentAt?: TimestampLike | null;
+  confirmationSentAt?: TimestampLike | null;
 }
 
 export const saveAppointmentSchema = z.object({
@@ -67,7 +69,9 @@ export type SaveAppointmentInput = z.infer<typeof saveAppointmentSchema>;
 
 export const appointmentStatusSchema = z.object({
   appointmentId: id,
-  status: z.enum(APPOINTMENT_STATUSES),
+  status: z.enum(APPOINTMENT_STATUSES).nullish(),
+  /** marca que se envió por WhatsApp la confirmación o el recordatorio */
+  sent: z.enum(["confirmation", "reminder"]).nullish(),
 });
 
 // ---------------- Mantenimiento ----------------

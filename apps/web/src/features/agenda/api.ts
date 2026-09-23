@@ -9,7 +9,7 @@ import { useQueryData } from "@/lib/firestore/hooks";
 import { useStaffDirectory } from "@/features/work-orders/api";
 
 export const saveAppointment = callable<SaveAppointmentInput, { appointmentId: string }>("saveAppointment");
-export const setAppointmentStatus = callable<{ appointmentId: string; status: AppointmentStatus }, { ok: boolean }>("setAppointmentStatus");
+export const setAppointmentStatus = callable<{ appointmentId: string; status?: AppointmentStatus; sent?: "confirmation" | "reminder" }, { ok: boolean }>("setAppointmentStatus");
 
 const appointmentsCol = () => collection(db, opsCol.appointments(TENANT_ID));
 

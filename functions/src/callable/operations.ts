@@ -74,7 +74,11 @@ export const setAppointmentStatus = onCall({ region: REGION }, async (request) =
   const input = parseInput(appointmentStatusSchema, request.data);
   const ref = db.doc(`${opsCol.appointments(caller.tid)}/${input.appointmentId}`);
   if (!(await ref.get()).exists) throw new HttpsError("not-found", "La cita no existe.");
-  await ref.update({ status: input.status, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
+  const upd: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid };
+  if (input.status) upd.status = input.status;
+  if (input.sent === "confirmation") upd.confirmationSentAt = FieldValue.serverTimestamp();
+  if (input.sent === "reminder") upd.reminderSentAt = FieldValue.serverTimestamp();
+  await ref.update(upd);
   return { ok: true };
 });
 

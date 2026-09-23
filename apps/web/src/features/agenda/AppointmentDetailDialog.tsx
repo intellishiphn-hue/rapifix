@@ -3,10 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { CalendarClock, Car, ClipboardList, KeyRound, MessageCircle, Pencil, Phone, User, Wrench } from "lucide-react";
 import {
-  APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUSES, APPOINTMENT_TYPE_LABELS, formatPhone,
+  APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUSES, APPOINTMENT_TYPE_LABELS, formatPhone, renderTemplate, templateBody,
   type Appointment, type AppointmentStatus,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
+import { formatPlate } from "@/lib/format";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/Badge";
@@ -22,14 +23,13 @@ type MsgKind = "confirm" | "reminder";
 
 export function appointmentMessage(a: Appointment, taller: string, kind: MsgKind): string {
   const start = a.start.toMillis();
-  const name = a.customerName.split(" ")[0] || a.customerName;
-  const when = `el ${fmtLongDay(start)} a las ${fmtTime(start)}`;
-  const vehicle = a.vehicleLabel ? `\nVehículo: *${a.vehicleLabel}*${a.plate ? ` (placa ${a.plate})` : ""}` : "";
-  const head =
-    kind === "confirm"
-      ? `¡Hola ${name}! 🚗\n\nSu cita en *${taller}* quedó agendada para ${when}.${vehicle}\n\n¿Nos confirma su asistencia?`
-      : `¡Hola ${name}! 🚗\n\nLe recordamos su cita en *${taller}* ${when}.${vehicle}\n\nSi necesita cambiar la hora, respóndanos este mensaje.`;
-  return `${head}\n\nGracias por su preferencia en *${taller}* 🚗`;
+  return renderTemplate(templateBody(kind === "confirm" ? "cita_confirmacion" : "cita_recordatorio"), {
+    cliente: a.customerName.split(" ")[0] || a.customerName,
+    taller,
+    fecha: `el ${fmtLongDay(start)} a las ${fmtTime(start)}`,
+    vehiculo: a.vehicleLabel,
+    placa: a.plate ? formatPlate(a.plate) : "",
+  }).replace(/\nVehículo: \*\* \(placa \)/, "").replace(/ \(placa \)/, "");
 }
 
 export function AppointmentDetailDialog({
@@ -37,17 +37,20 @@ export function AppointmentDetailDialog({
   onClose,
   onEdit,
   color,
+  initialMsg = null,
 }: {
   appointment: Appointment | null;
   onClose: () => void;
   onEdit: (a: Appointment) => void;
   color: string;
+  /** Abre directo el mensaje de WhatsApp (ej. confirmación al crear la cita) */
+  initialMsg?: MsgKind | null;
 }) {
   const { can } = useAuth();
   const navigate = useNavigate();
   const { settings } = useSettings();
   const [busy, setBusy] = useState<AppointmentStatus | null>(null);
-  const [msg, setMsg] = useState<MsgKind | null>(null);
+  const [msg, setMsg] = useState<MsgKind | null>(initialMsg);
   const canManage = can("agenda.manage");
   const taller = settings.name || "RAPIFIX";
   const text = useMemo(() => (a && msg ? appointmentMessage(a, taller, msg) : ""), [a, msg, taller]);
@@ -166,7 +169,12 @@ export function AppointmentDetailDialog({
         </div>
 
         {msg && a.phone && (
-          <WhatsAppComposer context="cita" to={{ phone: a.phone, name: a.customerName }} initial={text} />
+          <WhatsAppComposer
+            context="cita"
+            to={{ phone: a.phone, name: a.customerName }}
+            initial={text}
+            onSent={() => void setAppointmentStatus({ appointmentId: a.id, sent: msg === "confirm" ? "confirmation" : "reminder" }).catch(() => undefined)}
+          />
         )}
       </div>
     </Dialog>

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pruebas automáticas de firestore.rules y storage.rules contra el emulador",
+  "description": "Pruebas autom\u00e1ticas de firestore.rules y storage.rules contra el emulador",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -12,7 +12,6 @@
     "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^22.20.4",
     "firebase": "^12.19.0",
-    "firebase-tools": "^15.30.2",
     "typescript": "~5.9.3",
     "vitest": "^5.0.1"
   }

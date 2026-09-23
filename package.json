@@ -12,7 +12,7 @@
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
     "typecheck": "npm run typecheck -w packages/shared && npm run typecheck -w apps/web && npm --prefix functions run typecheck",
-    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-rapifix \"npm test -w tests/rules\"",
+    "test:rules": "npx -y firebase-tools@15 emulators:exec --only firestore,storage --project demo-rapifix \"npm test -w tests/rules\"",
     "functions:install": "npm --prefix functions install",
     "functions:build": "npm --prefix functions run build",
     "deploy": "npm run build && npm run functions:build && firebase deploy",

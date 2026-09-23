@@ -116,4 +116,4 @@ jobs:
 
       - name: Publicar en Firebase
         if: steps.sa.outputs.ok == 'true'
-        run: npx firebase deploy --project "$FIREBASE_PROJECT" --force --non-interactive
+        run: npx -y firebase-tools@15 deploy --project "$FIREBASE_PROJECT" --force --non-interactive

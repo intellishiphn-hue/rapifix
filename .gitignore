@@ -8,6 +8,8 @@ functions/lib/
 .env
 .env.*
 !.env.example
+# La config web de Firebase NO es secreta (va dentro del JS público); CI la necesita para compilar
+!apps/web/.env.production
 *service-account*.json
 *serviceAccount*.json
 *-firebase-adminsdk-*.json

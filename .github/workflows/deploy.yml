@@ -1,0 +1,119 @@
+name: Deploy
+
+# Publica todo (panel, Cloud Functions, reglas e índices) en producción
+# cada vez que se sube código a main. También se puede lanzar a mano
+# desde la pestaña Actions → Deploy → "Run workflow".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Nunca dos publicaciones a la vez; si llega otra, espera a que termine la actual.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  FIREBASE_PROJECT: rapifix-prod-a1b2c
+
+jobs:
+  deploy:
+    name: Probar y publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Caché de los emuladores de Firebase
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: firebase-emulators-${{ runner.os }}-
+
+      # Mientras no exista el secreto, el deploy automático queda apagado (sin marcar error).
+      - name: Verificar que existe la cuenta de servicio
+        id: sa
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then
+            echo "::notice::Deploy automático apagado: falta el secreto FIREBASE_SERVICE_ACCOUNT (ver docs/DEPLOY-AUTOMATICO.md)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Instalar dependencias
+        if: steps.sa.outputs.ok == 'true'
+        run: |
+          npm ci
+          npm --prefix functions ci
+
+      - name: Pruebas del paquete compartido
+        if: steps.sa.outputs.ok == 'true'
+        run: npm test -w packages/shared
+
+      # Las pruebas de reglas todavía no han corrido nunca contra el emulador: mientras se confirma
+      # la primera corrida en verde, un fallo aquí avisa pero no detiene la publicación.
+      # Cuando pasen en verde, quitar continue-on-error para que sí bloqueen.
+      - name: Pruebas de reglas de seguridad
+        if: steps.sa.outputs.ok == 'true'
+        continue-on-error: true
+        run: npm run test:rules
+
+      - name: Revisión de tipos
+        if: steps.sa.outputs.ok == 'true'
+        run: |
+          npm run typecheck
+          npm run typecheck -w tests/rules
+
+      # La config web (VITE_*) sale de apps/web/.env.production, que está en el repo.
+      - name: Build del panel
+        if: steps.sa.outputs.ok == 'true'
+        run: npm run build
+
+      - name: Build de Functions
+        if: steps.sa.outputs.ok == 'true'
+        run: npm run functions:build
+
+      # En modo --non-interactive, firebase deploy se detiene si falta algún
+      # parámetro de Functions en functions/.env.<proyecto> (aunque tenga default
+      # en código). Ese archivo no está en el repo, así que se crea aquí.
+      # BOOTSTRAP_ADMIN_EMAIL queda vacío salvo que exista la variable del repo
+      # del mismo nombre: vacío = el "primer administrador" ya no se puede reclamar.
+      - name: Parámetros de Functions
+        if: steps.sa.outputs.ok == 'true'
+        env:
+          BOOTSTRAP_ADMIN_EMAIL: ${{ vars.BOOTSTRAP_ADMIN_EMAIL }}
+        run: |
+          f="functions/.env.${FIREBASE_PROJECT}"
+          if [ ! -f "$f" ]; then
+            printf 'TENANT_ID=rapifix\nBOOTSTRAP_ADMIN_EMAIL=%s\n' "$BOOTSTRAP_ADMIN_EMAIL" > "$f"
+          fi
+
+      - name: Autenticarse en Google Cloud
+        if: steps.sa.outputs.ok == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Publicar en Firebase
+        if: steps.sa.outputs.ok == 'true'
+        run: npx firebase deploy --project "$FIREBASE_PROJECT" --force --non-interactive

@@ -207,7 +207,8 @@ service cloud.firestore {
           allow update: if canWorkOrder(parentOrder())
             && incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'visibleToCustomer', 'stage'])
             && isStr(incoming().caption, 0, 200)
-            && incoming().visibleToCustomer is bool;
+            && incoming().visibleToCustomer is bool
+            && incoming().stage in ['reception', 'diagnosis', 'before', 'during', 'after', 'damage'];
           allow delete: if hasRole(tid, managers());
         }
       }
@@ -283,6 +284,24 @@ service cloud.firestore {
       match /maintenance/{id} {
         allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
         allow write: if false;
+      }
+      // Historial de WhatsApp: cada vez que alguien abre WhatsApp con un mensaje del sistema.
+      // Se crea desde el panel, no se edita ni se borra.
+      match /messages/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow create: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'technician', 'warehouse'])
+          && incoming().keys().hasOnly(['to', 'name', 'body', 'orderId', 'orderCode', 'context', 'mode', 'createdBy', 'createdByName', 'at'])
+          && isStr(incoming().to, 5, 20)
+          && isStr(incoming().name, 0, 120)
+          && isStr(incoming().body, 1, 4000)
+          && (incoming().orderId == null || isStr(incoming().orderId, 1, 128))
+          && (incoming().orderCode == null || isStr(incoming().orderCode, 1, 30))
+          && isStr(incoming().context, 0, 40)
+          && incoming().mode == 'manual'
+          && incoming().createdBy == request.auth.uid
+          && isStr(incoming().createdByName, 0, 120)
+          && incoming().at == request.time;
+        allow update, delete: if false;
       }
       match /employees/{uid} {
         allow read: if inTenant(tid);

@@ -79,6 +79,9 @@ export const settingsSchema = z.object({
   quotePrefix: trimmed(6).min(1, "Obligatorio").regex(/^[A-Z0-9-]+$/, "Solo mayúsculas y números"),
   avgKmPerMonth: z.number({ error: "Kilómetros no válidos" }).int().min(100, "Mínimo 100 km").max(20000),
   oilChangeKm: z.number({ error: "Kilómetros no válidos" }).int().min(1000, "Mínimo 1,000 km").max(30000),
+  customDomain: z.string().trim().toLowerCase()
+    .transform((v) => v.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, ""))
+    .refine((v) => v === "" || /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(v), "Dominio no válido (ej. rapifix.hn)"),
 });
 export type SettingsInput = z.infer<typeof settingsSchema>;
 

@@ -1,19 +1,33 @@
 name: CI
 
+# Revisión en cada pull request y en cada push. No publica nada
+# (la publicación está en deploy.yml).
 on:
   pull_request:
   push:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
+    name: Tipos, pruebas y build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
       - name: Instalar dependencias
         run: |
           npm ci
@@ -21,16 +35,37 @@ jobs:
       - name: Pruebas del paquete compartido
         run: npm test -w packages/shared
       - name: Revisión de tipos
-        run: npm run typecheck
+        run: |
+          npm run typecheck
+          npm run typecheck -w tests/rules
       - name: Build de Functions
         run: npm run functions:build
+      # La config web (VITE_*) sale de apps/web/.env.production, que está en el repo.
       - name: Build del panel
-        env:
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
-          VITE_TENANT_ID: rapifix
         run: npm run build
+
+  rules:
+    name: Pruebas de reglas de seguridad
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Los emuladores de Firestore y Storage corren en Java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Caché de los emuladores de Firebase
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: firebase-emulators-${{ runner.os }}-
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Pruebas de firestore.rules y storage.rules
+        run: npm run test:rules

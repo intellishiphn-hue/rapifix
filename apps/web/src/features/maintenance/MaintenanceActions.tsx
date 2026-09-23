@@ -42,7 +42,7 @@ export function useMaintenanceActions() {
     <>
       <Dialog open={!!reminder} onClose={() => setReminder(null)} title="Recordatorio de mantenimiento" description={reminder ? `Para ${reminder.customerName} · ${formatPhone(reminder.phone)}` : undefined}>
         {reminder && (reminder.phone ? (
-          <WhatsAppComposer
+          <WhatsAppComposer context="mantenimiento"
             to={{ phone: reminder.phone, name: reminder.customerName }}
             initial={maintenanceMessage(reminder, settings.name || "RAPIFIX")}
             onSent={() => {

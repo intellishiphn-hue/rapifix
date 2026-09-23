@@ -1,4 +1,4 @@
-import { formatMoney, renderTemplate, whatsappLink, DEFAULT_TEMPLATES, templateForStatus, type WorkOrder, type WorkOrderStatus, type WorkshopSettings } from "@rapifix/shared";
+import { formatMoney, renderTemplate, whatsappLink, templateBody, templateForStatus, type WorkOrder, type WorkOrderStatus, type WorkshopSettings } from "@rapifix/shared";
 import { formatPlate } from "@/lib/format";
 
 /** Link del portal del cliente (Fase 3). */
@@ -23,8 +23,8 @@ export function messageForStatus(order: WorkOrder, status: WorkOrderStatus, sett
 }
 
 export function messageFromTemplate(order: WorkOrder, key: string, settings: WorkshopSettings): string {
-  const t = DEFAULT_TEMPLATES.find((x) => x.key === key);
-  return t ? renderTemplate(t.body, orderVars(order, settings)) : "";
+  const body = templateBody(key);
+  return body ? renderTemplate(body, orderVars(order, settings)) : "";
 }
 
 /** Fallback manual: abre WhatsApp con el mensaje listo para enviar. */

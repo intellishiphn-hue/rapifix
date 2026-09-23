@@ -133,6 +133,8 @@ export interface WorkshopSettings {
   avgKmPerMonth: number;
   /** Cada cuántos km se recomienda el cambio de aceite (detección automática) */
   oilChangeKm: number;
+  /** Dominio propio (ej. rapifix.hn) cuando se conecte en Firebase Hosting */
+  customDomain: string;
   updatedAt?: TimestampLike;
   updatedBy?: string;
 }
@@ -156,6 +158,7 @@ export const DEFAULT_SETTINGS: WorkshopSettings = {
   quotePrefix: "COT",
   avgKmPerMonth: 1500,
   oilChangeKm: 5000,
+  customDomain: "",
 };
 
 export interface AuditLog {

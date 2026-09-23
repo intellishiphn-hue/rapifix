@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 import { DEFAULT_TENANT_ID } from "@rapifix/shared";
 
 const config = {
@@ -26,6 +27,12 @@ if (!config.apiKey || !config.projectId) {
 }
 
 export const app = initializeApp(config);
+
+// App Check (protección contra bots): se activa al poner VITE_RECAPTCHA_SITE_KEY (ver docs/FASE-7.md)
+const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
+if (recaptchaKey && import.meta.env.VITE_USE_EMULATORS !== "true") {
+  initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(recaptchaKey), isTokenAutoRefreshEnabled: true });
+}
 export const auth = getAuth(app);
 // Caché local: la app sigue mostrando datos si el internet del taller falla un momento
 export const db = initializeFirestore(app, {

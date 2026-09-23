@@ -91,7 +91,7 @@ export function ReminderQueueCard() {
         footer={queue && queue.length > 1 ? <Button variant="ghost" icon={<SkipForward className="h-4 w-4" />} onClick={advance}>Saltar este</Button> : undefined}
       >
         {current && (
-          <WhatsAppComposer
+          <WhatsAppComposer context="mantenimiento"
             key={current.id}
             to={{ phone: current.phone, name: current.customerName }}
             initial={maintenanceMessage(current, settings.name || "RAPIFIX")}

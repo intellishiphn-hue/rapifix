@@ -160,3 +160,20 @@ export function hnDayKey(d: Date | number): string {
   const ms = typeof d === "number" ? d : d.getTime();
   return new Date(ms - 6 * 3600 * 1000).toISOString().slice(0, 10);
 }
+
+// ---------------- Historial de WhatsApp ----------------
+export interface MessageLog {
+  id: string;
+  to: string;
+  name: string;
+  body: string;
+  orderId: string | null;
+  orderCode: string | null;
+  /** de dónde salió: orden, cotización, mantenimiento, cobro, cita... */
+  context: string;
+  /** manual = se abrió WhatsApp con el mensaje listo (el envío lo confirma la persona) */
+  mode: "manual";
+  createdBy: string;
+  createdByName: string;
+  at: TimestampLike;
+}

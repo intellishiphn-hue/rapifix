@@ -50,6 +50,7 @@ export const PERMISSIONS = [
   "expenses.manage",
   "reports.view",
   "reports.financial",
+  "messages.read",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -66,7 +67,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "settings.read",
     "orders.read", "orders.create", "orders.diagnose", "quotes.manage",
     "catalog.read", "sales.create", "payments.read",
-    "agenda.read", "agenda.manage", "maintenance.manage", "employees.read", "reports.view",
+    "agenda.read", "agenda.manage", "maintenance.manage", "employees.read", "reports.view", "messages.read",
   ],
   technician: ["dashboard.view", "customers.read", "vehicles.read", "orders.read", "orders.diagnose", "catalog.read", "agenda.read"],
   warehouse: [
@@ -75,7 +76,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   seller: [
     "dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "orders.read",
-    "catalog.read", "sales.create", "payments.read", "agenda.read", "reports.view",
+    "catalog.read", "sales.create", "payments.read", "agenda.read", "reports.view", "messages.read",
   ],
 };
 

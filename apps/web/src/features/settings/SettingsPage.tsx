@@ -63,7 +63,7 @@ export function SettingsPage() {
       city: settings.city, phone: formatPhone(settings.phone), whatsapp: formatPhone(settings.whatsapp), email: settings.email,
       website: settings.website, hours: settings.hours, currency: settings.currency, taxRate: settings.taxRate,
       workOrderPrefix: settings.workOrderPrefix, quotePrefix: settings.quotePrefix,
-      avgKmPerMonth: settings.avgKmPerMonth, oilChangeKm: settings.oilChangeKm,
+      avgKmPerMonth: settings.avgKmPerMonth, oilChangeKm: settings.oilChangeKm, customDomain: settings.customDomain ?? "",
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, settings.updatedAt?.toMillis?.()]);
@@ -138,6 +138,9 @@ export function SettingsPage() {
                 <Field label="WhatsApp del taller" error={errors.whatsapp?.message}><Input {...register("whatsapp")} inputMode="tel" /></Field>
                 <Field label="Correo" error={errors.email?.message}><Input {...register("email")} type="email" /></Field>
                 <Field label="Sitio web" error={errors.website?.message}><Input {...register("website")} placeholder="rapifix.com" /></Field>
+                <Field label="Dominio propio del sistema" error={errors.customDomain?.message} hint="Solo cuando se conecte en Firebase Hosting (ej. app.rapifix.hn). Permite los pagos en línea desde ese dominio.">
+                  <Input {...register("customDomain")} placeholder="app.rapifix.hn" />
+                </Field>
               </div>
             </Card>
             <Card>

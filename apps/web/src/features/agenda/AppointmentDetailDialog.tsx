@@ -166,7 +166,7 @@ export function AppointmentDetailDialog({
         </div>
 
         {msg && a.phone && (
-          <WhatsAppComposer to={{ phone: a.phone, name: a.customerName }} initial={text} />
+          <WhatsAppComposer context="cita" to={{ phone: a.phone, name: a.customerName }} initial={text} />
         )}
       </div>
     </Dialog>

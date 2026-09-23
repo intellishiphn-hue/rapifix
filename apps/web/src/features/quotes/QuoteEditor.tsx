@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ClipboardCheck, Copy, FilePlus2, FileText, Plus, Printer, Save, Send } from "lucide-react";
 import {
-  computeQuote, DEFAULT_TEMPLATES, formatMoney, QUOTE_ITEM_LABELS, renderTemplate,
+  computeQuote, templateBody, formatMoney, QUOTE_ITEM_LABELS, renderTemplate,
   type QuoteItemInput, type QuoteItemType, type WorkOrder,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -49,7 +49,7 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
 
   const preview = useMemo(() => (lines ? computeQuote(lines, settings.taxRate) : null), [lines, settings.taxRate]);
   const quoteMessage = (total: number) =>
-    renderTemplate(DEFAULT_TEMPLATES.find((x) => x.key === "cotizacion_enviada")!.body, { ...orderVars(order, settings), total: formatMoney(total) });
+    renderTemplate(templateBody("cotizacion_enviada"), { ...orderVars(order, settings), total: formatMoney(total) });
 
   const persist = async (): Promise<string | null> => {
     if (!lines) return null;
@@ -161,7 +161,7 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
 
       {message !== null && (
         <Dialog open onClose={() => setMessage(null)} title="Enviar cotización por WhatsApp" description="El mensaje incluye el link donde el cliente la revisa y aprueba." footer={<Button variant="ghost" onClick={() => setMessage(null)}>Cerrar</Button>}>
-          <WhatsAppComposer order={order} initial={message} onSent={() => setMessage(null)} />
+          <WhatsAppComposer context="cotización" order={order} initial={message} onSent={() => setMessage(null)} />
         </Dialog>
       )}
       {current && recording && <RecordDecisionDialog quote={current} open onClose={() => setRecording(false)} />}

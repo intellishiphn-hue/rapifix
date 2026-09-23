@@ -51,6 +51,7 @@ export const opsCol = {
   appointments: (tid: string) => `tenants/${tid}/appointments`,
   maintenance: (tid: string) => `tenants/${tid}/maintenance`,
   employees: (tid: string) => `tenants/${tid}/employees`,
+  messages: (tid: string) => `tenants/${tid}/messages`,
 } as const;
 
 export const financeCol = {

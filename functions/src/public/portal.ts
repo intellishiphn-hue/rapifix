@@ -1,3 +1,4 @@
+import { rateLimit, requestIp, requireAppCheck } from "../lib/rateLimit";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import { orderCol, portalTokenSchema, quoteCol, respondQuoteSchema } from "@rapifix/shared";
@@ -25,7 +26,10 @@ function clientIp(raw: { headers: Record<string, unknown>; ip?: string }): strin
  * Guarda fecha y hora del servidor, identificador de aprobación, IP y navegador.
  */
 export const respondToQuote = onCall({ region: REGION }, async (request) => {
+  requireAppCheck(request);
   const input = parseInput(respondQuoteSchema, request.data);
+  await rateLimit("respond", [input.token], 10, 600);
+  await rateLimit("respond-ip", [requestIp(request)], 60, 600);
   const { tid, orderId, quoteId } = await loadByToken(input.token);
   if (!quoteId) throw new HttpsError("failed-precondition", "No hay una cotización pendiente.");
   const quoteRef = db.doc(`${quoteCol.quotes(tid)}/${quoteId}`);
@@ -58,7 +62,9 @@ export const respondToQuote = onCall({ region: REGION }, async (request) => {
 
 /** Marca la cotización como "Vista por el cliente" la primera vez que abre el portal. */
 export const markQuoteViewed = onCall({ region: REGION }, async (request) => {
+  requireAppCheck(request);
   const { token } = parseInput(portalTokenSchema, request.data);
+  await rateLimit("viewed", [token], 30, 600);
   const { tid, orderId, quoteId } = await loadByToken(token);
   if (!quoteId) return { ok: true };
   const quoteRef = db.doc(`${quoteCol.quotes(tid)}/${quoteId}`);

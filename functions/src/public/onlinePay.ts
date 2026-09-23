@@ -1,8 +1,9 @@
+import { rateLimit, requestIp, requireAppCheck } from "../lib/rateLimit";
 import { logger } from "firebase-functions/v2";
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { catalogCol, onlinePayStartSchema, orderCol, portalTokenSchema, quoteCol } from "@rapifix/shared";
+import { catalogCol, col, onlinePayStartSchema, orderCol, portalTokenSchema, quoteCol } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput } from "../lib/guards";
@@ -11,6 +12,14 @@ import { getRokiConfig, hondurasTime, rokiRequest, toDecimal, verifyRokiSignatur
 
 const PROJECT = process.env.GCLOUD_PROJECT ?? "";
 const ALLOWED_ORIGINS = [`https://${PROJECT}.web.app`, `https://${PROJECT}.firebaseapp.com`, "http://localhost:5173"];
+
+/** Dominios desde donde se puede iniciar un pago: los de Firebase y el dominio propio de Configuración. */
+async function allowedOrigin(tid: string, origin: string): Promise<boolean> {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  const s = await db.doc(`${col.settings(tid)}/general`).get();
+  const domain = String(s.get("customDomain") ?? "").trim().toLowerCase();
+  return !!domain && (origin === `https://${domain}` || origin === `https://www.${domain}`);
+}
 
 async function loadPortal(token: string) {
   const portal = await db.doc(`${quoteCol.portal}/${token}`).get();
@@ -22,10 +31,13 @@ async function loadPortal(token: string) {
 
 /** Crea (o reutiliza) el cobro en ROKI por el saldo de la orden y devuelve el link de pago. Público. */
 export const createOnlinePayment = onCall({ region: REGION }, async (request) => {
+  requireAppCheck(request);
   const input = parseInput(onlinePayStartSchema, request.data);
+  await rateLimit("pay", [input.token], 10, 600);
+  await rateLimit("pay-ip", [requestIp(request)], 60, 600);
   const origin = input.origin.replace(/\/$/, "");
-  if (!ALLOWED_ORIGINS.includes(origin)) throw new HttpsError("permission-denied", "Origen no permitido.");
   const { tid, orderId } = await loadPortal(input.token);
+  if (!(await allowedOrigin(tid, origin))) throw new HttpsError("permission-denied", "Origen no permitido.");
   const cfg = await getRokiConfig(tid);
   if (!cfg?.enabled || !cfg.secretKey) throw new HttpsError("failed-precondition", "Los pagos en línea no están activos. Contacte al taller.");
 
@@ -78,7 +90,9 @@ export const createOnlinePayment = onCall({ region: REGION }, async (request) =>
 
 /** Al regresar del pago, consulta a ROKI directamente (no se confía en la redirección). Público. */
 export const checkOnlinePayment = onCall({ region: REGION }, async (request) => {
+  requireAppCheck(request);
   const { token } = parseInput(portalTokenSchema, request.data);
+  await rateLimit("paycheck", [token], 30, 600);
   const { tid, orderId } = await loadPortal(token);
   const cfg = await getRokiConfig(tid);
   if (!cfg?.secretKey) return { status: "disabled" };

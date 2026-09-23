@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { Copy, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import { whatsappLink, type WorkOrder } from "@rapifix/shared";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { normalizePhone, opsCol, whatsappLink, type WorkOrder } from "@rapifix/shared";
+import { db, TENANT_ID } from "@/lib/firebase";
+import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Field";
 
@@ -15,6 +18,7 @@ export function WhatsAppComposer({
   initial,
   onSent,
   compact,
+  context,
 }: {
   order?: WorkOrder;
   /** Destinatario directo (cuando no hay orden, ej. cotización directa) */
@@ -22,7 +26,11 @@ export function WhatsAppComposer({
   initial: string;
   onSent?: () => void;
   compact?: boolean;
+  /** De dónde sale el mensaje (para el historial): orden, cotización, mantenimiento, cobro, cita... */
+  context?: string;
 }) {
+  const { user } = useAuth();
+  const myName = useDisplayName();
   const phone = to?.phone ?? order?.customer.whatsapp ?? order?.customer.phone ?? "";
   const name = to?.name ?? order?.customer.fullName ?? "el cliente";
   const [text, setText] = useState(initial);
@@ -47,6 +55,21 @@ export function WhatsAppComposer({
           disabled={!text.trim() || !phone}
           onClick={() => {
             window.open(whatsappLink(phone, text.trim()), "_blank", "noopener");
+            // Historial de WhatsApp (no bloquea el envío si falla)
+            if (user) {
+              addDoc(collection(db, opsCol.messages(TENANT_ID)), {
+                to: (normalizePhone(phone) || phone).slice(0, 20),
+                name: name.slice(0, 120),
+                body: text.trim().slice(0, 4000),
+                orderId: order?.id ?? null,
+                orderCode: order?.code ?? null,
+                context: (context ?? (order ? "orden" : "mensaje")).slice(0, 40),
+                mode: "manual",
+                createdBy: user.uid,
+                createdByName: myName.slice(0, 120),
+                at: serverTimestamp(),
+              }).catch(() => undefined);
+            }
             onSent?.();
           }}
         >

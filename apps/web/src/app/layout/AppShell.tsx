@@ -3,6 +3,8 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { cn } from "@/lib/cn";
+import { useAuth } from "@/lib/auth/useAuth";
+import { useTemplateOverridesSync } from "@/features/whatsapp/api";
 
 const KEY = "rapifix.sidebarCollapsed";
 
@@ -16,6 +18,8 @@ export function AppShell() {
   });
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
+  useTemplateOverridesSync(!!user);
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 

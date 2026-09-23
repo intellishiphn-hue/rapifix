@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ExternalLink, HandCoins, MessageCircle, ShoppingCart, Wrench } from "lucide-react";
-import { DEFAULT_TEMPLATES, formatMoney, renderTemplate, type Sale, type WorkOrder } from "@rapifix/shared";
+import { formatMoney, renderTemplate, templateBody, type Sale, type WorkOrder } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { formatDate, formatPlate } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -157,8 +157,7 @@ function ReminderDialog({ charge, onClose }: { charge: Charge; onClose: () => vo
 
   const text = useMemo(() => {
     if (charge.kind === "order") {
-      const t = DEFAULT_TEMPLATES.find((x) => x.key === "pago_pendiente")!;
-      return renderTemplate(t.body, { ...orderVars(charge.order, settings), total: formatMoney(charge.order.balance) });
+      return renderTemplate(templateBody("pago_pendiente"), { ...orderVars(charge.order, settings), total: formatMoney(charge.order.balance) });
     }
     const name = customer.data?.fullName || charge.sale.customerName;
     return renderTemplate(SALE_TEMPLATE, { cliente: name.split(" ")[0] ?? name, orden: charge.sale.code, total: formatMoney(charge.sale.balance), taller });
@@ -168,11 +167,11 @@ function ReminderDialog({ charge, onClose }: { charge: Charge; onClose: () => vo
   return (
     <Dialog open onClose={onClose} size="md" title={title} description="Revise el mensaje y envíelo por WhatsApp.">
       {charge.kind === "order" ? (
-        <WhatsAppComposer order={charge.order} initial={text} onSent={onClose} />
+        <WhatsAppComposer context="cobro" order={charge.order} initial={text} onSent={onClose} />
       ) : customer.loading ? <Skeleton className="h-32" /> : !customer.data || !(customer.data.whatsapp || customer.data.phone) ? (
         <p className="text-sm text-slate-600">El cliente no tiene teléfono registrado.</p>
       ) : (
-        <WhatsAppComposer to={{ phone: customer.data.whatsapp || customer.data.phone, name: customer.data.fullName }} initial={text} onSent={onClose} />
+        <WhatsAppComposer context="cobro" to={{ phone: customer.data.whatsapp || customer.data.phone, name: customer.data.fullName }} initial={text} onSent={onClose} />
       )}
     </Dialog>
   );

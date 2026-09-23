@@ -4,7 +4,7 @@ import { getDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { Car, ClipboardCheck, ClipboardList, Copy, ExternalLink, FilePlus2, FileText, Printer, Save, Send, UserPlus } from "lucide-react";
 import {
-  computeQuote, convertQuoteSchema, DEFAULT_TEMPLATES, EMPTY_RECEPTION, formatMoney, PRIORITIES, PRIORITY_LABELS, renderTemplate, WORK_TYPES, WORK_TYPE_LABELS,
+  computeQuote, convertQuoteSchema, templateBody, EMPTY_RECEPTION, formatMoney, PRIORITIES, PRIORITY_LABELS, renderTemplate, WORK_TYPES, WORK_TYPE_LABELS,
   type Customer, type Priority, type Quote, type QuoteItemInput, type ReceptionInput, type Vehicle, type WorkType,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -32,8 +32,7 @@ import { blankLine, DecisionInfo, QuoteLinesEditor, QuoteView, RecordDecisionDia
 const quoteLink = (q: Pick<Quote, "publicToken">) => (q.publicToken ? `${window.location.origin}/orden/${q.publicToken}` : "");
 
 function directMessage(q: Quote, taller: string) {
-  const t = DEFAULT_TEMPLATES.find((x) => x.key === "cotizacion_directa")!;
-  return renderTemplate(t.body, {
+  return renderTemplate(templateBody("cotizacion_directa"), {
     cliente: q.customerName.split(" ")[0],
     vehiculo: q.vehicleLabel,
     placa: formatPlate(q.plate),
@@ -265,7 +264,7 @@ export function DirectQuotePage() {
       )}
       {message !== null && quote && (
         <Dialog open onClose={() => setMessage(null)} title="Enviar cotización por WhatsApp" description="Incluye el link donde el cliente la revisa y la aprueba." footer={<Button variant="ghost" onClick={() => setMessage(null)}>Cerrar</Button>}>
-          <WhatsAppComposer to={to} initial={message} onSent={() => setMessage(null)} />
+          <WhatsAppComposer context="cotización" to={to} initial={message} onSent={() => setMessage(null)} />
         </Dialog>
       )}
       {quote && recording && <RecordDecisionDialog quote={quote} open onClose={() => setRecording(false)} />}

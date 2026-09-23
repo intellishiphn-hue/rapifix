@@ -1,6 +1,6 @@
 import { collection, limit, orderBy, query, where } from "firebase/firestore";
 import {
-  DEFAULT_TEMPLATES, opsCol, renderTemplate,
+  opsCol, templateBody, renderTemplate,
   type Maintenance, type MaintenanceStatus, type SaveMaintenanceInput,
 } from "@rapifix/shared";
 import { callable, db, TENANT_ID } from "@/lib/firebase";
@@ -49,10 +49,9 @@ export function estimateLabel(m: Maintenance): string {
 
 /** Plantilla "mantenimiento" con el servicio y el último servicio registrado. */
 export function maintenanceMessage(m: Maintenance, taller: string): string {
-  const t = DEFAULT_TEMPLATES.find((x) => x.key === "mantenimiento");
-  const service = /^cambio de aceite/i.test(m.serviceName) ? "su cambio de aceite" : m.serviceName.charAt(0).toLowerCase() + m.serviceName.slice(1);
+    const service = /^cambio de aceite/i.test(m.serviceName) ? "su cambio de aceite" : m.serviceName.charAt(0).toLowerCase() + m.serviceName.slice(1);
   const last = [m.lastDate ? `el ${formatDate(m.lastDate)}` : "", m.lastMileage ? `a los ${formatKm(m.lastMileage)}` : ""].filter(Boolean).join(" ");
-  return renderTemplate(t?.body ?? "", {
+  return renderTemplate(templateBody("mantenimiento"), {
     cliente: m.customerName.split(" ")[0] || m.customerName,
     vehiculo: m.vehicleLabel,
     placa: formatPlate(m.plate),

@@ -3,7 +3,7 @@
 **Sistema de Gestión para Taller Automotriz**
 
 React + TypeScript + Firebase (Auth, Firestore, Storage, Cloud Functions, Hosting).
-Arquitectura completa en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md). Notas por fase en [`docs/FASE-1.md`](docs/FASE-1.md) , [`docs/FASE-2.md`](docs/FASE-2.md), [`docs/FASE-3.md`](docs/FASE-3.md) , [`docs/FASE-4.md`](docs/FASE-4.md), [`docs/FASE-5.md`](docs/FASE-5.md) y [`docs/PAGOS-EN-LINEA.md`](docs/PAGOS-EN-LINEA.md).
+Arquitectura completa en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md). Notas por fase en [`docs/FASE-1.md`](docs/FASE-1.md) , [`docs/FASE-2.md`](docs/FASE-2.md), [`docs/FASE-3.md`](docs/FASE-3.md) , [`docs/FASE-4.md`](docs/FASE-4.md), [`docs/FASE-5.md`](docs/FASE-5.md), [`docs/FASE-7.md`](docs/FASE-7.md) y [`docs/PAGOS-EN-LINEA.md`](docs/PAGOS-EN-LINEA.md).
 
 ## Estructura
 
@@ -29,12 +29,12 @@ npm install                 # panel + paquete compartido
 npm run functions:install   # Cloud Functions
 ```
 
-Variables de entorno (NO se suben a GitHub):
+Variables de entorno:
 
 | Archivo | Contenido |
 |---|---|
 | `apps/web/.env.local` | Config web de Firebase para desarrollo (ver `.env.example`) |
-| `apps/web/.env.production` | La misma config, usada al compilar para publicar |
+| `apps/web/.env.production` | La misma config, usada al compilar para publicar. **Sí está en el repo** (no es secreta: va en el JS público) |
 | `functions/.env.<PROJECT_ID>` | `BOOTSTRAP_ADMIN_EMAIL` y `TENANT_ID` (ver `functions/.env.example`) |
 
 La config web se obtiene con:
@@ -56,9 +56,12 @@ Otros comandos:
 ```bash
 npm run typecheck             # revisión de tipos de todo el proyecto
 npm test -w packages/shared   # pruebas unitarias
+npm run test:rules            # pruebas de firestore.rules y storage.rules (emulador; requiere Java 21)
 ```
 
 ## Publicar (deploy)
+
+Automático: cada `git push` a `main` prueba y publica (ver [`docs/DEPLOY-AUTOMATICO.md`](docs/DEPLOY-AUTOMATICO.md)). A mano:
 
 ```bash
 npm run deploy             # todo: panel, functions, reglas e índices
@@ -91,5 +94,5 @@ URL: `https://<PROJECT_ID>.web.app`
 | 3 | Cotizaciones, aprobación por link, portal del cliente | ✅ |
 | 4 | Inventario, productos, servicios, POS, pagos, pagos en línea (ROKI) | ✅ |
 | 5 | Agenda, mantenimiento, técnicos, proveedores, compras, gastos, reportes | ✅ |
-| 6 | WhatsApp Web, plantillas, eventos, automatizaciones | |
-| 7 | Seguridad, auditoría, optimización, deployment automático | |
+| 6 | WhatsApp: plantillas editables e historial ✅ · envío 100% automático pendiente | 🟡 |
+| 7 | Seguridad, pruebas de reglas, optimización, deploy automático, dominio propio | ✅ |

@@ -43,6 +43,35 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   { key: "pago_pendiente", name: "Pago pendiente", body: `¡Hola {{cliente}}! 🧾\n\nLe recordamos que la orden *{{orden}}* de su *{{vehiculo}}* tiene un saldo pendiente de *{{total}}*.\n\n${FIRMA}` },
 ];
 
-export function templateForStatus(status: WorkOrderStatus): DefaultTemplate | undefined {
-  return DEFAULT_TEMPLATES.find((t) => t.status === status);
+// Textos editados por el taller (Configuración de WhatsApp). Se cargan al iniciar sesión.
+let overrides: Record<string, string> = {};
+export function setTemplateOverrides(map: Record<string, string> | null | undefined) {
+  overrides = { ...(map ?? {}) };
 }
+/** Texto vigente de una plantilla: el editado por el taller o el de fábrica. */
+export function templateBody(key: string): string {
+  const custom = overrides[key];
+  if (custom && custom.trim()) return custom;
+  return DEFAULT_TEMPLATES.find((t) => t.key === key)?.body ?? "";
+}
+export function isTemplateCustomized(key: string): boolean {
+  return !!overrides[key]?.trim();
+}
+
+export function templateForStatus(status: WorkOrderStatus): DefaultTemplate | undefined {
+  const t = DEFAULT_TEMPLATES.find((x) => x.status === status);
+  return t ? { ...t, body: templateBody(t.key) } : undefined;
+}
+
+/** Variables que acepta cada plantilla (para el editor) */
+export const TEMPLATE_VARIABLE_LABELS: Record<(typeof TEMPLATE_VARIABLES)[number], string> = {
+  cliente: "Nombre del cliente",
+  vehiculo: "Vehículo",
+  placa: "Placa",
+  orden: "Número de orden o cotización",
+  total: "Total o saldo",
+  link: "Link del cliente",
+  taller: "Nombre del taller",
+  servicio: "Servicio (mantenimiento)",
+  ultimo: "Último servicio (mantenimiento)",
+};

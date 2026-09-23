@@ -31,7 +31,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { label: "Cotizaciones", to: "/cotizaciones", icon: FileText, permission: "orders.read" },
       { label: "Mantenimiento", to: "/mantenimiento", icon: CalendarClock, permission: "maintenance.manage" },
       { label: "Portal del cliente", to: "/portal", icon: Globe, permission: "orders.read" },
-      { label: "WhatsApp", to: "/whatsapp", icon: MessageCircle, phase: 6 },
+      { label: "WhatsApp", to: "/whatsapp", icon: MessageCircle, permission: "messages.read" },
     ],
   },
   {

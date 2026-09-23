@@ -3,7 +3,7 @@
 **Sistema de Gestión para Taller Automotriz**
 
 React + TypeScript + Firebase (Auth, Firestore, Storage, Cloud Functions, Hosting).
-Arquitectura completa en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md). Notas por fase en [`docs/FASE-1.md`](docs/FASE-1.md) , [`docs/FASE-2.md`](docs/FASE-2.md), [`docs/FASE-3.md`](docs/FASE-3.md) y [`docs/FASE-4.md`](docs/FASE-4.md).
+Arquitectura completa en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md). Notas por fase en [`docs/FASE-1.md`](docs/FASE-1.md) , [`docs/FASE-2.md`](docs/FASE-2.md), [`docs/FASE-3.md`](docs/FASE-3.md) , [`docs/FASE-4.md`](docs/FASE-4.md) y [`docs/PAGOS-EN-LINEA.md`](docs/PAGOS-EN-LINEA.md).
 
 ## Estructura
 
@@ -89,7 +89,7 @@ URL: `https://<PROJECT_ID>.web.app`
 | 1 | Arquitectura, Firebase, Auth, layout, dashboard, clientes, vehículos | ✅ |
 | 2 | Órdenes de trabajo, estados, Kanban, recepción, fotos, diagnóstico, historial | ✅ |
 | 3 | Cotizaciones, aprobación por link, portal del cliente | ✅ |
-| 4 | Inventario, productos, servicios, POS, pagos | ✅ |
+| 4 | Inventario, productos, servicios, POS, pagos, pagos en línea (ROKI) | ✅ |
 | 5 | Agenda, mantenimiento, técnicos, proveedores, gastos, reportes | |
 | 6 | WhatsApp Web, plantillas, eventos, automatizaciones | |
 | 7 | Seguridad, auditoría, optimización, deployment automático | |

@@ -21,3 +21,6 @@ export { registerInventoryMovement, consumeOrderPart } from "./callable/inventor
 export { registerPayment, voidPayment } from "./callable/payments";
 export { createSale } from "./callable/sales";
 export { seedDemoCatalog } from "./callable/seedCatalog";
+// Pagos en línea con ROKI
+export { getOnlinePayConfig, saveOnlinePayConfig } from "./callable/onlinePayConfig";
+export { createOnlinePayment, checkOnlinePayment, rokiWebhook, reconcileOnlinePayments } from "./public/onlinePay";

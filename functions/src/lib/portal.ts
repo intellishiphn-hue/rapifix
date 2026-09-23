@@ -1,6 +1,6 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  col, orderCol, PORTAL_STEPS, quoteCol, STATUS_META,
+  catalogCol, col, orderCol, PORTAL_STEPS, quoteCol, STATUS_META,
   type PublicPortal, type Quote, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "./admin";
@@ -22,13 +22,15 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
   const token = o.portalToken as string | undefined;
   if (!token) return null;
 
-  const [settings, events, photos, quoteSnap] = await Promise.all([
+  const [settings, events, photos, quoteSnap, roki] = await Promise.all([
     db.doc(`${col.settings(tid)}/general`).get(),
     orderSnap.ref.collection("events").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(30).get(),
     orderSnap.ref.collection("photos").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(40).get(),
     o.activeQuoteId ? db.doc(`${quoteCol.quotes(tid)}/${o.activeQuoteId}`).get() : Promise.resolve(null),
+    db.doc(`${catalogCol.privateConfig(tid)}/roki`).get(),
   ]);
   const s = settings.data() ?? {};
+  const onlineEnabled = !!roki.get("enabled") && !!roki.get("secretKey");
   const status = o.status as WorkOrderStatus;
   const step = STATUS_META[status].portalStep; // 0..7, -1 cancelado
   const finished = status === "READY" || status === "DELIVERED";
@@ -86,6 +88,12 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
         }
       : null,
     active: o.portalEnabled !== false && !expired,
+    onlinePayment: {
+      enabled: onlineEnabled && status !== "CANCELLED",
+      balance: Number(o.balance ?? 0),
+      total: Number(o.totals?.total ?? 0),
+      paid: Number(o.paid ?? 0),
+    },
     updatedAt: FieldValue.serverTimestamp(),
   };
   await db.doc(`${quoteCol.portal}/${token}`).set(portal);

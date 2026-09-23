@@ -116,13 +116,17 @@ export const consumePartSchema = z.object({
 });
 
 // ---------------- Pagos ----------------
-export const PAYMENT_METHODS = ["cash", "transfer", "card", "other"] as const;
+export const PAYMENT_METHODS = ["cash", "transfer", "card", "other", "online"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/** Métodos que el personal registra a mano ("online" solo lo registra la pasarela). */
+export const MANUAL_PAYMENT_METHODS = ["cash", "transfer", "card", "other"] as const;
+export type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number];
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "Efectivo",
   transfer: "Transferencia",
   card: "Tarjeta",
   other: "Otro",
+  online: "En línea (ROKI)",
 };
 
 export interface Payment {
@@ -149,7 +153,7 @@ export interface Payment {
 
 const paymentLine = z.object({
   amount: cents.refine((v) => v > 0, "El monto debe ser mayor a 0"),
-  method: z.enum(PAYMENT_METHODS),
+  method: z.enum(MANUAL_PAYMENT_METHODS),
   reference: text(80),
 });
 
@@ -217,3 +221,43 @@ export const createSaleSchema = z.object({
   payments: z.array(paymentLine).max(5),
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
+
+// ---------------- Pagos en línea (ROKI) ----------------
+export interface OnlinePayment {
+  id: string;
+  orderId: string;
+  orderCode: string;
+  amount: number; // centavos
+  status: "creating" | "pending" | "paid" | "failed" | "expired" | "voided" | "refunded" | "error";
+  rokiPaymentId: number | null;
+  transactionId: string | null;
+  checkoutUrl: string;
+  serviceFee: number; // centavos cobrados por ROKI al cliente
+  paymentId: string | null; // pago registrado en RAPIFIX
+  error: string;
+  createdAt: TimestampLike;
+  paidAt?: TimestampLike | null;
+}
+
+export const onlinePayStartSchema = z.object({
+  token: z.string().regex(/^[2-9A-HJ-NP-Z]{10}$/, "Link no válido"),
+  origin: z.string().url().max(200),
+});
+
+export const onlinePayConfigSchema = z.object({
+  enabled: z.boolean(),
+  serviceFee: z.boolean(),
+  secretKey: z.string().trim().regex(/^sk_(test|live)_[A-Za-z0-9_\-]{8,}$/, "La llave secreta debe empezar con sk_test_ o sk_live_").nullish(),
+  webhookSecret: z.string().trim().min(8, "Secreto de webhook no válido").max(300).nullish(),
+});
+export type OnlinePayConfigInput = z.infer<typeof onlinePayConfigSchema>;
+
+export interface OnlinePayConfigStatus {
+  enabled: boolean;
+  serviceFee: boolean;
+  environment: "test" | "live" | null;
+  keyLast4: string;
+  hasWebhookSecret: boolean;
+  webhookUrl: string;
+  lastEventAt: TimestampLike | null;
+}

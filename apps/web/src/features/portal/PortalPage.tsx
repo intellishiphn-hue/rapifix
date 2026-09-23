@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { Check, CheckCircle2, Clock, HelpCircle, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
+import { Check, CheckCircle2, Clock, CreditCard, HelpCircle, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
 import { formatMoney, QUOTE_ITEM_LABELS, whatsappLink, type PublicPortal } from "@rapifix/shared";
 import { callable, db } from "@/lib/firebase";
 import { errorMessage } from "@/lib/errors";
@@ -11,6 +11,78 @@ import { LogoMark } from "@/components/common/Logo";
 
 const respondToQuote = callable<{ token: string; action: "approve" | "reject" | "question"; name?: string; comment?: string }, { result: string; approvalId?: string }>("respondToQuote");
 const markQuoteViewed = callable<{ token: string }, { ok: boolean }>("markQuoteViewed");
+const createOnlinePayment = callable<{ token: string; origin: string }, { checkoutUrl: string }>("createOnlinePayment");
+const checkOnlinePayment = callable<{ token: string }, { status: string }>("checkOnlinePayment");
+
+/** Pago en línea (ROKI). El pago solo se da por hecho cuando el servidor lo confirma con ROKI. */
+function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: string }) {
+  const op = portal.onlinePayment;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [returnState] = useState(() => new URLSearchParams(window.location.search).get("pago"));
+  const [checking, setChecking] = useState(returnState === "ok");
+  const checked = useRef(false);
+
+  useEffect(() => {
+    if (returnState !== "ok" || checked.current) return;
+    checked.current = true;
+    let tries = 0;
+    const run = async () => {
+      tries++;
+      const r = await checkOnlinePayment({ token }).catch(() => ({ status: "pending" }));
+      if (r.status === "paid" || tries >= 4) setChecking(false);
+      else setTimeout(() => void run(), 4000);
+    };
+    void run();
+  }, [returnState, token]);
+
+  useEffect(() => {
+    // Limpia ?pago= de la barra para que al recargar no se repita el aviso
+    if (returnState) window.history.replaceState(null, "", window.location.pathname);
+  }, [returnState]);
+
+  if (!op || portal.kind === "quote" || op.total <= 0) return null;
+  const paidInFull = op.balance <= 0 && op.paid > 0;
+  if (!op.enabled && !paidInFull) return null;
+
+  const pay = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const { checkoutUrl } = await createOnlinePayment({ token, origin: window.location.origin });
+      window.location.href = checkoutUrl;
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className={card}>
+      <h2 className="flex items-center gap-2 font-bold"><CreditCard className="h-5 w-5 text-brand-600" /> Pago</h2>
+      <dl className="mt-3 space-y-1 text-sm">
+        <div className="flex justify-between text-slate-600"><dt>Total de la orden</dt><dd className="tabular">{formatMoney(op.total)}</dd></div>
+        {op.paid > 0 && <div className="flex justify-between text-slate-600"><dt>Pagado</dt><dd className="tabular">{formatMoney(op.paid)}</dd></div>}
+        <div className="flex justify-between pt-1 text-lg font-extrabold"><dt>{paidInFull ? "Saldo" : "Saldo a pagar"}</dt><dd className="tabular">{formatMoney(Math.max(0, op.balance))}</dd></div>
+      </dl>
+      {paidInFull ? (
+        <p className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800"><CheckCircle2 className="h-5 w-5" /> ¡Orden pagada! Gracias.</p>
+      ) : checking ? (
+        <p className="mt-4 flex items-center gap-2 rounded-xl bg-brand-50 p-3 text-sm text-brand-800"><Loader2 className="h-4 w-4 animate-spin" /> Verificando su pago con el banco…</p>
+      ) : (
+        <>
+          {returnState === "ok" && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Su pago se está procesando. En unos minutos se verá reflejado aquí. Si ya le cobraron, no lo intente de nuevo.</p>}
+          {returnState === "cancelado" && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">No se realizó el pago. Puede intentarlo de nuevo cuando guste.</p>}
+          {error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+          <button onClick={() => void pay()} disabled={busy} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-base font-bold text-white hover:bg-brand-700 disabled:opacity-60">
+            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <CreditCard className="h-5 w-5" />} Pagar en línea {formatMoney(op.balance)}
+          </button>
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-slate-400"><ShieldCheck className="h-3.5 w-3.5" /> Pago seguro con tarjeta a través de ROKI</p>
+        </>
+      )}
+    </section>
+  );
+}
 
 type Action = "approve" | "reject" | "question";
 
@@ -257,6 +329,8 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
           )}
         </section>
       )}
+
+      <OnlinePaySection portal={p} token={token} />
 
       {/* Fotos */}
       {p.photos.length > 0 && (

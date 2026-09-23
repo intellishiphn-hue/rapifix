@@ -267,6 +267,12 @@ service cloud.firestore {
         allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
         allow write: if false;
       }
+      // Cobros en línea (ROKI): los crea y confirma solo el servidor.
+      // tenants/{tid}/private/* (llaves de ROKI) y rokiEvents quedan cerrados por la regla final.
+      match /onlinePayments/{opId} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
 
       // Directorio del personal (nombres y roles para asignar técnicos). Lo mantiene el servidor.
       match /staffDirectory/{uid} {

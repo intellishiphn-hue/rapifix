@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { formatMoney, PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type Payment, type PaymentMethod } from "@rapifix/shared";
+import { formatMoney, PAYMENT_METHOD_LABELS, MANUAL_PAYMENT_METHODS, type Payment, type ManualPaymentMethod } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
@@ -10,7 +10,7 @@ import { registerPayment, voidPayment } from "./api";
 
 export function PaymentDialog({ open, onClose, target, balance, title }: { open: boolean; onClose: (receiptId?: string) => void; target: { orderId?: string; saleId?: string }; balance: number; title: string }) {
   const [amount, setAmount] = useState(balance);
-  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [method, setMethod] = useState<ManualPaymentMethod>("cash");
   const [reference, setReference] = useState("");
   const [received, setReceived] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -49,7 +49,7 @@ export function PaymentDialog({ open, onClose, target, balance, title }: { open:
         <Field label="Monto" hint={amount < balance ? `Abono. Quedará un saldo de ${formatMoney(balance - amount)}` : "Pago total"}><MoneyInput value={amount} onChange={setAmount} /></Field>
         <Field label="Método">
           <div className="grid grid-cols-4 gap-1.5">
-            {PAYMENT_METHODS.map((m) => (
+            {MANUAL_PAYMENT_METHODS.map((m) => (
               <button key={m} type="button" onClick={() => setMethod(m)} className={`rounded-lg border px-2 py-2 text-xs font-semibold ${method === m ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"}`}>{PAYMENT_METHOD_LABELS[m]}</button>
             ))}
           </div>

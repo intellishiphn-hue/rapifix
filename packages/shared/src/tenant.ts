@@ -42,4 +42,7 @@ export const catalogCol = {
   movements: (tid: string) => `tenants/${tid}/inventoryMovements`,
   payments: (tid: string) => `tenants/${tid}/payments`,
   sales: (tid: string) => `tenants/${tid}/sales`,
+  onlinePayments: (tid: string) => `tenants/${tid}/onlinePayments`,
+  rokiEvents: (tid: string) => `tenants/${tid}/rokiEvents`,
+  privateConfig: (tid: string) => `tenants/${tid}/private`,
 } as const;

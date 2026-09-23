@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Minus, Package, Plus, Printer, Search, ShoppingCart, Trash2, Wrench, X } from "lucide-react";
 import {
-  computeQuote, formatMoney, PAYMENT_METHOD_LABELS, PAYMENT_METHODS,
-  type Customer, type PaymentMethod, type Product, type SaleItemKind, type Service,
+  computeQuote, formatMoney, PAYMENT_METHOD_LABELS, MANUAL_PAYMENT_METHODS,
+  type Customer, type ManualPaymentMethod, type Product, type SaleItemKind, type Service,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
 import { useDebounced } from "@/lib/firestore/hooks";
@@ -22,7 +22,7 @@ import { searchCatalog } from "@/features/catalog/api";
 import { createSale } from "@/features/payments/api";
 
 interface CartLine { id: string; kind: SaleItemKind; refId: string | null; description: string; qty: number; unitPrice: number; discount: number; taxable: boolean; stock?: number }
-interface PayLine { id: string; method: PaymentMethod; amount: number; reference: string }
+interface PayLine { id: string; method: ManualPaymentMethod; amount: number; reference: string }
 
 export function POSPage() {
   const { settings } = useSettings();
@@ -181,8 +181,8 @@ export function POSPage() {
               {payments.map((p) => (
                 <div key={p.id} className="flex gap-2">
                   <div className="w-36 shrink-0">
-                    <Select value={p.method} onChange={(e) => setPayments(payments.map((x) => (x.id === p.id ? { ...x, method: e.target.value as PaymentMethod } : x)))}>
-                      {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}
+                    <Select value={p.method} onChange={(e) => setPayments(payments.map((x) => (x.id === p.id ? { ...x, method: e.target.value as ManualPaymentMethod } : x)))}>
+                      {MANUAL_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}
                     </Select>
                   </div>
                   <MoneyInput value={p.amount} onChange={(v) => { setPayTouched(true); setPayments(payments.map((x) => (x.id === p.id ? { ...x, amount: v } : x))); }} className="min-w-0 flex-1" placeholder="0.00" />

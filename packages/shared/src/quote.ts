@@ -200,5 +200,7 @@ export interface PublicPortal {
     decidedAt: TimestampLike | null;
   } | null;
   active: boolean;
+  /** Pago en línea con ROKI (si el taller lo activó) */
+  onlinePayment?: { enabled: boolean; balance: number; total: number; paid: number };
   updatedAt: TimestampLike;
 }

@@ -33,6 +33,7 @@ export const PERMISSIONS = [
   "orders.read",
   "orders.create",
   "orders.diagnose",
+  "quotes.manage",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -47,7 +48,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   manager: ALL.filter((p) => p !== "users.manage"),
   reception: [
     "dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "settings.read",
-    "orders.read", "orders.create", "orders.diagnose",
+    "orders.read", "orders.create", "orders.diagnose", "quotes.manage",
   ],
   technician: ["dashboard.view", "customers.read", "vehicles.read", "orders.read", "orders.diagnose"],
   warehouse: ["dashboard.view", "customers.read", "vehicles.read", "orders.read"],

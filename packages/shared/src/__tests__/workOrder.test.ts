@@ -45,3 +45,12 @@ describe("cambio de estado", () => {
     expect(changeStatusSchema.safeParse({ orderId: "x", toStatus: "IN_REPAIR", note: null, mileageOut: null }).success).toBe(true);
   });
 });
+
+describe("plantillas con link", () => {
+  it("incluye el link cuando existe", () => {
+    expect(renderTemplate("Hola {{cliente}}. Avance: {{link}}", { cliente: "Ana", link: "https://x/orden/ABC" })).toBe("Hola Ana. Avance: https://x/orden/ABC");
+  });
+  it("quita la frase del link cuando no existe", () => {
+    expect(renderTemplate("Hola {{cliente}}, listo. Puede ver los detalles aquí: {{link}}", { cliente: "Ana" })).toBe("Hola Ana, listo.");
+  });
+});

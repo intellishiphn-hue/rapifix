@@ -2,6 +2,7 @@ import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { FieldValue } from "firebase-admin/firestore";
 import { col, orderCol } from "@rapifix/shared";
 import { db } from "../lib/admin";
+import { buildPortal } from "../lib/portal";
 import { REGION } from "../lib/params";
 
 /** Mantiene en el cliente: órdenes abiertas y última visita. */
@@ -11,6 +12,7 @@ export const onWorkOrderWritten = onDocumentWritten(
     const before = event.data?.before.data();
     const after = event.data?.after.data();
     const { tid } = event.params;
+    if (after) await buildPortal(tid, event.params.orderId);
     const customerId = (after?.customerId ?? before?.customerId) as string | undefined;
     if (!customerId) return;
     const created = !before && !!after;
@@ -37,6 +39,27 @@ export const onOrderPhotoWritten = onDocumentWritten(
     const ref = db.doc(`${orderCol.workOrders(tid)}/${orderId}`);
     const count = await ref.collection("photos").count().get();
     await ref.update({ photoCount: count.data().count });
+  },
+);
+
+/** Cambios de visibilidad de fotos también actualizan el portal. */
+export const onOrderPhotoUpdated = onDocumentWritten(
+  { document: "tenants/{tid}/workOrders/{orderId}/photos/{photoId}", region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (before && after && before.visibleToCustomer === after.visibleToCustomer && before.caption === after.caption) return;
+    await buildPortal(event.params.tid, event.params.orderId);
+  },
+);
+
+/** Nuevas actualizaciones visibles al cliente se reflejan en el portal. */
+export const onOrderEventCreated = onDocumentWritten(
+  { document: "tenants/{tid}/workOrders/{orderId}/events/{eventId}", region: REGION },
+  async (event) => {
+    const after = event.data?.after.data();
+    if (!after?.visibleToCustomer || event.data?.before.exists) return;
+    await buildPortal(event.params.tid, event.params.orderId);
   },
 );
 

@@ -1,8 +1,8 @@
 import { formatMoney, renderTemplate, whatsappLink, DEFAULT_TEMPLATES, templateForStatus, type WorkOrder, type WorkOrderStatus, type WorkshopSettings } from "@rapifix/shared";
 import { formatPlate } from "@/lib/format";
 
-/** Link del portal del cliente. Se activa en la Fase 3. */
-export const PORTAL_ENABLED = false;
+/** Link del portal del cliente (Fase 3). */
+export const PORTAL_ENABLED = true;
 export const portalUrl = (order: WorkOrder) => `${window.location.origin}/orden/${order.portalToken}`;
 
 export function orderVars(order: WorkOrder, settings: WorkshopSettings) {
@@ -13,7 +13,7 @@ export function orderVars(order: WorkOrder, settings: WorkshopSettings) {
     orden: order.code,
     total: formatMoney(order.totals?.total ?? 0),
     taller: settings.name || "RAPIFIX",
-    link: PORTAL_ENABLED ? `Detalles: ${portalUrl(order)}` : "",
+    link: PORTAL_ENABLED && order.portalToken ? portalUrl(order) : "",
   };
 }
 

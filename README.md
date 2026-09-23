@@ -3,7 +3,7 @@
 **Sistema de Gestión para Taller Automotriz**
 
 React + TypeScript + Firebase (Auth, Firestore, Storage, Cloud Functions, Hosting).
-Arquitectura completa en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md). Notas por fase en [`docs/FASE-1.md`](docs/FASE-1.md) y [`docs/FASE-2.md`](docs/FASE-2.md).
+Arquitectura completa en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md). Notas por fase en [`docs/FASE-1.md`](docs/FASE-1.md) , [`docs/FASE-2.md`](docs/FASE-2.md) y [`docs/FASE-3.md`](docs/FASE-3.md).
 
 ## Estructura
 
@@ -88,7 +88,7 @@ URL: `https://<PROJECT_ID>.web.app`
 |---|---|---|
 | 1 | Arquitectura, Firebase, Auth, layout, dashboard, clientes, vehículos | ✅ |
 | 2 | Órdenes de trabajo, estados, Kanban, recepción, fotos, diagnóstico, historial | ✅ |
-| 3 | Cotizaciones, aprobación por link, portal del cliente | |
+| 3 | Cotizaciones, aprobación por link, portal del cliente | ✅ |
 | 4 | Inventario, productos, servicios, POS, pagos | |
 | 5 | Agenda, mantenimiento, técnicos, proveedores, gastos, reportes | |
 | 6 | WhatsApp Web, plantillas, eventos, automatizaciones | |

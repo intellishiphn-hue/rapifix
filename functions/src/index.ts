@@ -2,6 +2,7 @@
  * RAPIFIX - Cloud Functions
  * Fase 1: usuarios y roles, datos demo, desnormalización y auditoría.
  * Fase 2: órdenes de trabajo, estados, secciones, historial y directorio del personal.
+ * Fase 3: cotizaciones, aprobación pública y portal del cliente.
  */
 export { bootstrapAdmin, createStaffUser, updateStaffUser } from "./callable/users";
 export { seedDemoData } from "./callable/seed";
@@ -11,4 +12,7 @@ export {
   createWorkOrder, changeWorkOrderStatus, updateWorkOrder, saveWorkOrderSection, addOrderEvent, touchSession,
 } from "./callable/workOrders";
 export { seedDemoOrders } from "./callable/seedOrders";
-export { onWorkOrderWritten, onOrderPhotoWritten, onUserWritten } from "./triggers/orders";
+export { onWorkOrderWritten, onOrderPhotoWritten, onOrderPhotoUpdated, onOrderEventCreated, onUserWritten } from "./triggers/orders";
+// Fase 3: cotizaciones y portal del cliente
+export { saveQuote, sendQuote, newQuoteVersion, ensurePortal } from "./callable/quotes";
+export { respondToQuote, markQuoteViewed } from "./public/portal";

@@ -29,3 +29,8 @@ export const orderCol = {
 export const orderStoragePath = {
   photo: (tid: string, orderId: string, fileId: string) => `tenants/${tid}/workOrders/${orderId}/photos/${fileId}.jpg`,
 } as const;
+
+export const quoteCol = {
+  quotes: (tid: string) => `tenants/${tid}/quotes`,
+  portal: "publicPortal",
+} as const;

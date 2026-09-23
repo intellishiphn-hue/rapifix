@@ -28,9 +28,9 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { label: "Clientes", to: "/clientes", icon: Users, permission: "customers.read" },
       { label: "Vehículos", to: "/vehiculos", icon: Car, permission: "vehicles.read" },
-      { label: "Cotizaciones", to: "/cotizaciones", icon: FileText, phase: 3 },
+      { label: "Cotizaciones", to: "/cotizaciones", icon: FileText, permission: "orders.read" },
       { label: "Mantenimiento", to: "/mantenimiento", icon: CalendarClock, phase: 5 },
-      { label: "Portal del cliente", to: "/portal", icon: Globe, phase: 3 },
+      { label: "Portal del cliente", to: "/portal", icon: Globe, permission: "orders.read" },
       { label: "WhatsApp", to: "/whatsapp", icon: MessageCircle, phase: 6 },
     ],
   },

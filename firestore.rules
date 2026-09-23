@@ -212,6 +212,12 @@ service cloud.firestore {
         }
       }
 
+      // ---------- Cotizaciones (FASE 3): solo las escriben Cloud Functions ----------
+      match /quotes/{quoteId} {
+        allow read: if canSeeOrder(resource.data);
+        allow write: if false;
+      }
+
       // Directorio del personal (nombres y roles para asignar técnicos). Lo mantiene el servidor.
       match /staffDirectory/{uid} {
         allow read: if inTenant(tid);
@@ -240,6 +246,15 @@ service cloud.firestore {
       match /meta/{docId} {
         allow read, write: if false;
       }
+    }
+
+    // ---------- Portal público del cliente (FASE 3) ----------
+    // Copia sanitizada de la orden. Se lee solo con el token exacto (link del cliente);
+    // listar o adivinar portales es imposible. Solo la escriben Cloud Functions.
+    match /publicPortal/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
     }
 
     // Todo lo demás está cerrado por defecto

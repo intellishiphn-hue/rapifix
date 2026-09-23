@@ -11,6 +11,8 @@ import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState, ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { useOrderEvents, useWorkOrder } from "./api";
+import { ApprovedItems, QuoteEditor } from "@/features/quotes/QuoteEditor";
+import { OrderDocuments, PortalLinkButton } from "./OrderDocuments";
 import { StatusBadge } from "./StatusBadge";
 import { StatusPicker } from "./StatusPicker";
 import { useStatusChange } from "./useStatusChange";
@@ -23,11 +25,7 @@ import { daysInShop } from "./OrderCard";
 
 type Tab = "resumen" | "diagnostico" | "cotizacion" | "servicios" | "repuestos" | "fotos" | "historial" | "comunicacion" | "pagos" | "documentos";
 const UPCOMING: Partial<Record<Tab, { phase: number; text: string }>> = {
-  cotizacion: { phase: 3, text: "Cotizaciones con mano de obra, repuestos y servicios, y aprobación del cliente por link." },
-  servicios: { phase: 3, text: "Los servicios aprobados de la cotización aparecerán aquí para marcarlos como realizados." },
-  repuestos: { phase: 4, text: "Repuestos usados en la orden, conectados al inventario." },
   pagos: { phase: 4, text: "Pagos, abonos y saldo pendiente de esta orden." },
-  documentos: { phase: 3, text: "PDF de la orden de trabajo y de la cotización con el branding de RAPIFIX." },
 };
 
 export function WorkOrderDetailPage() {
@@ -89,9 +87,12 @@ export function WorkOrderDetailPage() {
               {order.promisedAt && <span className="text-slate-600">Entrega prometida: <b>{formatDate(order.promisedAt, true)}</b></span>}
             </div>
           </div>
+          <div className="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
+          <PortalLinkButton order={order} />
           <div className="flex shrink-0 gap-6 rounded-xl bg-slate-50 px-5 py-3 lg:text-right">
             <div><div className="text-xs text-slate-500">Total</div><div className="tabular text-lg font-bold">{formatMoney(order.totals?.total ?? 0)}</div></div>
             <div><div className="text-xs text-slate-500">Saldo</div><div className="tabular text-lg font-bold">{formatMoney(order.balance ?? 0)}</div></div>
+          </div>
           </div>
         </div>
         {allowedTransitions(role, order.status).length > 0 && (
@@ -109,6 +110,15 @@ export function WorkOrderDetailPage() {
         {tab === "fotos" && <OrderPhotos order={order} />}
         {tab === "historial" && <EventTimeline events={events.data} loading={events.loading} error={events.error} />}
         {tab === "comunicacion" && <OrderCommunication order={order} events={events} />}
+        {tab === "cotizacion" && <QuoteEditor order={order} />}
+        {tab === "servicios" && <ApprovedItems order={order} types={["labor", "service", "other"]} empty="Sin servicios aprobados" />}
+        {tab === "repuestos" && (
+          <>
+            <ApprovedItems order={order} types={["part"]} empty="Sin repuestos aprobados" />
+            <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">En la Fase 4 los repuestos se conectan al inventario (descuento de existencias).</p>
+          </>
+        )}
+        {tab === "documentos" && <OrderDocuments order={order} />}
         {UPCOMING[tab] && (
           <EmptyState icon={<ClipboardList className="h-7 w-7" />} title={`Disponible en la Fase ${UPCOMING[tab]!.phase}`} description={UPCOMING[tab]!.text} />
         )}

@@ -14,6 +14,7 @@ import { Field, Input, Select } from "@/components/ui/Field";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { seedDemoData } from "@/features/users/api";
+import { seedDemoOrders } from "@/features/work-orders/api";
 import { saveSettings, uploadLogo, useSettings } from "./api";
 
 export function SettingsPage() {
@@ -23,6 +24,19 @@ export function SettingsPage() {
   const [logoPct, setLogoPct] = useState<number | null>(null);
   const [seedOpen, setSeedOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [seedingOrders, setSeedingOrders] = useState(false);
+
+  const seedOrders = async () => {
+    setSeedingOrders(true);
+    try {
+      const r = await seedDemoOrders();
+      toast.success(`${r.orders} órdenes demo creadas en distintos estados`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSeedingOrders(false);
+    }
+  };
   const logoInput = useRef<HTMLInputElement>(null);
 
   const { register, handleSubmit, reset, formState } = useForm<SettingsInput>({ resolver: zodResolver(settingsSchema) });
@@ -149,7 +163,8 @@ export function SettingsPage() {
               <CardHeader title="Datos de demostración" description="Clientes y vehículos de ejemplo para probar el sistema." />
               <div className="p-5">
                 <p className="text-sm text-slate-600">Crea 3 clientes (Juan Pérez, María López, Carlos Hernández) y 5 vehículos. Solo se puede cargar una vez.</p>
-                <Button variant="secondary" className="mt-3 w-full" icon={<Database className="h-4 w-4" />} onClick={() => setSeedOpen(true)}>Cargar datos demo</Button>
+                <Button variant="secondary" className="mt-3 w-full" icon={<Database className="h-4 w-4" />} onClick={() => setSeedOpen(true)}>Cargar clientes y vehículos demo</Button>
+                <Button variant="secondary" className="mt-2 w-full" icon={<Database className="h-4 w-4" />} loading={seedingOrders} onClick={() => void seedOrders()}>Cargar órdenes demo</Button>
               </div>
             </Card>
           )}

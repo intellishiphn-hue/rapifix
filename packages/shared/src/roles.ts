@@ -30,6 +30,9 @@ export const PERMISSIONS = [
   "settings.write",
   "users.manage",
   "audit.read",
+  "orders.read",
+  "orders.create",
+  "orders.diagnose",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -42,10 +45,13 @@ const ALL = PERMISSIONS;
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   admin: ALL,
   manager: ALL.filter((p) => p !== "users.manage"),
-  reception: ["dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "settings.read"],
-  technician: ["dashboard.view", "customers.read", "vehicles.read"],
-  warehouse: ["dashboard.view", "customers.read", "vehicles.read"],
-  seller: ["dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write"],
+  reception: [
+    "dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "settings.read",
+    "orders.read", "orders.create", "orders.diagnose",
+  ],
+  technician: ["dashboard.view", "customers.read", "vehicles.read", "orders.read", "orders.diagnose"],
+  warehouse: ["dashboard.view", "customers.read", "vehicles.read", "orders.read"],
+  seller: ["dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "orders.read"],
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {

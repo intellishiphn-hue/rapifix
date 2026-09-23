@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState, ErrorState, PageLoader, Skeleton } from "@/components/ui/Feedback";
 import { AuditTrail } from "@/features/audit/AuditTrail";
+import { useCustomerOrders } from "@/features/work-orders/api";
+import { OrdersMiniList } from "@/features/work-orders/OrdersMiniList";
 import { useCustomerVehicles } from "@/features/vehicles/api";
 import { VehicleCard } from "@/features/vehicles/VehicleCard";
 import { VehicleFormDialog } from "@/features/vehicles/VehicleFormDialog";
@@ -36,6 +38,7 @@ export function CustomerDetailPage() {
   const { id } = useParams();
   const { data: customer, loading, error, exists } = useCustomer(id);
   const vehicles = useCustomerVehicles(id);
+  const orders = useCustomerOrders(id);
   const { can } = useAuth();
   const [tab, setTab] = useState<Tab>("vehicles");
   const [editing, setEditing] = useState(false);
@@ -52,12 +55,12 @@ export function CustomerDetailPage() {
   const canAudit = can("audit.read");
   const tabs: Array<{ value: Tab; label: string; icon: React.ReactNode; count?: number; disabled?: boolean }> = [
     { value: "vehicles", label: "Vehículos", icon: <Car className="h-4 w-4" />, count: activeVehicles.length },
-    { value: "orders", label: "Órdenes", icon: <ClipboardList className="h-4 w-4" /> },
+    { value: "orders", label: "Órdenes", icon: <ClipboardList className="h-4 w-4" />, count: orders.data.length },
     { value: "quotes", label: "Cotizaciones", icon: <FileText className="h-4 w-4" /> },
     { value: "payments", label: "Pagos", icon: <CreditCard className="h-4 w-4" /> },
     ...(canAudit ? [{ value: "changes" as Tab, label: "Cambios", icon: <History className="h-4 w-4" /> }] : []),
   ];
-  const upcoming: Record<string, string> = { orders: "Fase 2", quotes: "Fase 3", payments: "Fase 4" };
+  const upcoming: Record<string, string> = { quotes: "Fase 3", payments: "Fase 4" };
 
   return (
     <>
@@ -140,6 +143,7 @@ export function CustomerDetailPage() {
               description="Cuando se active este módulo, aquí verá el historial completo de este cliente."
             />
           )}
+          {tab === "orders" && <OrdersMiniList orders={orders.data} loading={orders.loading} error={orders.error} showVehicle />}
           {tab === "changes" && canAudit && <AuditTrail entityId={customer.id} />}
         </Card>
       </div>

@@ -19,6 +19,20 @@ service firebase.storage {
       allow delete: if hasRole(tid, ['admin', 'manager']);
     }
 
+    // Fotos de órdenes de trabajo: recepción, diagnóstico, antes, durante, después
+    match /tenants/{tid}/workOrders/{orderId}/photos/{fileName} {
+      function order() {
+        return firestore.get(/databases/(default)/documents/tenants/$(tid)/workOrders/$(orderId)).data;
+      }
+      allow read: if inTenant(tid);
+      allow create: if isImage() && maxMB(10) && (
+        hasRole(tid, ['admin', 'manager', 'reception'])
+        || (hasRole(tid, ['technician']) && request.auth.uid in order().technicianIds)
+      );
+      allow update: if false;
+      allow delete: if hasRole(tid, ['admin', 'manager']);
+    }
+
     // Logo del taller (lectura pública: se muestra en el portal del cliente y en PDFs)
     match /tenants/{tid}/branding/{fileName} {
       allow read: if true;

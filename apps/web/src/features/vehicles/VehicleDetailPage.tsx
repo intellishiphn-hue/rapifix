@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Archive, ArchiveRestore, Camera, Car, ClipboardList, Gauge, History, MessageCircle, Pencil, Phone, User } from "lucide-react";
+import { Archive, ArchiveRestore, Camera, Car, ClipboardList, Gauge, History, MessageCircle, Pencil, Phone, Plus, User } from "lucide-react";
 import { toast } from "sonner";
 import { FUEL_LABELS, TRANSMISSION_LABELS, formatPhone, whatsappLink } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -14,6 +14,9 @@ import { Tabs } from "@/components/ui/Tabs";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState, ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { AuditTrail } from "@/features/audit/AuditTrail";
+import { useVehicleOrders } from "@/features/work-orders/api";
+import { OrdersMiniList } from "@/features/work-orders/OrdersMiniList";
+import { StatusBadge } from "@/features/work-orders/StatusBadge";
 import { setVehicleArchived, useMileageLog, useVehicle } from "./api";
 import { PlateTag } from "./VehicleCard";
 import { VehicleFormDialog } from "./VehicleFormDialog";
@@ -35,8 +38,9 @@ export function VehicleDetailPage() {
   const { id } = useParams();
   const { data: vehicle, loading, error, exists } = useVehicle(id);
   const mileage = useMileageLog(id);
+  const orders = useVehicleOrders(id);
   const { can, user } = useAuth();
-  const [tab, setTab] = useState<Tab>("photos");
+  const [tab, setTab] = useState<Tab>("timeline");
   const [editing, setEditing] = useState(false);
   const [km, setKm] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -66,9 +70,9 @@ export function VehicleDetailPage() {
   };
 
   const tabs: Array<{ value: Tab; label: string; icon: React.ReactNode; count?: number }> = [
+    { value: "timeline", label: "Órdenes e historial", icon: <ClipboardList className="h-4 w-4" />, count: orders.data.length },
     { value: "photos", label: "Fotos", icon: <Camera className="h-4 w-4" />, count: vehicle.photoCount ?? 0 },
     { value: "mileage", label: "Kilometraje", icon: <Gauge className="h-4 w-4" /> },
-    { value: "timeline", label: "Línea de tiempo", icon: <ClipboardList className="h-4 w-4" /> },
     ...(canAudit ? [{ value: "changes" as Tab, label: "Cambios", icon: <History className="h-4 w-4" /> }] : []),
   ];
 
@@ -96,6 +100,15 @@ export function VehicleDetailPage() {
           )
         }
       />
+
+      {orders.data.filter((o) => o.isOpen).map((o) => (
+        <Link key={o.id} to={`/ordenes/${o.id}`} className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm hover:bg-brand-100/60">
+          <ClipboardList className="h-4 w-4 text-brand-700" />
+          <span className="font-semibold text-brand-900">En taller: {o.code}</span>
+          <StatusBadge status={o.status} />
+          <span className="ml-auto font-semibold text-brand-700">Ver orden</span>
+        </Link>
+      ))}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="overflow-hidden lg:col-span-2">
@@ -157,10 +170,13 @@ export function VehicleDetailPage() {
           )
         )}
         {tab === "timeline" && (
-          <EmptyState
-            icon={<ClipboardList className="h-7 w-7" />}
-            title="La línea de tiempo llega con las órdenes de trabajo"
-            description="En la Fase 2 aquí aparecerán órdenes, diagnósticos, reparaciones, repuestos y pagos de este vehículo."
+          <OrdersMiniList
+            orders={orders.data}
+            loading={orders.loading}
+            error={orders.error}
+            action={can("orders.create") && !vehicle.archived && !orders.data.some((o) => o.isOpen) && (
+              <Link to={`/ordenes/nueva?vehiculo=${vehicle.id}`}><Button size="sm" icon={<Plus className="h-4 w-4" />}>Nueva orden</Button></Link>
+            )}
           />
         )}
         {tab === "changes" && canAudit && <AuditTrail entityId={vehicle.id} />}

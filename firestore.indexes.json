@@ -4,48 +4,296 @@
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "searchKeywords", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "searchKeywords",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "vehicles",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "customerId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "customerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "vehicles",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "archived", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "archived",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "vehicles",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "searchKeywords", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "searchKeywords",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "auditLogs",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "entityId", "order": "ASCENDING" },
-        { "fieldPath": "at", "order": "DESCENDING" }
+        {
+          "fieldPath": "entityId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isOpen",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "statusChangedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "technicianIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "isOpen",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "statusChangedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "technicianIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "technicianIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "searchKeywords",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "customerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "vehicleId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "technicianIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "vehicleId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "technicianIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "customerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "technicianIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "technicianIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "isOpen",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "vehicleId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isOpen",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deliveredAt",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],

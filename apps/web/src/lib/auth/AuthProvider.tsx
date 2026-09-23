@@ -2,7 +2,9 @@ import { createContext, useCallback, useEffect, useMemo, useRef, useState, type 
 import { onAuthStateChanged, signOut as fbSignOut, type User } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { can as canRole, isRole, type Permission, type Role, type UserProfile } from "@rapifix/shared";
-import { auth, db } from "@/lib/firebase";
+import { auth, callable, db } from "@/lib/firebase";
+
+const touchSession = callable<void, { ok: boolean }>("touchSession");
 
 export type AuthStatus = "loading" | "signedOut" | "noRole" | "ready";
 
@@ -78,6 +80,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       () => setProfile(null),
     );
   }, [user, readClaims]);
+
+  // Registra el acceso una vez por sesión (actualiza el directorio del personal)
+  const touched = useRef<string | null>(null);
+  useEffect(() => {
+    if (status === "ready" && user && touched.current !== user.uid) {
+      touched.current = user.uid;
+      touchSession().catch(() => undefined);
+    }
+  }, [status, user]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

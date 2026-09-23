@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
-import { Car, Loader2, Search, User } from "lucide-react";
-import { col, formatPhone, searchToken, type Customer, type Vehicle } from "@rapifix/shared";
+import { Car, ClipboardList, Loader2, Search, User } from "lucide-react";
+import { col, formatPhone, orderCol, searchToken, STATUS_META, type Customer, type Vehicle, type WorkOrder } from "@rapifix/shared";
+import { useAuth } from "@/lib/auth/useAuth";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { useDebounced } from "@/lib/firestore/hooks";
 import { formatPlate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
-type Result = { type: "customer" | "vehicle"; id: string; title: string; subtitle: string; to: string };
+type Result = { type: "customer" | "vehicle" | "order"; id: string; title: string; subtitle: string; to: string };
 
 /** Búsqueda global: cliente, teléfono, placa, VIN, marca o modelo. (Órdenes se suman en Fase 2) */
 export function GlobalSearch() {
@@ -19,6 +20,7 @@ export function GlobalSearch() {
   const [active, setActive] = useState(0);
   const debounced = useDebounced(text, 250);
   const navigate = useNavigate();
+  const { role, user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -51,11 +53,16 @@ export function GlobalSearch() {
     }
     let cancelled = false;
     setLoading(true);
+    const ordersQ =
+      role === "technician" && user
+        ? query(collection(db, orderCol.workOrders(TENANT_ID)), where("technicianIds", "array-contains", user.uid), where("isOpen", "==", true), limit(50))
+        : query(collection(db, orderCol.workOrders(TENANT_ID)), where("searchKeywords", "array-contains", token), limit(6));
     Promise.all([
       getDocs(query(collection(db, col.customers(TENANT_ID)), where("searchKeywords", "array-contains", token), limit(6))),
       getDocs(query(collection(db, col.vehicles(TENANT_ID)), where("searchKeywords", "array-contains", token), limit(6))),
+      getDocs(ordersQ).catch(() => null),
     ])
-      .then(([cs, vs]) => {
+      .then(([cs, vs, os]) => {
         if (cancelled) return;
         const customers: Result[] = cs.docs.map((d) => {
           const c = d.data() as Customer;
@@ -65,7 +72,12 @@ export function GlobalSearch() {
           const v = d.data() as Vehicle;
           return { type: "vehicle", id: d.id, title: `${formatPlate(v.plate)} · ${v.make} ${v.model} ${v.year}`, subtitle: v.customer?.fullName ?? "", to: `/vehiculos/${d.id}` };
         });
-        setResults([...vehicles, ...customers]);
+        const orders: Result[] = (os?.docs ?? [])
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<WorkOrder, "id">) }) as WorkOrder)
+          .filter((o) => o.searchKeywords?.includes(token))
+          .slice(0, 6)
+          .map((o) => ({ type: "order", id: o.id, title: `${o.code} · ${formatPlate(o.vehicle.plate)} ${o.vehicle.make} ${o.vehicle.model}`, subtitle: `${STATUS_META[o.status].label} · ${o.customer.fullName}`, to: `/ordenes/${o.id}` }));
+        setResults([...orders, ...vehicles, ...customers]);
         setActive(0);
       })
       .catch(() => !cancelled && setResults([]))
@@ -73,7 +85,7 @@ export function GlobalSearch() {
     return () => {
       cancelled = true;
     };
-  }, [debounced]);
+  }, [debounced, role, user]);
 
   const go = (r: Result) => {
     navigate(r.to);
@@ -99,7 +111,7 @@ export function GlobalSearch() {
           if (e.key === "Enter" && results[active]) go(results[active]);
           if (e.key === "Escape") setOpen(false);
         }}
-        placeholder="Buscar placa, cliente, teléfono, VIN..."
+        placeholder="Buscar placa, OT, cliente, teléfono, VIN..."
         className="h-10 w-full rounded-[10px] border border-slate-200 bg-slate-50 pl-9 pr-12 text-sm placeholder:text-slate-400 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
       />
       <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-slate-200 bg-white px-1.5 text-[10px] font-semibold text-slate-400 sm:block">
@@ -122,8 +134,8 @@ export function GlobalSearch() {
                     onClick={() => go(r)}
                     className={cn("flex w-full items-center gap-3 px-4 py-2.5 text-left", i === active && "bg-brand-50")}
                   >
-                    <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", r.type === "vehicle" ? "bg-sky-100 text-sky-700" : "bg-brand-100 text-brand-700")}>
-                      {r.type === "vehicle" ? <Car className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                    <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", r.type === "vehicle" ? "bg-sky-100 text-sky-700" : r.type === "order" ? "bg-amber-100 text-amber-800" : "bg-brand-100 text-brand-700")}>
+                      {r.type === "vehicle" ? <Car className="h-4 w-4" /> : r.type === "order" ? <ClipboardList className="h-4 w-4" /> : <User className="h-4 w-4" />}
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold text-slate-900">{r.title}</span>

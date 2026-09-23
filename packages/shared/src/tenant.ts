@@ -18,3 +18,14 @@ export const storagePath = {
     `tenants/${tid}/vehicles/${vehicleId}/photos/${fileId}.jpg`,
   logo: (tid: string, ext: string) => `tenants/${tid}/branding/logo.${ext}`,
 } as const;
+
+export const orderCol = {
+  workOrders: (tid: string) => `tenants/${tid}/workOrders`,
+  events: (tid: string, orderId: string) => `tenants/${tid}/workOrders/${orderId}/events`,
+  photos: (tid: string, orderId: string) => `tenants/${tid}/workOrders/${orderId}/photos`,
+  staff: (tid: string) => `tenants/${tid}/staffDirectory`,
+} as const;
+
+export const orderStoragePath = {
+  photo: (tid: string, orderId: string, fileId: string) => `tenants/${tid}/workOrders/${orderId}/photos/${fileId}.jpg`,
+} as const;

@@ -166,6 +166,58 @@ service cloud.firestore {
         }
       }
 
+      // ---------- Órdenes de trabajo (FASE 2) ----------
+      // Solo Cloud Functions escriben la orden y su historial. El técnico
+      // únicamente ve las órdenes donde está asignado.
+      function canSeeOrder(data) {
+        return hasRole(tid, ['admin', 'manager', 'reception', 'warehouse', 'seller'])
+          || (inTenant(tid) && role() == 'technician' && request.auth.uid in data.technicianIds);
+      }
+      function canWorkOrder(data) {
+        return hasRole(tid, ['admin', 'manager', 'reception'])
+          || (inTenant(tid) && role() == 'technician' && request.auth.uid in data.technicianIds);
+      }
+
+      match /workOrders/{orderId} {
+        function parentOrder() {
+          return get(/databases/$(database)/documents/tenants/$(tid)/workOrders/$(orderId)).data;
+        }
+
+        allow read: if canSeeOrder(resource.data);
+        allow write: if false;
+
+        match /events/{eventId} {
+          allow read: if canSeeOrder(parentOrder());
+          allow write: if false;
+        }
+
+        match /photos/{photoId} {
+          allow read: if canSeeOrder(parentOrder());
+          allow create: if canWorkOrder(parentOrder())
+            && incoming().keys().hasOnly(['url', 'storagePath', 'stage', 'angle', 'caption', 'visibleToCustomer', 'by', 'byName', 'at'])
+            && isStr(incoming().url, 1, 2000)
+            && isStr(incoming().storagePath, 1, 300)
+            && incoming().storagePath.matches('tenants/' + tid + '/workOrders/' + orderId + '/photos/.*')
+            && incoming().stage in ['reception', 'diagnosis', 'before', 'during', 'after', 'damage']
+            && isStr(incoming().angle, 0, 30)
+            && isStr(incoming().caption, 0, 200)
+            && incoming().visibleToCustomer is bool
+            && incoming().by == request.auth.uid
+            && incoming().at == request.time;
+          allow update: if canWorkOrder(parentOrder())
+            && incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'visibleToCustomer', 'stage'])
+            && isStr(incoming().caption, 0, 200)
+            && incoming().visibleToCustomer is bool;
+          allow delete: if hasRole(tid, managers());
+        }
+      }
+
+      // Directorio del personal (nombres y roles para asignar técnicos). Lo mantiene el servidor.
+      match /staffDirectory/{uid} {
+        allow read: if inTenant(tid);
+        allow write: if false;
+      }
+
       // ---------- Configuración ----------
       match /settings/{docId} {
         allow read: if inTenant(tid);

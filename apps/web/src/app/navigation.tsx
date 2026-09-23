@@ -19,7 +19,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: "Operación",
     items: [
       { label: "Dashboard", to: "/", icon: LayoutDashboard, permission: "dashboard.view" },
-      { label: "Órdenes de trabajo", to: "/ordenes", icon: ClipboardList, phase: 2 },
+      { label: "Órdenes de trabajo", to: "/ordenes", icon: ClipboardList, permission: "orders.read" },
       { label: "Agenda", to: "/agenda", icon: CalendarDays, phase: 5 },
     ],
   },

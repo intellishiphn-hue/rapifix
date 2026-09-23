@@ -63,6 +63,7 @@ export function SettingsPage() {
       city: settings.city, phone: formatPhone(settings.phone), whatsapp: formatPhone(settings.whatsapp), email: settings.email,
       website: settings.website, hours: settings.hours, currency: settings.currency, taxRate: settings.taxRate,
       workOrderPrefix: settings.workOrderPrefix, quotePrefix: settings.quotePrefix,
+      avgKmPerMonth: settings.avgKmPerMonth, oilChangeKm: settings.oilChangeKm,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, settings.updatedAt?.toMillis?.()]);
@@ -149,6 +150,18 @@ export function SettingsPage() {
                 <Field label="Prefijo de órdenes" error={errors.workOrderPrefix?.message} hint="Ej. OT-1024"><Input {...register("workOrderPrefix")} className="uppercase" /></Field>
                 <Field label="Prefijo de cotizaciones" error={errors.quotePrefix?.message} hint="Ej. COT-0045"><Input {...register("quotePrefix")} className="uppercase" /></Field>
               </div>
+            </Card>
+            <Card>
+              <CardHeader title="Recordatorios de mantenimiento" description="Para calcular cuándo le toca el cambio de aceite a cada cliente." />
+              <div className="grid gap-4 p-5 sm:grid-cols-2">
+                <Field label="Km que maneja un cliente al mes" error={errors.avgKmPerMonth?.message} hint="Se usa cuando el carro no tiene historial. 1,500 km/mes = 5,000 km en unos 3 meses y medio.">
+                  <Input type="number" step={100} min={100} {...register("avgKmPerMonth", { valueAsNumber: true })} />
+                </Field>
+                <Field label="Cambio de aceite cada (km)" error={errors.oilChangeKm?.message} hint="Para órdenes con aceite que no usan un servicio del catálogo con intervalo.">
+                  <Input type="number" step={500} min={1000} {...register("oilChangeKm", { valueAsNumber: true })} />
+                </Field>
+              </div>
+              <p className="px-5 pb-5 text-xs text-slate-500">Si el carro ya vino antes al taller, el sistema usa lo que realmente maneja ese cliente (según los kilometrajes de sus visitas).</p>
             </Card>
           </fieldset>
           <button type="submit" className="hidden" />

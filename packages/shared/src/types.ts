@@ -129,6 +129,10 @@ export interface WorkshopSettings {
   taxRate: number; // porcentaje, ej 15
   workOrderPrefix: string; // OT
   quotePrefix: string; // COT
+  /** Kilómetros que maneja un cliente al mes cuando no hay historial (para estimar mantenimientos) */
+  avgKmPerMonth: number;
+  /** Cada cuántos km se recomienda el cambio de aceite (detección automática) */
+  oilChangeKm: number;
   updatedAt?: TimestampLike;
   updatedBy?: string;
 }
@@ -150,6 +154,8 @@ export const DEFAULT_SETTINGS: WorkshopSettings = {
   taxRate: 15,
   workOrderPrefix: "OT",
   quotePrefix: "COT",
+  avgKmPerMonth: 1500,
+  oilChangeKm: 5000,
 };
 
 export interface AuditLog {

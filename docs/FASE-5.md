@@ -15,6 +15,8 @@
 | Cuentas por cobrar | Órdenes y ventas con saldo, entregadas con saldo resaltadas, cobrar desde ahí y recordatorio de pago por WhatsApp |
 | Reportes | Período (hoy, semana, mes, mes anterior, año o personalizado). Pestañas según rol: Resumen financiero y flujo de caja, Órdenes, Servicios y repuestos (con margen para gerencia), Técnicos, Ventas, Gastos, Inventario. Exportar a Excel e imprimir o guardar en PDF |
 | Dashboard | Cobrado por día (30 días), citas de hoy, mantenimientos vencidos y próximos, cuentas por pagar vencidas. El técnico ve sus órdenes y sus citas del día |
+| Cambio de aceite estimado | Como el cliente no dice cuánto maneja, el sistema lo calcula con los kilometrajes de sus visitas; si no hay historial, usa el promedio de Configuración (1,500 km/mes: 5,000 km en unos 3 meses y medio). Las órdenes que llevan aceite programan "Cambio de aceite" aunque no usen un servicio del catálogo (5,000 km o 6 meses, lo que llegue primero). "Revisar órdenes pasadas" lo aplica a las entregas de los últimos 12 meses |
+| Avisos desde el Dashboard | Tarjeta "Toca mantenimiento" con los clientes a los que ya les toca o está por tocarles y no se les ha avisado en 30 días. "Avisar a todos uno por uno" abre WhatsApp con el mensaje listo y pasa al siguiente |
 | Revisión diaria | 6:00 AM: estados de mantenimiento y vencimiento de cotizaciones que pasaron su fecha de validez |
 
 ## Cloud Functions nuevas

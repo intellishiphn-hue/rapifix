@@ -25,6 +25,6 @@ export { seedDemoCatalog } from "./callable/seedCatalog";
 export { getOnlinePayConfig, saveOnlinePayConfig } from "./callable/onlinePayConfig";
 export { createOnlinePayment, checkOnlinePayment, rokiWebhook, reconcileOnlinePayments } from "./public/onlinePay";
 // Fase 5: agenda, mantenimiento, técnicos, proveedores, compras y gastos
-export { saveAppointment, setAppointmentStatus, saveMaintenance, maintenanceAction, saveEmployeeProfile } from "./callable/operations";
+export { saveAppointment, setAppointmentStatus, saveMaintenance, maintenanceAction, saveEmployeeProfile, backfillMaintenance } from "./callable/operations";
 export { saveSupplier, createPurchase, paySupplier, voidPurchase, saveExpense, voidExpense } from "./callable/finance";
 export { onOrderDelivered, dailyMaintenance } from "./scheduled/daily";

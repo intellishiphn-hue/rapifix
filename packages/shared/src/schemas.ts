@@ -77,6 +77,8 @@ export const settingsSchema = z.object({
   taxRate: z.number({ error: "Porcentaje no válido" }).min(0).max(100),
   workOrderPrefix: trimmed(6).min(1, "Obligatorio").regex(/^[A-Z0-9-]+$/, "Solo mayúsculas y números"),
   quotePrefix: trimmed(6).min(1, "Obligatorio").regex(/^[A-Z0-9-]+$/, "Solo mayúsculas y números"),
+  avgKmPerMonth: z.number({ error: "Kilómetros no válidos" }).int().min(100, "Mínimo 100 km").max(20000),
+  oilChangeKm: z.number({ error: "Kilómetros no válidos" }).int().min(1000, "Mínimo 1,000 km").max(30000),
 });
 export type SettingsInput = z.infer<typeof settingsSchema>;
 

@@ -5,7 +5,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { col, opsCol, quoteCol } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
-import { computeMaintenanceStatus, generateMaintenanceFromOrder } from "../lib/maintenance";
+import { computeFields, generateMaintenanceFromOrder, maintenanceDefaults } from "../lib/maintenance";
 import { buildPortal, buildQuotePortal } from "../lib/portal";
 
 /** Al pasar una orden a Entregado, programa los mantenimientos de sus servicios. */
@@ -26,25 +26,7 @@ export const dailyMaintenance = onSchedule({ region: REGION, schedule: "0 6 * * 
   const tenants = await db.collection(col.tenants).listDocuments();
   for (const t of tenants) {
     const tid = t.id;
-    const open = await db.collection(opsCol.maintenance(tid)).where("status", "in", ["upcoming", "due", "overdue"]).get();
-    const vehicleIds = [...new Set(open.docs.map((d) => d.get("vehicleId") as string))];
-    const mileage = new Map<string, number>();
-    for (let i = 0; i < vehicleIds.length; i += 100) {
-      const refs = vehicleIds.slice(i, i + 100).map((id) => db.doc(`${col.vehicles(tid)}/${id}`));
-      if (refs.length) (await db.getAll(...refs)).forEach((v) => mileage.set(v.id, Number(v.get("mileage") ?? 0)));
-    }
-    let changed = 0;
-    let batch = db.batch();
-    for (const m of open.docs) {
-      const status = computeMaintenanceStatus((m.get("nextDate") as Timestamp | null)?.toMillis() ?? null, m.get("nextMileage") ?? null, mileage.get(m.get("vehicleId")) ?? 0);
-      if (status === m.get("status")) continue;
-      batch.update(m.ref, { status, updatedAt: FieldValue.serverTimestamp(), updatedBy: "system" });
-      if (++changed % 400 === 0) {
-        await batch.commit();
-        batch = db.batch();
-      }
-    }
-    await batch.commit();
+    const changed = await refreshTenantMaintenance(tid);
 
     const expiredQuotes = await db.collection(quoteCol.quotes(tid)).where("status", "in", ["sent", "viewed"]).where("validUntil", "<", Timestamp.now()).get();
     for (const q of expiredQuotes.docs) {
@@ -55,3 +37,33 @@ export const dailyMaintenance = onSchedule({ region: REGION, schedule: "0 6 * * 
     logger.info("Revisión diaria", { tid, maintenanceChanged: changed, quotesExpired: expiredQuotes.size });
   }
 });
+
+/** Recalcula km estimados, fecha en que toca y estado de todos los mantenimientos abiertos. */
+export async function refreshTenantMaintenance(tid: string): Promise<number> {
+    const open = await db.collection(opsCol.maintenance(tid)).where("status", "in", ["upcoming", "due", "overdue"]).get();
+    const defaults = await maintenanceDefaults(tid);
+    const vehicleIds = [...new Set(open.docs.map((d) => d.get("vehicleId") as string))];
+    const vehicles = new Map<string, FirebaseFirestore.DocumentData | undefined>();
+    for (let i = 0; i < vehicleIds.length; i += 100) {
+      const refs = vehicleIds.slice(i, i + 100).map((id) => db.doc(`${col.vehicles(tid)}/${id}`));
+      if (refs.length) (await db.getAll(...refs)).forEach((v) => vehicles.set(v.id, v.data()));
+    }
+    const rates = new Map<string, { kmPerDay: number; source: "history" | "default" }>();
+    let changed = 0;
+    let batch = db.batch();
+    for (const m of open.docs) {
+      const vehicleId = m.get("vehicleId") as string;
+      const calc = await computeFields(tid, vehicleId, vehicles.get(vehicleId), {
+        lastMs: (m.get("lastDate") as Timestamp | null)?.toMillis() ?? null, lastMileage: Number(m.get("lastMileage") ?? 0),
+        nextDate: (m.get("nextDate") as Timestamp | null) ?? null, nextMileage: m.get("nextMileage") ?? null,
+      }, defaults, rates);
+      batch.update(m.ref, { ...calc, updatedAt: FieldValue.serverTimestamp(), updatedBy: "system" });
+      if (calc.status !== m.get("status")) changed++;
+      if ((open.docs.indexOf(m) + 1) % 400 === 0) {
+        await batch.commit();
+        batch = db.batch();
+      }
+    }
+    await batch.commit();
+    return changed;
+}

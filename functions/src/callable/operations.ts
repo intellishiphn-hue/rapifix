@@ -7,7 +7,8 @@ import {
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput, requireRole } from "../lib/guards";
-import { computeMaintenanceStatus, nextFrom } from "../lib/maintenance";
+import { refreshTenantMaintenance } from "../scheduled/daily";
+import { computeFields, generateMaintenanceFromOrder, maintenanceDefaults, nextFrom } from "../lib/maintenance";
 
 const AGENDA: Role[] = ["admin", "manager", "reception"];
 
@@ -88,7 +89,7 @@ export const saveMaintenance = onCall({ region: REGION }, async (request) => {
   const customer = await db.doc(`${col.customers(tid)}/${v.customerId}`).get();
   const lastMs = input.lastDate ?? Date.now();
   const next = nextFrom(lastMs, input.lastMileage, input.intervalDays, input.intervalKm);
-  const currentMileage = Math.max(Number(v.mileage ?? 0), input.lastMileage);
+  const calc = await computeFields(tid, vehicle.id, v, { lastMs, lastMileage: input.lastMileage, ...next }, await maintenanceDefaults(tid));
   const data = {
     vehicleId: vehicle.id, customerId: v.customerId,
     customerName: customer.exists ? `${customer.get("firstName")} ${customer.get("lastName")}` : (v.ownerName ?? ""),
@@ -96,8 +97,7 @@ export const saveMaintenance = onCall({ region: REGION }, async (request) => {
     vehicleLabel: `${v.make} ${v.model} ${v.year ?? ""}`.trim(), plate: v.plate,
     serviceId: input.serviceId ?? null, serviceName: input.serviceName,
     lastDate: Timestamp.fromMillis(lastMs), lastMileage: input.lastMileage,
-    intervalDays: input.intervalDays, intervalKm: input.intervalKm, ...next,
-    status: computeMaintenanceStatus(next.nextDate?.toMillis() ?? null, next.nextMileage, currentMileage),
+    intervalDays: input.intervalDays, intervalKm: input.intervalKm, ...next, ...calc,
     notes: input.notes, doneAt: null,
     updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
   };
@@ -123,8 +123,11 @@ export const maintenanceAction = onCall({ region: REGION }, async (request) => {
   if (input.action === "done") await ref.update({ ...base, status: "done", doneAt: FieldValue.serverTimestamp() });
   if (input.action === "reopen") {
     const v = await db.doc(`${col.vehicles(tid)}/${m.get("vehicleId")}`).get();
-    const status = computeMaintenanceStatus((m.get("nextDate") as Timestamp | null)?.toMillis() ?? null, m.get("nextMileage") ?? null, Number(v.get("mileage") ?? 0));
-    await ref.update({ ...base, status, doneAt: null });
+    const calc = await computeFields(tid, m.get("vehicleId"), v.data(), {
+      lastMs: (m.get("lastDate") as Timestamp | null)?.toMillis() ?? null, lastMileage: Number(m.get("lastMileage") ?? 0),
+      nextDate: (m.get("nextDate") as Timestamp | null) ?? null, nextMileage: m.get("nextMileage") ?? null,
+    }, await maintenanceDefaults(tid));
+    await ref.update({ ...base, ...calc, doneAt: null });
   }
   return { ok: true };
 });
@@ -140,4 +143,20 @@ export const saveEmployeeProfile = onCall({ region: REGION }, async (request) =>
     updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
   }, { merge: true });
   return { ok: true };
+});
+
+/**
+ * Una sola vez (o cuando se configuran intervalos nuevos): programa los mantenimientos
+ * a partir de las órdenes entregadas de los últimos 12 meses.
+ */
+export const backfillMaintenance = onCall({ region: REGION, timeoutSeconds: 300 }, async (request) => {
+  const caller = requireRole(request, ["admin", "manager"]);
+  const tid = caller.tid;
+  const since = Timestamp.fromMillis(Date.now() - 365 * 86400000);
+  const orders = await db.collection(orderCol.workOrders(tid)).where("status", "==", "DELIVERED").where("deliveredAt", ">=", since).orderBy("deliveredAt", "asc").limit(1000).get();
+  const defaults = await maintenanceDefaults(tid);
+  let created = 0;
+  for (const o of orders.docs) created += await generateMaintenanceFromOrder(tid, o.id, defaults);
+  await refreshTenantMaintenance(tid);
+  return { orders: orders.size, maintenance: created };
 });

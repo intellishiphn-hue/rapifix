@@ -18,6 +18,7 @@ import { usePendingIntakeQuotes } from "@/features/quotes/api";
 import { daysInShop } from "@/features/work-orders/OrderCard";
 import { StatusBadge } from "@/features/work-orders/StatusBadge";
 import { hnDate, hnParts, hnTodayStart } from "@/features/reports/period";
+import { ReminderQueueCard } from "@/features/maintenance/ReminderQueueCard";
 import { CollectedChartCard, MaintenanceCard, MyOrdersCard, OverduePayablesCard, TodayAppointmentsCard } from "./widgets";
 
 const monthStart = (offset = 0) => {
@@ -269,6 +270,7 @@ export function DashboardPage() {
         <div className={`grid gap-5 ${can("agenda.read") && can("maintenance.manage") ? "xl:grid-cols-3" : ""}`}>
           {can("agenda.read") && <div className={can("maintenance.manage") ? "xl:col-span-2" : ""}><TodayAppointmentsCard /></div>}
           {can("maintenance.manage") && <MaintenanceCard />}
+          {can("maintenance.manage") && <div className="xl:col-span-3"><ReminderQueueCard /></div>}
         </div>
       )}
 

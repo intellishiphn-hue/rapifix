@@ -99,6 +99,12 @@ export interface Maintenance extends BaseDoc {
   intervalKm: number; // 0 = no aplica
   nextDate: TimestampLike | null;
   nextMileage: number | null;
+  /** Fecha estimada en que le toca (la primera entre la fecha y los km estimados). La recalcula el servidor cada día */
+  dueDate?: TimestampLike | null;
+  /** Kilometraje estimado hoy según lo que maneja el cliente */
+  estimatedMileage?: number | null;
+  kmPerDay?: number;
+  kmSource?: "history" | "default";
   status: MaintenanceStatus;
   source: "order" | "manual";
   workOrderId: string | null;

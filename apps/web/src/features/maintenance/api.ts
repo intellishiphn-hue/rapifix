@@ -12,10 +12,10 @@ export const maintenanceAction = callable<{ maintenanceId: string; action: "done
 
 const maintenanceCol = () => collection(db, opsCol.maintenance(TENANT_ID));
 
-/** Índice status + nextDate. Con status null no consulta. */
+/** Índice status + dueDate (fecha estimada en que toca). Con status null no consulta. */
 export function useMaintenanceByStatus(status: MaintenanceStatus | null, max = 300) {
   return useQueryData<Maintenance>(
-    status ? query(maintenanceCol(), where("status", "==", status), orderBy("nextDate"), limit(max)) : null,
+    status ? query(maintenanceCol(), where("status", "==", status), orderBy("dueDate"), limit(max)) : null,
     `maintenance|${status}|${max}`,
   );
 }
@@ -41,18 +41,33 @@ export function nextLabel(m: Maintenance): string {
   return [m.nextDate ? formatDate(m.nextDate) : "", m.nextMileage ? formatKm(m.nextMileage) : ""].filter(Boolean).join(" o ");
 }
 
-/** Plantilla "mantenimiento" con el servicio y la fecha/km sugeridos. */
+/** "Toca aprox. 12 dic 2026 · hoy ≈ 84,300 km" (estimado con lo que maneja el cliente) */
+export function estimateLabel(m: Maintenance): string {
+  const parts = [m.dueDate ? `Toca aprox. ${formatDate(m.dueDate)}` : "", m.nextMileage && m.estimatedMileage ? `hoy ≈ ${formatKm(m.estimatedMileage)}` : ""];
+  return parts.filter(Boolean).join(" · ");
+}
+
+/** Plantilla "mantenimiento" con el servicio y el último servicio registrado. */
 export function maintenanceMessage(m: Maintenance, taller: string): string {
   const t = DEFAULT_TEMPLATES.find((x) => x.key === "mantenimiento");
-  const base = renderTemplate(t?.body ?? "", {
+  const service = /^cambio de aceite/i.test(m.serviceName) ? "su cambio de aceite" : m.serviceName.charAt(0).toLowerCase() + m.serviceName.slice(1);
+  const last = [m.lastDate ? `el ${formatDate(m.lastDate)}` : "", m.lastMileage ? `a los ${formatKm(m.lastMileage)}` : ""].filter(Boolean).join(" ");
+  return renderTemplate(t?.body ?? "", {
     cliente: m.customerName.split(" ")[0] || m.customerName,
     vehiculo: m.vehicleLabel,
     placa: formatPlate(m.plate),
+    servicio: service,
+    ultimo: last ? `Su último servicio con nosotros fue ${last}.` : "",
     taller,
   });
-  const when = [m.nextDate ? `el ${formatDate(m.nextDate)}` : "", m.nextMileage ? `a los ${formatKm(m.nextMileage)}` : ""].filter(Boolean).join(" o ");
-  const detail = [`Servicio: *${m.serviceName}*`, when ? `${m.status === "overdue" ? "Le correspondía" : "Le corresponde"} ${when}.` : ""].filter(Boolean).join("\n");
-  const marker = "¿Le agendamos";
-  const i = base.indexOf(marker);
-  return i >= 0 ? `${base.slice(0, i)}${detail}\n\n${base.slice(i)}` : `${base}\n\n${detail}`;
 }
+
+/** Pendientes de avisar: próximos o vencidos sin recordatorio en los últimos 30 días. */
+export function needsReminder(m: Maintenance, now = Date.now()): boolean {
+  if (m.status !== "due" && m.status !== "overdue") return false;
+  if (!m.phone) return false;
+  const sent = m.reminderSentAt?.toMillis?.() ?? 0;
+  return now - sent > 30 * 86400000;
+}
+
+export const backfillMaintenance = callable<Record<string, never>, { orders: number; maintenance: number }>("backfillMaintenance");

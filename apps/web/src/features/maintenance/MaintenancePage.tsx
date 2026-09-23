@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarCheck, CalendarClock, Info, MessageCircle, Plus, Search } from "lucide-react";
+import { CalendarCheck, CalendarClock, History, Info, MessageCircle, Plus, Search } from "lucide-react";
 import { MAINTENANCE_STATUS_LABELS, normalizeText, type Maintenance, type MaintenanceStatus } from "@rapifix/shared";
 import { formatDate, formatKm, formatRelative } from "@/lib/format";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -10,7 +10,10 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { Tabs } from "@/components/ui/Tabs";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
-import { MAINT_TONE, nextLabel, useMaintenanceByStatus } from "./api";
+import { backfillMaintenance, estimateLabel, MAINT_TONE, nextLabel, useMaintenanceByStatus } from "./api";
+import { toast } from "sonner";
+import { useAuth } from "@/lib/auth/useAuth";
+import { errorMessage } from "@/lib/errors";
 import { MaintenanceButtons, useMaintenanceActions, type MaintenanceActionsApi } from "./MaintenanceActions";
 import { MaintenanceFormDialog } from "./MaintenanceFormDialog";
 
@@ -27,6 +30,19 @@ export function MaintenancePage() {
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const api = useMaintenanceActions();
+  const { role } = useAuth();
+  const [backfilling, setBackfilling] = useState(false);
+  const backfill = async () => {
+    setBackfilling(true);
+    try {
+      const r = await backfillMaintenance({});
+      toast.success(`Revisadas ${r.orders} órdenes entregadas: ${r.maintenance} mantenimientos programados`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   const overdue = useMaintenanceByStatus("overdue");
   const due = useMaintenanceByStatus("due");
@@ -63,15 +79,26 @@ export function MaintenancePage() {
       <PageHeader
         title="Mantenimiento preventivo"
         description="Clientes a los que les toca volver al taller."
-        actions={<Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Nuevo mantenimiento</Button>}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            {(role === "admin" || role === "manager") && (
+              <Button variant="secondary" icon={<History className="h-4 w-4" />} loading={backfilling} onClick={() => void backfill()} title="Programa los mantenimientos de las órdenes entregadas en los últimos 12 meses">
+                Revisar órdenes pasadas
+              </Button>
+            )}
+            <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Nuevo mantenimiento</Button>
+          </div>
+        }
       />
 
       <div className="mb-5 flex items-start gap-3 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3 text-sm text-slate-700">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
         <p>
-          Los mantenimientos se crean solos al entregar una orden con servicios que tengan intervalo (se configura en{" "}
-          <Link to="/servicios" className="font-semibold text-brand-700">Servicios</Link>). El estado se actualiza cada mañana:
-          pasa a <b>Próximo</b> 15 días o 500 km antes, y a <b>Vencido</b> cuando se cumple la fecha o el kilometraje.
+          Se crean solos al entregar una orden con servicios que tengan intervalo (se configura en{" "}
+          <Link to="/servicios" className="font-semibold text-brand-700">Servicios</Link>) o que lleve aceite. Como el cliente no nos dice
+          cuánto maneja, el sistema lo estima con sus visitas anteriores o con el promedio de{" "}
+          <Link to="/configuracion" className="font-semibold text-brand-700">Configuración</Link>. Cada mañana pasa a <b>Próximo</b> 15 días
+          antes de la fecha estimada y a <b>Vencido</b> cuando ya le tocó.
         </p>
       </div>
 
@@ -160,7 +187,7 @@ function DesktopTable({ rows, api }: { rows: Maintenance[]; api: MaintenanceActi
                 {lastLabel(m)}
                 {m.workOrderCode && <Link to={`/ordenes/${m.workOrderId}`} className="block text-xs font-semibold text-brand-700">{m.workOrderCode}</Link>}
               </td>
-              <td className={m.status === "overdue" ? "px-3 py-3 font-semibold text-red-700" : "px-3 py-3 font-medium text-slate-800"}>{nextLabel(m) || "—"}</td>
+              <td className={m.status === "overdue" ? "px-3 py-3 font-semibold text-red-700" : "px-3 py-3 font-medium text-slate-800"}>{nextLabel(m) || "—"}{estimateLabel(m) && <div className="text-xs font-normal text-slate-500">{estimateLabel(m)}</div>}</td>
               <td className="px-3 py-3"><StatusCell m={m} /></td>
               <td className="px-5 py-3"><div className="flex justify-end"><MaintenanceButtons m={m} api={api} compact /></div></td>
             </tr>
@@ -186,7 +213,7 @@ function MobileList({ rows, api }: { rows: Maintenance[]; api: MaintenanceAction
           <div className="text-sm font-medium text-slate-800">{m.serviceName}</div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div><div className="text-slate-500">Último</div><div className="text-slate-700">{lastLabel(m)}</div></div>
-            <div><div className="text-slate-500">Próximo</div><div className={m.status === "overdue" ? "font-semibold text-red-700" : "font-medium text-slate-800"}>{nextLabel(m) || "—"}</div></div>
+            <div><div className="text-slate-500">Próximo</div><div className={m.status === "overdue" ? "font-semibold text-red-700" : "font-medium text-slate-800"}>{nextLabel(m) || "—"}</div>{estimateLabel(m) && <div className="text-xs text-slate-500">{estimateLabel(m)}</div>}</div>
           </div>
           {(m.reminderSentAt || m.appointmentId) && (
             <div className="flex flex-wrap gap-1.5">

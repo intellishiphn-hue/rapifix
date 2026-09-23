@@ -222,8 +222,9 @@ export type SaveSectionInput = z.infer<typeof saveSectionSchema>;
 export const changeStatusSchema = z.object({
   orderId: z.string().min(1),
   toStatus: z.enum(WORK_ORDER_STATUSES),
-  note: text(500).optional(),
-  mileageOut: z.number().int().min(0).max(2_000_000).optional(),
+  // nullish: Firebase envía como null los campos que el navegador deja en undefined
+  note: text(500).nullish(),
+  mileageOut: z.number().int().min(0).max(2_000_000).nullish(),
 });
 export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;
 

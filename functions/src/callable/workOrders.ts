@@ -171,7 +171,7 @@ export const changeWorkOrderStatus = onCall({ region: REGION }, async (request) 
     };
     if (to === "DELIVERED") {
       update.deliveredAt = FieldValue.serverTimestamp();
-      if (input.mileageOut !== undefined) update.mileageOut = input.mileageOut;
+      if (input.mileageOut != null) update.mileageOut = input.mileageOut;
     }
     if (to === "CANCELLED") update.cancelReason = input.note!.trim();
     if (from === "CANCELLED") update.cancelReason = "";
@@ -184,7 +184,7 @@ export const changeWorkOrderStatus = onCall({ region: REGION }, async (request) 
     return { from, to };
   });
 
-  if (result.to === "DELIVERED" && input.mileageOut !== undefined && vehicleId) {
+  if (result.to === "DELIVERED" && input.mileageOut != null && vehicleId) {
     await logMileage(db.doc(`${col.vehicles(tid)}/${vehicleId}`), input.mileageOut, "delivery", caller, name, "Entrega");
   }
   return result;

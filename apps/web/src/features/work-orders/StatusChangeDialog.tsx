@@ -46,11 +46,12 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
     }
     setSaving(true);
     try {
+      // Solo se envían los campos con valor (Firebase convierte undefined en null)
       await changeWorkOrderStatus({
         orderId: order.id,
         toStatus: to,
-        note: note.trim() || undefined,
-        mileageOut: delivering && km !== "" && !kmInvalid ? kmNum : undefined,
+        ...(note.trim() ? { note: note.trim() } : {}),
+        ...(delivering && km !== "" && !kmInvalid ? { mileageOut: kmNum } : {}),
       });
       toast.success(`Orden ${order.code}: ${STATUS_META[to].label}`);
       const msg = cancelling ? null : messageForStatus(order, to, settings);

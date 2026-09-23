@@ -33,3 +33,10 @@ describe("utilidades de orden", () => {
     expect(renderTemplate("Hola {{cliente}}, su {{vehiculo}} está listo. {{link}}", { cliente: "Juan", vehiculo: "Corolla" })).toBe("Hola Juan, su Corolla está listo.");
   });
 });
+
+import { changeStatusSchema } from "../workOrder";
+describe("cambio de estado", () => {
+  it("acepta note y mileageOut en null (así los envía Firebase)", () => {
+    expect(changeStatusSchema.safeParse({ orderId: "x", toStatus: "IN_REPAIR", note: null, mileageOut: null }).success).toBe(true);
+  });
+});

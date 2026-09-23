@@ -39,6 +39,14 @@ service firebase.storage {
       allow write: if hasRole(tid, ['admin', 'manager']) && isImage() && maxMB(2);
     }
 
+    // Comprobantes de gastos (foto o PDF): solo administración y gerencia
+    match /tenants/{tid}/expenses/{fileName} {
+      allow read: if hasRole(tid, ['admin', 'manager']);
+      allow create: if hasRole(tid, ['admin', 'manager']) && maxMB(10)
+        && (isImage() || request.resource.contentType == 'application/pdf');
+      allow update, delete: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

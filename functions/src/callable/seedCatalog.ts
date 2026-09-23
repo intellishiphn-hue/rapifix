@@ -18,8 +18,8 @@ const PRODUCTS = [
   { sku: "BAT-12V60", name: "Batería 12V 60Ah", category: "Eléctrico", brand: "LTH", price: L(3600), cost: L(2600), stock: 3, min: 2 },
 ];
 const SERVICES = [
-  { code: "MO-ACEITE", name: "Cambio de aceite y filtro (mano de obra)", category: "Mantenimiento", price: L(350), hours: 0.5 },
-  { code: "ALIN-BAL", name: "Alineado y balanceo", category: "Suspensión", price: L(900), hours: 1 },
+  { code: "MO-ACEITE", name: "Cambio de aceite y filtro (mano de obra)", category: "Mantenimiento", price: L(350), hours: 0.5, days: 90, km: 5000 },
+  { code: "ALIN-BAL", name: "Alineado y balanceo", category: "Suspensión", price: L(900), hours: 1, days: 180, km: 10000 },
   { code: "DIAG-COMP", name: "Diagnóstico computarizado (escáner)", category: "Diagnóstico", price: L(600), hours: 1 },
   { code: "MO-FRENOS", name: "Cambio de pastillas de freno (mano de obra)", category: "Frenos", price: L(700), hours: 1.5 },
   { code: "RECT-DISC", name: "Rectificado de discos (par)", category: "Frenos", price: L(1200), hours: 1 },
@@ -50,7 +50,7 @@ export const seedDemoCatalog = onCall({ region: REGION }, async (request) => {
   }
   for (const s of SERVICES) {
     batch.set(db.collection(catalogCol.services(tid)).doc(), {
-      code: s.code, name: s.name, category: s.category, price: s.price, estimatedHours: s.hours, taxable: true, active: true,
+      code: s.code, name: s.name, category: s.category, price: s.price, estimatedHours: s.hours, intervalDays: (s as { days?: number }).days ?? 0, intervalKm: (s as { km?: number }).km ?? 0, taxable: true, active: true,
       searchKeywords: buildSearchKeywords([s.name, s.code, s.category]), ...meta,
     });
   }

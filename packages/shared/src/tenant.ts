@@ -46,3 +46,20 @@ export const catalogCol = {
   rokiEvents: (tid: string) => `tenants/${tid}/rokiEvents`,
   privateConfig: (tid: string) => `tenants/${tid}/private`,
 } as const;
+
+export const opsCol = {
+  appointments: (tid: string) => `tenants/${tid}/appointments`,
+  maintenance: (tid: string) => `tenants/${tid}/maintenance`,
+  employees: (tid: string) => `tenants/${tid}/employees`,
+} as const;
+
+export const financeCol = {
+  suppliers: (tid: string) => `tenants/${tid}/suppliers`,
+  purchases: (tid: string) => `tenants/${tid}/purchases`,
+  supplierPayments: (tid: string) => `tenants/${tid}/supplierPayments`,
+  expenses: (tid: string) => `tenants/${tid}/expenses`,
+} as const;
+
+export const financeStoragePath = {
+  expenseReceipt: (tid: string, fileId: string, ext: "jpg" | "png" | "webp" | "pdf") => `tenants/${tid}/expenses/${fileId}.${ext}`,
+} as const;

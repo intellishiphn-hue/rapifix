@@ -37,6 +37,9 @@ export interface Service extends BaseDoc {
   estimatedHours: number;
   taxable: boolean;
   active: boolean;
+  /** Mantenimiento recomendado: cada cuántos días / km (0 = no genera recordatorio) */
+  intervalDays?: number;
+  intervalKm?: number;
   searchKeywords: string[];
 }
 
@@ -66,6 +69,8 @@ export const serviceSchema = z.object({
   estimatedHours: z.number({ error: "Horas no válidas" }).min(0).max(500),
   taxable: z.boolean(),
   active: z.boolean(),
+  intervalDays: z.number({ error: "Días no válidos" }).int().min(0).max(3650),
+  intervalKm: z.number({ error: "Kilómetros no válidos" }).int().min(0).max(500_000),
 });
 export type ServiceInput = z.infer<typeof serviceSchema>;
 

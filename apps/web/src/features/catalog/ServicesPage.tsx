@@ -17,14 +17,14 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { saveService, useServices } from "./api";
 
-const EMPTY: ServiceInput = { code: "", name: "", category: "", price: 0, estimatedHours: 1, taxable: true, active: true };
+const EMPTY: ServiceInput = { code: "", name: "", category: "", price: 0, estimatedHours: 1, taxable: true, active: true, intervalDays: 0, intervalKm: 0 };
 
 function ServiceDialog({ service, onClose }: { service: Service | null | undefined; onClose: () => void }) {
   const { user } = useAuth();
   const { register, handleSubmit, reset, setValue, watch, formState } = useForm<ServiceInput>({ resolver: zodResolver(serviceSchema), defaultValues: EMPTY });
   const price = watch("price");
   useEffect(() => {
-    if (service !== undefined) reset(service ? { code: service.code, name: service.name, category: service.category, price: service.price, estimatedHours: service.estimatedHours, taxable: service.taxable, active: service.active } : EMPTY);
+    if (service !== undefined) reset(service ? { code: service.code, name: service.name, category: service.category, price: service.price, estimatedHours: service.estimatedHours, taxable: service.taxable, active: service.active, intervalDays: service.intervalDays ?? 0, intervalKm: service.intervalKm ?? 0 } : EMPTY);
   }, [service, reset]);
   if (service === undefined) return null;
   const submit = async (v: ServiceInput) => {
@@ -45,6 +45,8 @@ function ServiceDialog({ service, onClose }: { service: Service | null | undefin
         <Field label="Categoría"><Input {...register("category")} placeholder="Frenos, suspensión, mantenimiento..." /></Field>
         <Field label="Precio" required><MoneyInput value={price} onChange={(v) => setValue("price", v)} /></Field>
         <Field label="Horas estimadas" error={formState.errors.estimatedHours?.message}><Input type="number" step="0.5" min={0} {...register("estimatedHours", { valueAsNumber: true })} /></Field>
+        <Field label="Repetir cada (días)" hint="0 = sin recordatorio" error={formState.errors.intervalDays?.message}><Input type="number" min={0} step={1} {...register("intervalDays", { valueAsNumber: true })} /></Field>
+        <Field label="Repetir cada (km)" hint="Ej. 5000 para cambio de aceite" error={formState.errors.intervalKm?.message}><Input type="number" min={0} step={500} {...register("intervalKm", { valueAsNumber: true })} /></Field>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("taxable")} /> Aplica ISV</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("active")} /> Activo</label>
         <button type="submit" className="hidden" />

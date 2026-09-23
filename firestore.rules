@@ -247,7 +247,7 @@ service cloud.firestore {
       match /services/{serviceId} {
         allow read: if inTenant(tid);
         allow create, update: if hasRole(tid, ['admin', 'manager'])
-          && incoming().keys().hasOnly(['code', 'name', 'category', 'price', 'estimatedHours', 'taxable', 'active', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && incoming().keys().hasOnly(['code', 'name', 'category', 'price', 'estimatedHours', 'taxable', 'active', 'intervalDays', 'intervalKm', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
           && isStr(incoming().name, 2, 120) && incoming().price is int && incoming().price >= 0
           && incoming().taxable is bool && incoming().active is bool
           && (request.method == 'create' ? validCreateMeta() : validUpdateMeta());
@@ -271,6 +271,37 @@ service cloud.firestore {
       // tenants/{tid}/private/* (llaves de ROKI) y rokiEvents quedan cerrados por la regla final.
       match /onlinePayments/{opId} {
         allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
+
+      // ---------- FASE 5: agenda, mantenimiento, personal, proveedores, compras y gastos ----------
+      // Todo se escribe por Cloud Functions (validación, numeración e inventario en el servidor).
+      match /appointments/{id} {
+        allow read: if inTenant(tid);
+        allow write: if false;
+      }
+      match /maintenance/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
+      match /employees/{uid} {
+        allow read: if inTenant(tid);
+        allow write: if false;
+      }
+      match /suppliers/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'warehouse']);
+        allow write: if false;
+      }
+      match /purchases/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'warehouse']);
+        allow write: if false;
+      }
+      match /supplierPayments/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'warehouse']);
+        allow write: if false;
+      }
+      match /expenses/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager']);
         allow write: if false;
       }
 

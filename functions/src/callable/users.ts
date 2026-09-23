@@ -1,3 +1,4 @@
+import { logger } from "firebase-functions/v2";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -56,12 +57,30 @@ export const bootstrapAdmin = onCall({ region: REGION }, async (request) => {
   return { ok: true };
 });
 
+const AUTH_ERRORS: Record<string, string> = {
+  "auth/invalid-email": "El correo no es válido.",
+  "auth/invalid-password": "La contraseña no es válida (mínimo 8 caracteres).",
+  "auth/password-does-not-meet-requirements": "La contraseña no cumple la política de Firebase (revise mayúsculas, números o símbolos).",
+  "auth/invalid-display-name": "El nombre no es válido.",
+  "auth/operation-not-allowed": "El acceso con correo y contraseña está desactivado en Firebase Authentication.",
+  "auth/insufficient-permission": "El servidor no tiene permiso para crear usuarios en Firebase Authentication.",
+  "auth/too-many-requests": "Demasiados intentos. Espere unos minutos.",
+};
+
+function authError(err: unknown, fallback: string): HttpsError {
+  const code = (err as { code?: string }).code ?? "";
+  const message = (err as { message?: string }).message ?? String(err);
+  logger.error("createStaffUser: error de Firebase Auth", { code, message });
+  return new HttpsError(code === "auth/insufficient-permission" ? "permission-denied" : "internal", AUTH_ERRORS[code] ?? `${fallback} (${code || message.slice(0, 120)})`);
+}
+
 /** Crea un usuario del personal con su rol. Solo administradores. */
 export const createStaffUser = onCall({ region: REGION }, async (request) => {
   const caller = requireRole(request, ["admin"]);
   const input = parseInput(createStaffUserSchema, request.data);
 
   let uid: string;
+  let created = false;
   try {
     const user = await auth.createUser({
       email: input.email,
@@ -70,25 +89,41 @@ export const createStaffUser = onCall({ region: REGION }, async (request) => {
       disabled: false,
     });
     uid = user.uid;
+    created = true;
   } catch (err: unknown) {
     const code = (err as { code?: string }).code;
-    if (code === "auth/email-already-exists") throw new HttpsError("already-exists", "Ya existe un usuario con ese correo.");
-    if (code === "auth/invalid-password") throw new HttpsError("invalid-argument", "La contraseña no es válida (mínimo 8 caracteres).");
-    throw new HttpsError("internal", "No se pudo crear el usuario.");
+    if (code !== "auth/email-already-exists") throw authError(err, "No se pudo crear el usuario");
+    // Si un intento anterior quedó a medias (existe en Authentication pero no en el sistema), se completa.
+    const existing = await auth.getUserByEmail(input.email);
+    const profile = await db.doc(`${col.users}/${existing.uid}`).get();
+    if (profile.exists) throw new HttpsError("already-exists", "Ya existe un usuario con ese correo.");
+    try {
+      await auth.updateUser(existing.uid, { password: input.password, displayName: input.displayName, disabled: false });
+    } catch (e) {
+      throw authError(e, "No se pudo actualizar el usuario existente");
+    }
+    uid = existing.uid;
   }
 
-  await applyRole(uid, caller.tid, input.role);
-  await db.doc(`${col.users}/${uid}`).set({
-    displayName: input.displayName,
-    email: input.email,
-    phone: input.phone ? normalizePhone(input.phone) : "",
-    tid: caller.tid,
-    role: input.role,
-    active: true,
-    createdAt: FieldValue.serverTimestamp(),
-    createdBy: caller.uid,
-    claimsUpdatedAt: FieldValue.serverTimestamp(),
-  });
+  try {
+    await applyRole(uid, caller.tid, input.role);
+    await db.doc(`${col.users}/${uid}`).set({
+      displayName: input.displayName,
+      email: input.email,
+      phone: input.phone ? normalizePhone(input.phone) : "",
+      tid: caller.tid,
+      role: input.role,
+      active: true,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: caller.uid,
+      claimsUpdatedAt: FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    logger.error("createStaffUser: no se pudo asignar el rol o guardar el perfil", { uid, err: String(err) });
+    // Se deshace para que se pueda volver a intentar sin "correo ya existe"
+    if (created) await auth.deleteUser(uid).catch(() => undefined);
+    throw new HttpsError("internal", `No se pudo terminar de crear el usuario: ${String((err as Error)?.message ?? err).slice(0, 150)}`);
+  }
   return { uid };
 });
 

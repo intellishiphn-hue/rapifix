@@ -34,3 +34,12 @@ export const quoteCol = {
   quotes: (tid: string) => `tenants/${tid}/quotes`,
   portal: "publicPortal",
 } as const;
+
+export const catalogCol = {
+  products: (tid: string) => `tenants/${tid}/products`,
+  productCosts: (tid: string) => `tenants/${tid}/productCosts`,
+  services: (tid: string) => `tenants/${tid}/services`,
+  movements: (tid: string) => `tenants/${tid}/inventoryMovements`,
+  payments: (tid: string) => `tenants/${tid}/payments`,
+  sales: (tid: string) => `tenants/${tid}/sales`,
+} as const;

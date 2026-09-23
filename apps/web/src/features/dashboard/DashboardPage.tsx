@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, getCountFromServer, limit, orderBy, query, Timestamp, where } from "firebase/firestore";
+import { collection, getAggregateFromServer, getCountFromServer, limit, orderBy, query, sum, Timestamp, where } from "firebase/firestore";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AlertTriangle, ArrowRight, Car, CheckCircle2, ClipboardList, Clock, FileClock, Plus, Stethoscope, UserPlus, Users, Wrench } from "lucide-react";
-import { col, formatMoney, KANBAN_COLUMNS, orderCol, type Customer, type Vehicle, type WorkOrder } from "@rapifix/shared";
+import { catalogCol, col, formatMoney, KANBAN_COLUMNS, orderCol, type Customer, type Vehicle, type WorkOrder } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { useQueryData } from "@/lib/firestore/hooks";
 import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
@@ -66,6 +66,36 @@ function Kpi({ label, value, icon, hint, tone }: { label: string; value: number 
         </div>
         <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${tone}`}>{icon}</span>
       </div>
+    </Card>
+  );
+}
+
+/** Cobrado hoy / este mes y cuentas por cobrar (solo quien ve finanzas). */
+function useMoney(enabled: boolean) {
+  const [m, setM] = useState<{ today: number; month: number; receivable: number } | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    const pays = collection(db, catalogCol.payments(TENANT_ID));
+    const q = (since: Date) => getAggregateFromServer(query(pays, where("status", "==", "valid"), where("at", ">=", Timestamp.fromDate(since))), { total: sum("amount") });
+    Promise.all([
+      q(d),
+      q(new Date(d.getFullYear(), d.getMonth(), 1)),
+      getAggregateFromServer(query(collection(db, orderCol.workOrders(TENANT_ID)), where("balance", ">", 0)), { total: sum("balance") }),
+    ])
+      .then(([a, b, c]) => setM({ today: a.data().total ?? 0, month: b.data().total ?? 0, receivable: c.data().total ?? 0 }))
+      .catch(() => setM({ today: 0, month: 0, receivable: 0 }));
+  }, [enabled]);
+  return m;
+}
+
+function MoneyKpi({ label, value, hint, tone }: { label: string; value: number | undefined; hint?: string; tone: string }) {
+  return (
+    <Card className="p-5">
+      <div className="text-sm font-medium text-slate-500">{label}</div>
+      {value === undefined ? <Skeleton className="mt-2 h-8 w-28" /> : <div className={`tabular mt-1 text-2xl font-bold tracking-tight ${tone}`}>{formatMoney(value)}</div>}
+      {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
     </Card>
   );
 }
@@ -175,6 +205,7 @@ export function DashboardPage() {
   const isEmpty = kpis && kpis.customers === 0 && kpis.vehicles === 0;
   const recentOrders = open.data.slice(0, 5);
   const pendingIntake = usePendingIntakeQuotes();
+  const money = useMoney(can("dashboard.financials"));
 
   return (
     <div className="space-y-6">
@@ -207,6 +238,14 @@ export function DashboardPage() {
         <Kpi label="Esperando aprobación" value={oc(["QUOTE_SENT", "AWAITING_APPROVAL"])} icon={<FileClock className="h-5 w-5" />} tone="bg-amber-50 text-amber-600" />
         <Kpi label="Listos para entrega" value={oc(["READY"])} icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-green-50 text-green-600" />
       </div>
+
+      {can("dashboard.financials") && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <MoneyKpi label="Cobrado hoy" value={money?.today} tone="text-slate-900" />
+          <MoneyKpi label="Cobrado este mes" value={money?.month} tone="text-emerald-700" />
+          <MoneyKpi label="Cuentas por cobrar" value={money?.receivable} hint="Saldos pendientes en órdenes" tone="text-amber-700" />
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-3">
         <Card>

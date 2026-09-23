@@ -16,3 +16,8 @@ export { onWorkOrderWritten, onOrderPhotoWritten, onOrderPhotoUpdated, onOrderEv
 // Fase 3: cotizaciones y portal del cliente
 export { saveQuote, sendQuote, newQuoteVersion, ensurePortal, recordQuoteDecision, convertQuoteToOrder } from "./callable/quotes";
 export { respondToQuote, markQuoteViewed } from "./public/portal";
+// Fase 4: inventario, pagos y punto de venta
+export { registerInventoryMovement, consumeOrderPart } from "./callable/inventory";
+export { registerPayment, voidPayment } from "./callable/payments";
+export { createSale } from "./callable/sales";
+export { seedDemoCatalog } from "./callable/seedCatalog";

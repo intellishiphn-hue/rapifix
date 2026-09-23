@@ -26,6 +26,8 @@ export const QUOTE_STATUS_META: Record<QuoteStatus, { label: string; tone: "gray
 export interface QuoteItem {
   id: string;
   type: QuoteItemType;
+  productId?: string | null; // del catálogo (para descontar inventario)
+  serviceId?: string | null;
   description: string;
   qty: number;
   unitCost: number; // costo interno (no se muestra al cliente)
@@ -117,6 +119,8 @@ const cents = z.number().int().min(0).max(100_000_000_00);
 export const quoteItemInput = z.object({
   id: z.string().min(1).max(40),
   type: z.enum(QUOTE_ITEM_TYPES),
+  productId: z.string().nullish(),
+  serviceId: z.string().nullish(),
   description: z.string().trim().min(1, "Cada línea necesita descripción").max(300),
   qty: z.number().positive("La cantidad debe ser mayor a 0").max(10_000),
   unitCost: cents,

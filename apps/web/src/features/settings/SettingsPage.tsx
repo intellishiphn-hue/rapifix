@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { seedDemoData } from "@/features/users/api";
 import { seedDemoOrders } from "@/features/work-orders/api";
+import { seedDemoCatalog } from "@/features/catalog/api";
 import { saveSettings, uploadLogo, useSettings } from "./api";
 
 export function SettingsPage() {
@@ -25,6 +26,18 @@ export function SettingsPage() {
   const [seedOpen, setSeedOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedingOrders, setSeedingOrders] = useState(false);
+
+  const seedCatalog = async () => {
+    setSeedingOrders(true);
+    try {
+      const r = await seedDemoCatalog();
+      toast.success(`Catálogo demo: ${r.products} productos y ${r.services} servicios`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSeedingOrders(false);
+    }
+  };
 
   const seedOrders = async () => {
     setSeedingOrders(true);
@@ -165,6 +178,7 @@ export function SettingsPage() {
                 <p className="text-sm text-slate-600">Crea 3 clientes (Juan Pérez, María López, Carlos Hernández) y 5 vehículos. Solo se puede cargar una vez.</p>
                 <Button variant="secondary" className="mt-3 w-full" icon={<Database className="h-4 w-4" />} onClick={() => setSeedOpen(true)}>Cargar clientes y vehículos demo</Button>
                 <Button variant="secondary" className="mt-2 w-full" icon={<Database className="h-4 w-4" />} loading={seedingOrders} onClick={() => void seedOrders()}>Cargar órdenes demo</Button>
+                <Button variant="secondary" className="mt-2 w-full" icon={<Database className="h-4 w-4" />} loading={seedingOrders} onClick={() => void seedCatalog()}>Cargar catálogo demo (repuestos y servicios)</Button>
               </div>
             </Card>
           )}

@@ -218,6 +218,56 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // ---------- Catálogo e inventario (FASE 4) ----------
+      function validProduct(d) {
+        return d.keys().hasOnly([
+            'sku', 'name', 'category', 'brand', 'supplier', 'unit', 'price', 'stock', 'minStock', 'location',
+            'taxable', 'active', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+          ])
+          && isStr(d.sku, 0, 40) && isStr(d.name, 2, 120) && isStr(d.category, 0, 60) && isStr(d.brand, 0, 60)
+          && isStr(d.supplier, 0, 80) && isStr(d.unit, 1, 20) && isStr(d.location, 0, 60)
+          && d.price is int && d.price >= 0 && d.minStock is number && d.minStock >= 0
+          && d.taxable is bool && d.active is bool
+          && d.searchKeywords is list && d.searchKeywords.size() <= 200;
+      }
+      match /products/{productId} {
+        allow read: if inTenant(tid);
+        // La existencia (stock) solo la cambian Cloud Functions por movimientos de inventario
+        allow create: if hasRole(tid, ['admin', 'manager', 'warehouse']) && validProduct(incoming()) && validCreateMeta() && incoming().stock == 0;
+        allow update: if hasRole(tid, ['admin', 'manager', 'warehouse']) && validProduct(incoming()) && validUpdateMeta() && unchanged('stock');
+        allow delete: if false;
+      }
+      // Costos: técnicos, recepción y vendedores no pueden verlos
+      match /productCosts/{productId} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'warehouse']);
+        allow write: if hasRole(tid, ['admin', 'manager', 'warehouse'])
+          && incoming().keys().hasOnly(['cost', 'avgCost', 'lastPurchaseCost', 'updatedAt'])
+          && incoming().cost is int && incoming().cost >= 0;
+      }
+      match /services/{serviceId} {
+        allow read: if inTenant(tid);
+        allow create, update: if hasRole(tid, ['admin', 'manager'])
+          && incoming().keys().hasOnly(['code', 'name', 'category', 'price', 'estimatedHours', 'taxable', 'active', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && isStr(incoming().name, 2, 120) && incoming().price is int && incoming().price >= 0
+          && incoming().taxable is bool && incoming().active is bool
+          && (request.method == 'create' ? validCreateMeta() : validUpdateMeta());
+        allow delete: if false;
+      }
+      match /inventoryMovements/{movementId} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'warehouse', 'reception']);
+        allow write: if false;
+      }
+
+      // ---------- Pagos y ventas (FASE 4): solo Cloud Functions ----------
+      match /payments/{paymentId} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
+      match /sales/{saleId} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
+
       // Directorio del personal (nombres y roles para asignar técnicos). Lo mantiene el servidor.
       match /staffDirectory/{uid} {
         allow read: if inTenant(tid);

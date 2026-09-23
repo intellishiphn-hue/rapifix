@@ -20,11 +20,14 @@ export function formatPhone(value: string | null | undefined): string {
   return value;
 }
 
-/** Link wa.me con texto opcional (fallback manual de WhatsApp) */
+/**
+ * Link de WhatsApp con texto (fallback manual). Se usa api.whatsapp.com/send en lugar de
+ * wa.me porque la redirección de wa.me daña los emojis del mensaje.
+ */
 export function whatsappLink(phone: string, text?: string): string {
   const digits = phone.replace(/\D/g, "");
-  const base = `https://wa.me/${digits}`;
-  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
+  const base = `https://api.whatsapp.com/send?phone=${digits}`;
+  return text ? `${base}&text=${encodeURIComponent(text.normalize("NFC"))}` : base;
 }
 
 export function isValidPhone(value: string): boolean {

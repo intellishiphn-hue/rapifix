@@ -13,6 +13,7 @@ import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { useOrderEvents, useWorkOrder } from "./api";
 import { ApprovedItems, QuoteEditor } from "@/features/quotes/QuoteEditor";
 import { OrderDocuments, PortalLinkButton } from "./OrderDocuments";
+import { OrderPayments } from "@/features/payments/OrderPayments";
 import { StatusBadge } from "./StatusBadge";
 import { StatusPicker } from "./StatusPicker";
 import { useStatusChange } from "./useStatusChange";
@@ -24,9 +25,7 @@ import { OrderCommunication } from "./OrderCommunication";
 import { daysInShop } from "./OrderCard";
 
 type Tab = "resumen" | "diagnostico" | "cotizacion" | "servicios" | "repuestos" | "fotos" | "historial" | "comunicacion" | "pagos" | "documentos";
-const UPCOMING: Partial<Record<Tab, { phase: number; text: string }>> = {
-  pagos: { phase: 4, text: "Pagos, abonos y saldo pendiente de esta orden." },
-};
+const UPCOMING: Partial<Record<Tab, { phase: number; text: string }>> = {};
 
 export function WorkOrderDetailPage() {
   const { id } = useParams();
@@ -115,10 +114,11 @@ export function WorkOrderDetailPage() {
         {tab === "repuestos" && (
           <>
             <ApprovedItems order={order} types={["part"]} empty="Sin repuestos aprobados" />
-            <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">En la Fase 4 los repuestos se conectan al inventario (descuento de existencias).</p>
+            <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">Los repuestos agregados desde el catálogo se pueden descontar del inventario cuando se usan.</p>
           </>
         )}
         {tab === "documentos" && <OrderDocuments order={order} />}
+        {tab === "pagos" && <OrderPayments order={order} />}
         {UPCOMING[tab] && (
           <EmptyState icon={<ClipboardList className="h-7 w-7" />} title={`Disponible en la Fase ${UPCOMING[tab]!.phase}`} description={UPCOMING[tab]!.text} />
         )}

@@ -37,8 +37,8 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Ventas y finanzas",
     items: [
-      { label: "Punto de venta", to: "/pos", icon: ShoppingCart, phase: 4 },
-      { label: "Pagos", to: "/pagos", icon: CreditCard, phase: 4 },
+      { label: "Punto de venta", to: "/pos", icon: ShoppingCart, permission: "sales.create" },
+      { label: "Pagos", to: "/pagos", icon: CreditCard, permission: "payments.read" },
       { label: "Gastos", to: "/gastos", icon: Receipt, phase: 5 },
       { label: "Reportes", to: "/reportes", icon: BarChart3, phase: 5 },
     ],
@@ -46,9 +46,9 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Inventario",
     items: [
-      { label: "Inventario", to: "/inventario", icon: Boxes, phase: 4 },
-      { label: "Productos y repuestos", to: "/productos", icon: Package, phase: 4 },
-      { label: "Servicios", to: "/servicios", icon: Wrench, phase: 4 },
+      { label: "Inventario", to: "/inventario", icon: Boxes, permission: "catalog.read" },
+      { label: "Productos y repuestos", to: "/productos", icon: Package, permission: "catalog.read" },
+      { label: "Servicios", to: "/servicios", icon: Wrench, permission: "catalog.read" },
       { label: "Proveedores", to: "/proveedores", icon: Truck, phase: 5 },
     ],
   },

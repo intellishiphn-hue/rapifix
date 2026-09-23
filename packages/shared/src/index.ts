@@ -9,3 +9,4 @@ export * from "./workOrderStatus";
 export * from "./workOrder";
 export * from "./templates";
 export * from "./quote";
+export * from "./catalog";

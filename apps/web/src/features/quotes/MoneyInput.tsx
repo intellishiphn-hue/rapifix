@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/Field";
 import { cn } from "@/lib/cn";
 
 /** Campo de dinero en lempiras que guarda centavos. */
-export function MoneyInput({ value, onChange, className, disabled }: { value: number; onChange: (cents: number) => void; className?: string; disabled?: boolean }) {
+export function MoneyInput({ value, onChange, className, disabled, placeholder }: { value: number; onChange: (cents: number) => void; className?: string; disabled?: boolean; placeholder?: string }) {
   const [text, setText] = useState(value ? (value / 100).toFixed(2) : "");
   useEffect(() => {
     const current = Math.round(Number(text.replace(/,/g, "")) * 100) || 0;
@@ -16,6 +16,7 @@ export function MoneyInput({ value, onChange, className, disabled }: { value: nu
       <Input
         inputMode="decimal"
         disabled={disabled}
+        placeholder={placeholder}
         value={text}
         onChange={(e) => {
           const t = e.target.value.replace(/[^\d.,]/g, "");

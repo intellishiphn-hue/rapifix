@@ -34,6 +34,12 @@ export const PERMISSIONS = [
   "orders.create",
   "orders.diagnose",
   "quotes.manage",
+  "catalog.read",
+  "catalog.manage",
+  "inventory.manage",
+  "sales.create",
+  "payments.read",
+  "payments.void",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -49,10 +55,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   reception: [
     "dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "settings.read",
     "orders.read", "orders.create", "orders.diagnose", "quotes.manage",
+    "catalog.read", "sales.create", "payments.read",
   ],
-  technician: ["dashboard.view", "customers.read", "vehicles.read", "orders.read", "orders.diagnose"],
-  warehouse: ["dashboard.view", "customers.read", "vehicles.read", "orders.read"],
-  seller: ["dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "orders.read"],
+  technician: ["dashboard.view", "customers.read", "vehicles.read", "orders.read", "orders.diagnose", "catalog.read"],
+  warehouse: ["dashboard.view", "customers.read", "vehicles.read", "orders.read", "catalog.read", "catalog.manage", "inventory.manage"],
+  seller: [
+    "dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "orders.read",
+    "catalog.read", "sales.create", "payments.read",
+  ],
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {

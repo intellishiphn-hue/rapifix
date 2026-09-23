@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, HelpCircle, Plus, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, HelpCircle, Plus, Search, Trash2, XCircle } from "lucide-react";
+import { CatalogPicker, type CatalogPick } from "@/features/catalog/CatalogPicker";
+import { fetchCost } from "@/features/catalog/api";
 import {
   DECISION_CHANNEL_LABELS, formatMoney, QUOTE_ITEM_LABELS, QUOTE_ITEM_TYPES,
   type Quote, type QuoteItemInput, type QuoteItemType, type Totals,
@@ -77,8 +79,18 @@ export function QuoteLinesEditor({
   taxRate: number;
 }) {
   const edit = (id: string, patch: Partial<QuoteItemInput>) => onLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const [picking, setPicking] = useState(false);
+  const addFromCatalog = async (pick: CatalogPick) => {
+    if (pick.kind === "product") {
+      const cost = showCost ? await fetchCost(pick.item.id) : 0;
+      onLines([...lines.filter((l) => l.description.trim()), { ...blankLine("part"), productId: pick.item.id, description: pick.item.name, unitPrice: pick.item.price, unitCost: cost, taxable: pick.item.taxable }]);
+    } else {
+      onLines([...lines.filter((l) => l.description.trim()), { ...blankLine("service"), serviceId: pick.item.id, description: pick.item.name, unitPrice: pick.item.price, taxable: pick.item.taxable }]);
+    }
+  };
   return (
     <div className="space-y-3">
+      <CatalogPicker open={picking} onClose={() => setPicking(false)} onPick={(p) => void addFromCatalog(p)} />
       {lines.map((l, i) => (
         <div key={l.id} className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-12 sm:items-end">
           <Field label={i === 0 ? "Tipo" : ""} className="sm:col-span-2">
@@ -88,6 +100,7 @@ export function QuoteLinesEditor({
           </Field>
           <Field label={i === 0 ? "Descripción" : ""} className="col-span-2 sm:col-span-4">
             <Input value={l.description} onChange={(e) => edit(l.id, { description: e.target.value })} placeholder="Ej. Pastillas de freno delanteras" />
+            {(l.productId || l.serviceId) && <span className="mt-0.5 block text-[11px] text-brand-700">Del catálogo{l.productId ? " · se puede descontar del inventario" : ""}</span>}
           </Field>
           <Field label={i === 0 ? "Cant." : ""} className="sm:col-span-1">
             <Input type="number" inputMode="decimal" min={0} step="any" value={Number.isNaN(l.qty) ? "" : l.qty} onChange={(e) => edit(l.id, { qty: e.target.value === "" ? Number.NaN : Number(e.target.value) })} className="text-right" />
@@ -106,6 +119,7 @@ export function QuoteLinesEditor({
         </div>
       ))}
       <div className="flex flex-wrap gap-2">
+        <Button size="sm" icon={<Search className="h-3.5 w-3.5" />} onClick={() => setPicking(true)}>Del catálogo</Button>
         {QUOTE_ITEM_TYPES.map((t) => (
           <Button key={t} size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => onLines([...lines, blankLine(t)])}>{QUOTE_ITEM_LABELS[t]}</Button>
         ))}

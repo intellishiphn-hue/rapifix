@@ -21,6 +21,13 @@ const PortalLinksPage = page(() => import("@/features/portal/PortalLinksPage"), 
 const PortalPage = page(() => import("@/features/portal/PortalPage"), "PortalPage");
 const PrintOrderPage = page(() => import("@/features/print/PrintPages"), "PrintOrderPage");
 const PrintQuotePage = page(() => import("@/features/print/PrintPages"), "PrintQuotePage");
+const ProductsPage = page(() => import("@/features/catalog/ProductsPage"), "ProductsPage");
+const InventoryPage = page(() => import("@/features/catalog/InventoryPage"), "InventoryPage");
+const ServicesPage = page(() => import("@/features/catalog/ServicesPage"), "ServicesPage");
+const POSPage = page(() => import("@/features/pos/POSPage"), "POSPage");
+const PaymentsPage = page(() => import("@/features/payments/PaymentsPage"), "PaymentsPage");
+const PrintReceiptPage = page(() => import("@/features/print/PrintPages"), "PrintReceiptPage");
+const PrintSalePage = page(() => import("@/features/print/PrintPages"), "PrintSalePage");
 const UsersPage = page(() => import("@/features/users/UsersPage"), "UsersPage");
 function page<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K) {
   return lazy(() => loader().then((m) => ({ default: m[key] })));
@@ -43,6 +50,8 @@ export const router = createBrowserRouter([
   { path: "/seguimiento/:token", element: <RedirectToPortal suffix="" /> },
   // Documentos imprimibles (requieren sesión, sin menú)
   { path: "/imprimir/orden/:id", element: <RequireAuth><S><PrintOrderPage /></S></RequireAuth> },
+  { path: "/imprimir/recibo/:id", element: <RequireAuth><S><PrintReceiptPage /></S></RequireAuth> },
+  { path: "/imprimir/venta/:id", element: <RequireAuth><S><PrintSalePage /></S></RequireAuth> },
   { path: "/imprimir/cotizacion/:id", element: <RequireAuth><S><PrintQuotePage /></S></RequireAuth> },
   {
     path: "/",
@@ -64,6 +73,11 @@ export const router = createBrowserRouter([
       { path: "cotizaciones/nueva", element: <RequirePermission permission="quotes.manage"><S><DirectQuotePage /></S></RequirePermission> },
       { path: "cotizaciones/:id", element: <RequirePermission permission="orders.read"><S><DirectQuotePage /></S></RequirePermission> },
       { path: "portal", element: <RequirePermission permission="orders.read"><S><PortalLinksPage /></S></RequirePermission> },
+      { path: "productos", element: <RequirePermission permission="catalog.read"><S><ProductsPage /></S></RequirePermission> },
+      { path: "inventario", element: <RequirePermission permission="catalog.read"><S><InventoryPage /></S></RequirePermission> },
+      { path: "servicios", element: <RequirePermission permission="catalog.read"><S><ServicesPage /></S></RequirePermission> },
+      { path: "pos", element: <RequirePermission permission="sales.create"><S><POSPage /></S></RequirePermission> },
+      { path: "pagos", element: <RequirePermission permission="payments.read"><S><PaymentsPage /></S></RequirePermission> },
       { path: "configuracion", element: <RequirePermission permission="settings.read"><S><SettingsPage /></S></RequirePermission> },
       { path: "usuarios", element: <RequirePermission permission="users.manage"><S><UsersPage /></S></RequirePermission> },
       ...COMING_SOON.map((i) => ({ path: i.to.slice(1), element: <ComingSoonPage /> })),

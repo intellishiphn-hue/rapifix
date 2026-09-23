@@ -120,6 +120,9 @@ export interface WorkOrder extends BaseDoc {
   mileageOut: number | null;
   cancelReason: string;
   photoCount: number;
+  /** Repuestos ya descontados del inventario: clave `${quoteId}_${itemId}` */
+  consumed?: Record<string, { movementId: string; qty: number }>;
+  activeQuoteId?: string | null;
   searchKeywords: string[];
 }
 

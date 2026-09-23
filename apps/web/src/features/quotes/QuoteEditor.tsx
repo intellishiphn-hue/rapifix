@@ -17,6 +17,7 @@ import { useSettings } from "@/features/settings/api";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
 import { orderVars } from "@/features/work-orders/whatsapp";
 import { newQuoteVersion, saveQuote, sendQuote, useOrderQuotes } from "./api";
+import { consumeOrderPart } from "@/features/catalog/api";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { blankLine, DecisionInfo, QuoteLinesEditor, QuoteView, RecordDecisionDialog } from "./parts";
 
@@ -168,20 +169,46 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
   );
 }
 
-/** Líneas aprobadas por tipo (tabs Servicios y Repuestos de la orden). */
+/** Líneas aprobadas por tipo (tabs Servicios y Repuestos de la orden). Los repuestos del catálogo se descuentan del inventario. */
 export function ApprovedItems({ order, types, empty }: { order: WorkOrder; types: QuoteItemType[]; empty: string }) {
+  const { can, role, user } = useAuth();
   const { data, loading } = useOrderQuotes(order.id);
-  const items = data.filter((q) => q.status === "approved").flatMap((q) => q.items.filter((it) => types.includes(it.type)).map((it) => ({ ...it, code: q.code })));
+  const [busy, setBusy] = useState<string | null>(null);
+  const items = data.filter((q) => q.status === "approved").flatMap((q) => q.items.filter((it) => types.includes(it.type)).map((it) => ({ ...it, code: q.code, quoteId: q.id })));
+  const canConsume = (can("inventory.manage") || can("quotes.manage") || (role === "technician" && !!user && order.technicianIds.includes(user.uid))) && order.isOpen;
   if (loading) return <div className="p-5"><Skeleton className="h-24" /></div>;
   if (!items.length) return <EmptyState icon={<FileText className="h-7 w-7" />} title={empty} description="Aparecen aquí cuando el cliente aprueba la cotización." />;
+
+  const consume = async (quoteId: string, itemId: string) => {
+    setBusy(itemId);
+    try {
+      const r = await consumeOrderPart({ orderId: order.id, quoteId, itemId });
+      toast.success(`Descontado del inventario. Quedan ${r.stock}.`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <ul className="divide-y divide-slate-100">
-      {items.map((it) => (
-        <li key={`${it.code}-${it.id}`} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
-          <div><div className="font-medium">{it.description}</div><div className="text-xs text-slate-500">{QUOTE_ITEM_LABELS[it.type]} · {it.qty} × {formatMoney(it.unitPrice)} · {it.code}</div></div>
-          <div className="tabular font-semibold">{formatMoney(it.lineTotal)}</div>
-        </li>
-      ))}
+      {items.map((it) => {
+        const used = order.consumed?.[`${it.quoteId}_${it.id}`];
+        return (
+          <li key={`${it.code}-${it.id}`} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
+            <div className="min-w-0 flex-1"><div className="font-medium">{it.description}</div><div className="text-xs text-slate-500">{QUOTE_ITEM_LABELS[it.type]} · {it.qty} × {formatMoney(it.unitPrice)} · {it.code}</div></div>
+            {it.type === "part" && (used ? (
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Descontado del inventario</span>
+            ) : it.productId ? (
+              canConsume && <Button size="sm" variant="secondary" loading={busy === it.id} onClick={() => void consume(it.quoteId, it.id)}>Descontar del inventario</Button>
+            ) : (
+              <span className="text-xs text-slate-400">No enlazado al catálogo</span>
+            ))}
+            <div className="tabular font-semibold">{formatMoney(it.lineTotal)}</div>
+          </li>
+        );
+      })}
     </ul>
   );
 }

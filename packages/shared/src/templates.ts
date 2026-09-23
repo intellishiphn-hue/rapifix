@@ -23,7 +23,7 @@ export interface DefaultTemplate {
 }
 
 /** Plantillas iniciales (editables desde Configuración en la Fase 6). */
-const FIRMA = "Gracias por su preferencia en *{{taller}}* 👨‍🔧";
+const FIRMA = "Gracias por su preferencia en *{{taller}}* 🚗";
 
 export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   { key: "recibido", name: "Vehículo recibido", status: "RECEIVED", body: `¡Hola {{cliente}}! 👋\n\nRecibimos su vehículo: *{{vehiculo}}* (placa {{placa}})\n(Orden {{orden}})\n\nLe mantendremos informado del avance.\nPuede seguirlo aquí: {{link}}\n\n${FIRMA}` },
@@ -39,7 +39,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   { key: "entregado", name: "Agradecimiento", status: "DELIVERED", body: `¡Muchas gracias {{cliente}}! 🙌\n\nFue un gusto atender su *{{vehiculo}}*.\n(Orden {{orden}})\n\nCualquier cosa, estamos para servirle.\n\n${FIRMA}` },
   { key: "recordatorio_entrega", name: "Recordatorio de entrega", body: `¡Hola {{cliente}}! 🚗\n\nLe recordamos que su *{{vehiculo}}* está listo para retirar.\n(Orden {{orden}})\n\n${FIRMA}` },
   { key: "pendiente_retiro", name: "Vehículo pendiente de retiro", body: `¡Hola {{cliente}}! 🚗\n\nSu *{{vehiculo}}* sigue en nuestras instalaciones esperando ser retirado.\n(Orden {{orden}})\n\n¿Cuándo nos visita?\n\n${FIRMA}` },
-  { key: "mantenimiento", name: "Mantenimiento próximo", body: `¡Hola {{cliente}}! 🛠️\n\nSe acerca el mantenimiento de su *{{vehiculo}}* (placa {{placa}}).\n\n¿Le agendamos una cita?\n\n${FIRMA}` },
+  { key: "mantenimiento", name: "Mantenimiento próximo", body: `¡Hola {{cliente}}! 🔧\n\nSe acerca el mantenimiento de su *{{vehiculo}}* (placa {{placa}}).\n\n¿Le agendamos una cita?\n\n${FIRMA}` },
   { key: "pago_pendiente", name: "Pago pendiente", body: `¡Hola {{cliente}}! 🧾\n\nLe recordamos que la orden *{{orden}}* de su *{{vehiculo}}* tiene un saldo pendiente de *{{total}}*.\n\n${FIRMA}` },
 ];
 

@@ -1,12 +1,10 @@
-import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
-  Camera, ChevronLeft, ClipboardList, CreditCard, FileText, History, LayoutGrid, MessageCircle, Package, Phone, Stethoscope, Wrench, XCircle,
+  Camera, ChevronLeft, ClipboardList, CreditCard, FileText, History, LayoutGrid, MessageCircle, Package, Phone, Stethoscope, Wrench, 
 } from "lucide-react";
-import { allowedTransitions, formatMoney, formatPhone, PRIORITY_LABELS, STATUS_META, whatsappLink, type WorkOrderStatus } from "@rapifix/shared";
+import { allowedTransitions, formatMoney, formatPhone, PRIORITY_LABELS, whatsappLink } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { formatDate } from "@/lib/format";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
@@ -14,7 +12,8 @@ import { EmptyState, ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { useOrderEvents, useWorkOrder } from "./api";
 import { StatusBadge } from "./StatusBadge";
-import { StatusChangeDialog } from "./StatusChangeDialog";
+import { StatusPicker } from "./StatusPicker";
+import { useStatusChange } from "./useStatusChange";
 import { OrderSummary } from "./OrderSummary";
 import { OrderDiagnosis } from "./OrderDiagnosis";
 import { OrderPhotos } from "./OrderPhotos";
@@ -37,7 +36,7 @@ export function WorkOrderDetailPage() {
   const { data: order, loading, error, exists } = useWorkOrder(id);
   const events = useOrderEvents(id);
   const { role } = useAuth();
-  const [changeTo, setChangeTo] = useState<WorkOrderStatus | null>(null);
+  const status = useStatusChange();
   const tab = (params.get("tab") as Tab) || "resumen";
   const setTab = (t: Tab) => setParams((p) => { p.set("tab", t); return p; }, { replace: true });
 
@@ -47,9 +46,6 @@ export function WorkOrderDetailPage() {
     return <EmptyState icon={<ClipboardList className="h-7 w-7" />} title="Orden no encontrada" description="Puede que no exista o que no esté asignada a usted." action={<Link to="/ordenes" className="font-semibold text-brand-700">Volver a órdenes</Link>} />;
   }
 
-  const next = allowedTransitions(role, order.status);
-  const forward = next.filter((s) => s !== "CANCELLED");
-  const canCancel = next.includes("CANCELLED");
   const days = daysInShop(order);
 
   const tabs: Array<{ value: Tab; label: string; icon: React.ReactNode; count?: number }> = [
@@ -98,13 +94,10 @@ export function WorkOrderDetailPage() {
             <div><div className="text-xs text-slate-500">Saldo</div><div className="tabular text-lg font-bold">{formatMoney(order.balance ?? 0)}</div></div>
           </div>
         </div>
-        {(forward.length > 0 || canCancel) && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
-            <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Siguiente paso</span>
-            {forward.map((s, i) => (
-              <Button key={s} size="sm" variant={i === 0 ? "primary" : "secondary"} onClick={() => setChangeTo(s)}>{STATUS_META[s].label}</Button>
-            ))}
-            {canCancel && <Button size="sm" variant="ghost" className="ml-auto text-red-600 hover:bg-red-50" icon={<XCircle className="h-4 w-4" />} onClick={() => setChangeTo("CANCELLED")}>Cancelar orden</Button>}
+        {allowedTransitions(role, order.status).length > 0 && (
+          <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Estado · toque para cambiar</div>
+            <StatusPicker order={order} onPick={(s) => void status.change(order, s)} busy={status.busyId === order.id} />
           </div>
         )}
       </Card>
@@ -121,7 +114,7 @@ export function WorkOrderDetailPage() {
         )}
       </Card>
 
-      {changeTo && <StatusChangeDialog order={order} to={changeTo} onClose={() => setChangeTo(null)} />}
+      {status.element}
     </>
   );
 }

@@ -50,61 +50,36 @@ export const KANBAN_COLUMNS = [
   { key: "delivered", label: "Entregado", statuses: ["DELIVERED"] },
 ] as const satisfies ReadonlyArray<{ key: string; label: string; statuses: readonly WorkOrderStatus[] }>;
 
-/** Transiciones normales del flujo. */
-export const TRANSITIONS: Record<WorkOrderStatus, readonly WorkOrderStatus[]> = {
-  RECEIVED: ["INSPECTION", "DIAGNOSIS", "CANCELLED"],
-  INSPECTION: ["DIAGNOSIS", "CANCELLED"],
-  DIAGNOSIS: ["AWAITING_QUOTE", "APPROVED", "CANCELLED"],
-  AWAITING_QUOTE: ["QUOTE_SENT", "AWAITING_APPROVAL", "DIAGNOSIS", "CANCELLED"],
-  QUOTE_SENT: ["AWAITING_APPROVAL", "APPROVED", "AWAITING_QUOTE", "CANCELLED"],
-  AWAITING_APPROVAL: ["APPROVED", "AWAITING_QUOTE", "CANCELLED"],
-  APPROVED: ["IN_REPAIR", "WAITING_PARTS", "CANCELLED"],
-  IN_REPAIR: ["WAITING_PARTS", "QUALITY_CONTROL", "CANCELLED"],
-  WAITING_PARTS: ["IN_REPAIR", "CANCELLED"],
-  QUALITY_CONTROL: ["READY", "IN_REPAIR"],
-  READY: ["DELIVERED", "IN_REPAIR"],
-  DELIVERED: [],
-  CANCELLED: ["RECEIVED"],
-};
-
-/** Qué transiciones puede hacer cada rol (admin y gerente: todas las del flujo). */
-const TECH_ALLOWED: ReadonlyArray<[WorkOrderStatus, WorkOrderStatus]> = [
-  ["RECEIVED", "INSPECTION"],
-  ["RECEIVED", "DIAGNOSIS"],
-  ["INSPECTION", "DIAGNOSIS"],
-  ["DIAGNOSIS", "AWAITING_QUOTE"],
-  ["APPROVED", "IN_REPAIR"],
-  ["APPROVED", "WAITING_PARTS"],
-  ["IN_REPAIR", "WAITING_PARTS"],
-  ["WAITING_PARTS", "IN_REPAIR"],
-  ["IN_REPAIR", "QUALITY_CONTROL"],
-];
-const WAREHOUSE_ALLOWED: ReadonlyArray<[WorkOrderStatus, WorkOrderStatus]> = [
-  ["APPROVED", "WAITING_PARTS"],
-  ["IN_REPAIR", "WAITING_PARTS"],
-  ["WAITING_PARTS", "IN_REPAIR"],
-];
+/**
+ * Cambio de estado libre: el personal elige directamente el estado que corresponde,
+ * sin tener que seguir un orden. Solo se restringe lo sensible:
+ * - Entregado y Cancelado: solo administración, gerencia y recepción.
+ * - Reabrir una orden entregada o cancelada: solo administración y gerencia.
+ * - Bodega: solo marca "Esperando repuestos" / "En reparación".
+ */
+const DESK_ONLY: readonly WorkOrderStatus[] = ["DELIVERED", "CANCELLED"];
 
 export function canTransition(role: Role | null | undefined, from: WorkOrderStatus, to: WorkOrderStatus): boolean {
   if (!role || from === to) return false;
-  if (!TRANSITIONS[from].includes(to)) return false;
+  const closed = from === "DELIVERED" || from === "CANCELLED";
   switch (role) {
     case "admin":
     case "manager":
       return true;
     case "reception":
-      return !(from === "CANCELLED" && to === "RECEIVED");
+      return !closed;
     case "technician":
-      return TECH_ALLOWED.some(([a, b]) => a === from && b === to);
+      return !closed && !DESK_ONLY.includes(to);
     case "warehouse":
-      return WAREHOUSE_ALLOWED.some(([a, b]) => a === from && b === to);
+      return (["APPROVED", "IN_REPAIR", "WAITING_PARTS"] as WorkOrderStatus[]).includes(from) && (to === "WAITING_PARTS" || to === "IN_REPAIR");
     default:
       return false;
   }
 }
 
+/** Estados a los que el rol puede mover la orden, en el orden natural del flujo. */
 export function allowedTransitions(role: Role | null | undefined, from: WorkOrderStatus): WorkOrderStatus[] {
-  return TRANSITIONS[from].filter((to) => canTransition(role, from, to));
+  return WORK_ORDER_STATUSES.filter((to) => canTransition(role, from, to));
 }
 
 /** Pasos del portal del cliente (Fase 3) */

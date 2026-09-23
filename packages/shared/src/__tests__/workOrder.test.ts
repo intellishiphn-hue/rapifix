@@ -3,18 +3,23 @@ import { allowedTransitions, canTransition } from "../workOrderStatus";
 import { diagnosisSchema, generateToken, TOKEN_ALPHABET } from "../workOrder";
 import { renderTemplate } from "../templates";
 
-describe("máquina de estados", () => {
-  it("técnico puede pasar de aprobado a reparación", () => expect(canTransition("technician", "APPROVED", "IN_REPAIR")).toBe(true));
-  it("técnico no puede entregar", () => expect(canTransition("technician", "READY", "DELIVERED")).toBe(false));
-  it("técnico no puede cancelar", () => expect(canTransition("technician", "RECEIVED", "CANCELLED")).toBe(false));
-  it("recepción entrega pero no reabre canceladas", () => {
+describe("cambio de estado libre", () => {
+  it("técnico puede elegir cualquier estado de trabajo", () => {
+    expect(canTransition("technician", "RECEIVED", "IN_REPAIR")).toBe(true);
+    expect(canTransition("technician", "IN_REPAIR", "DIAGNOSIS")).toBe(true);
+    expect(canTransition("technician", "QUALITY_CONTROL", "READY")).toBe(true);
+  });
+  it("técnico no entrega ni cancela", () => {
+    expect(canTransition("technician", "READY", "DELIVERED")).toBe(false);
+    expect(canTransition("technician", "RECEIVED", "CANCELLED")).toBe(false);
+  });
+  it("recepción entrega pero no reabre", () => {
     expect(canTransition("reception", "READY", "DELIVERED")).toBe(true);
-    expect(canTransition("reception", "CANCELLED", "RECEIVED")).toBe(false);
+    expect(canTransition("reception", "DELIVERED", "IN_REPAIR")).toBe(false);
     expect(canTransition("manager", "CANCELLED", "RECEIVED")).toBe(true);
   });
-  it("entregado es final", () => expect(allowedTransitions("admin", "DELIVERED")).toEqual([]));
-  it("no permite saltos fuera del flujo", () => expect(canTransition("admin", "RECEIVED", "READY")).toBe(false));
   it("vendedor no cambia estados", () => expect(allowedTransitions("seller", "RECEIVED")).toEqual([]));
+  it("no incluye el estado actual", () => expect(allowedTransitions("admin", "RECEIVED")).not.toContain("RECEIVED"));
 });
 
 describe("utilidades de orden", () => {

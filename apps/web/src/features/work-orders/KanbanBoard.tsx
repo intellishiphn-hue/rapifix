@@ -1,14 +1,12 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { allowedTransitions, KANBAN_COLUMNS, STATUS_META, type WorkOrder, type WorkOrderStatus } from "@rapifix/shared";
+import { allowedTransitions, KANBAN_COLUMNS, STATUS_META, type WorkOrder } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { toDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { Dialog } from "@/components/ui/Dialog";
-import { Button } from "@/components/ui/Button";
 import { OrderCard } from "./OrderCard";
 import { MoveMenu } from "./MoveMenu";
-import { StatusChangeDialog } from "./StatusChangeDialog";
+import { useStatusChange } from "./useStatusChange";
 
 const COLUMN_ACCENT: Record<string, string> = {
   received: "bg-slate-400", diagnosis: "bg-indigo-500", approval: "bg-amber-500", repair: "bg-brand-600",
@@ -19,8 +17,7 @@ export function KanbanBoard({ open, delivered }: { open: WorkOrder[]; delivered:
   const { role } = useAuth();
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
-  const [change, setChange] = useState<{ order: WorkOrder; to: WorkOrderStatus } | null>(null);
-  const [choose, setChoose] = useState<{ order: WorkOrder; options: WorkOrderStatus[] } | null>(null);
+  const status = useStatusChange();
 
   const all = useMemo(() => {
     const weekAgo = Date.now() - 7 * 86400000;
@@ -45,8 +42,8 @@ export function KanbanBoard({ open, delivered }: { open: WorkOrder[]; delivered:
       toast.error(`No se puede mover de "${STATUS_META[order.status].label}" a "${col.label}".`);
       return;
     }
-    if (options.length === 1) setChange({ order, to: options[0]! });
-    else setChoose({ order, options });
+    // Una columna puede agrupar varios estados: se usa el primero permitido (se ajusta luego con un toque)
+    void status.change(order, options[0]!);
   };
 
   return (
@@ -77,12 +74,12 @@ export function KanbanBoard({ open, delivered }: { open: WorkOrder[]; delivered:
                   <OrderCard
                     key={o.id}
                     order={o}
-                    draggable={o.isOpen}
+                    draggable={allowedTransitions(role, o.status).length > 0}
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = "move";
                       setDragId(o.id);
                     }}
-                    action={o.isOpen && <MoveMenu order={o} onPick={(to) => setChange({ order: o, to })} />}
+                    action={<MoveMenu order={o} onPick={(to) => void status.change(o, to)} />}
                   />
                 ))}
                 {!col.orders.length && <div className="rounded-xl border-2 border-dashed border-slate-200 py-6 text-center text-xs text-slate-400">Sin órdenes</div>}
@@ -92,18 +89,7 @@ export function KanbanBoard({ open, delivered }: { open: WorkOrder[]; delivered:
         </div>
       </div>
 
-      {choose && (
-        <Dialog open onClose={() => setChoose(null)} size="sm" title="¿A qué estado?" description={choose.order.code}>
-          <div className="grid gap-2">
-            {choose.options.map((s) => (
-              <Button key={s} variant="secondary" onClick={() => { setChange({ order: choose.order, to: s }); setChoose(null); }}>
-                {STATUS_META[s].label}
-              </Button>
-            ))}
-          </div>
-        </Dialog>
-      )}
-      {change && <StatusChangeDialog order={change.order} to={change.to} onClose={() => setChange(null)} />}
+      {status.element}
     </>
   );
 }

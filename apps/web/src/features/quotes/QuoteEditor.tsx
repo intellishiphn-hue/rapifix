@@ -128,7 +128,7 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
             action={
               <div className="flex gap-2">
                 <Link to={`/imprimir/cotizacion/${current.id}`} target="_blank"><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
-                {manage && <Button size="sm" variant="secondary" icon={<FilePlus2 className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => { await newQuoteVersion({ quoteId: current.id }); toast.success("Nueva versión creada. Edítela y vuelva a enviarla."); })}>Nueva versión</Button>}
+                {manage && current.status !== "approved" && <Button size="sm" variant="secondary" icon={<FilePlus2 className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => { await newQuoteVersion({ quoteId: current.id }); toast.success("Nueva versión creada. Edítela y vuelva a enviarla."); })}>Nueva versión</Button>}
               </div>
             }
           />

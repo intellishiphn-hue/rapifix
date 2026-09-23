@@ -16,18 +16,22 @@ const PERCENT: Record<WorkOrderStatus, number> = {
  * No incluye teléfono, identidad, dirección, costos ni notas internas.
  */
 export async function buildPortal(tid: string, orderId: string): Promise<string | null> {
-  const orderSnap = await db.doc(`${orderCol.workOrders(tid)}/${orderId}`).get();
+  // Todo se lee y escribe en una transacción: si la orden o la cotización cambian mientras
+  // se arma el portal (por ejemplo, el cliente aprueba en ese instante), Firestore la repite
+  // con los datos nuevos. Así una actualización vieja nunca pisa una más reciente.
+  return db.runTransaction(async (tx) => {
+  const orderSnap = await tx.get(db.doc(`${orderCol.workOrders(tid)}/${orderId}`));
   if (!orderSnap.exists) return null;
   const o = orderSnap.data()!;
   const token = o.portalToken as string | undefined;
   if (!token) return null;
 
   const [settings, events, photos, quoteSnap, roki] = await Promise.all([
-    db.doc(`${col.settings(tid)}/general`).get(),
-    orderSnap.ref.collection("events").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(30).get(),
-    orderSnap.ref.collection("photos").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(40).get(),
-    o.activeQuoteId ? db.doc(`${quoteCol.quotes(tid)}/${o.activeQuoteId}`).get() : Promise.resolve(null),
-    db.doc(`${catalogCol.privateConfig(tid)}/roki`).get(),
+    tx.get(db.doc(`${col.settings(tid)}/general`)),
+    tx.get(orderSnap.ref.collection("events").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(30)),
+    tx.get(orderSnap.ref.collection("photos").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(40)),
+    o.activeQuoteId ? tx.get(db.doc(`${quoteCol.quotes(tid)}/${o.activeQuoteId}`)) : Promise.resolve(null),
+    tx.get(db.doc(`${catalogCol.privateConfig(tid)}/roki`)),
   ]);
   const s = settings.data() ?? {};
   const onlineEnabled = !!roki.get("enabled") && !!roki.get("secretKey");
@@ -96,8 +100,9 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
     },
     updatedAt: FieldValue.serverTimestamp(),
   };
-  await db.doc(`${quoteCol.portal}/${token}`).set(portal);
+  tx.set(db.doc(`${quoteCol.portal}/${token}`), portal);
   return token;
+  });
 }
 
 function workshopInfo(s: FirebaseFirestore.DocumentData) {
@@ -109,13 +114,14 @@ function workshopInfo(s: FirebaseFirestore.DocumentData) {
 
 /** Portal de una cotización directa (sin orden): solo muestra la cotización para aprobar. */
 export async function buildQuotePortal(tid: string, quoteId: string): Promise<string | null> {
-  const snap = await db.doc(`${quoteCol.quotes(tid)}/${quoteId}`).get();
+  return db.runTransaction(async (tx) => {
+  const snap = await tx.get(db.doc(`${quoteCol.quotes(tid)}/${quoteId}`));
   if (!snap.exists) return null;
   const q = { id: snap.id, ...snap.data() } as Quote;
   if (!q.publicToken || q.orderId) return q.publicToken ?? null;
   const [settings, vehicle] = await Promise.all([
-    db.doc(`${col.settings(tid)}/general`).get(),
-    q.vehicleId ? db.doc(`${col.vehicles(tid)}/${q.vehicleId}`).get() : Promise.resolve(null),
+    tx.get(db.doc(`${col.settings(tid)}/general`)),
+    q.vehicleId ? tx.get(db.doc(`${col.vehicles(tid)}/${q.vehicleId}`)) : Promise.resolve(null),
   ]);
   const v = vehicle?.data();
   const portal = {
@@ -144,6 +150,7 @@ export async function buildQuotePortal(tid: string, quoteId: string): Promise<st
     active: true,
     updatedAt: FieldValue.serverTimestamp(),
   };
-  await db.doc(`${quoteCol.portal}/${q.publicToken}`).set(portal);
+  tx.set(db.doc(`${quoteCol.portal}/${q.publicToken}`), portal);
   return q.publicToken;
+  });
 }

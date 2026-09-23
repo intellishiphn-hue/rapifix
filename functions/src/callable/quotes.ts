@@ -163,6 +163,7 @@ export const newQuoteVersion = onCall({ region: REGION }, async (request) => {
     if (!q.exists) throw new HttpsError("not-found", "La cotización no existe.");
     const d = q.data()!;
     if (d.status === "draft") throw new HttpsError("failed-precondition", "El borrador ya se puede editar.");
+    if (d.status === "approved") throw new HttpsError("failed-precondition", "Esta cotización ya fue aprobada por el cliente y no se puede volver a enviar.");
     if (["sent", "viewed"].includes(d.status)) tx.update(oldRef, { status: "expired", updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
     const now = FieldValue.serverTimestamp();
     tx.set(newRef, {

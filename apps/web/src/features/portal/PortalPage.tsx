@@ -156,6 +156,8 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  // Cotizaciones ya respondidas desde este navegador: los botones no vuelven a aparecer
+  const [answered, setAnswered] = useState<string | null>(null);
   const viewed = useRef(false);
   const quoteRef = useRef<HTMLDivElement>(null);
 
@@ -171,7 +173,7 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
 
   const p = portal;
   const q = p.quote;
-  const pending = q && (q.status === "sent" || q.status === "viewed");
+  const pending = q && (q.status === "sent" || q.status === "viewed") && answered !== q.id;
   const contact = p.workshop.whatsapp ? whatsappLink(p.workshop.whatsapp, `Hola, les escribo por la orden ${p.orderCode} (${p.vehicle.make} ${p.vehicle.model}, placa ${formatPlate(p.vehicle.plate)}).`) : null;
   const last = p.updates[0];
 
@@ -184,6 +186,7 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
     setBusy(true);
     setNotice(null);
     try {
+      if (q && action !== "question") setAnswered(q.id);
       await respondToQuote({ token, action, ...(name.trim() ? { name: name.trim() } : {}), ...(comment.trim() ? { comment: comment.trim() } : {}) });
       setNotice({
         tone: "ok",
@@ -192,7 +195,10 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
       setAction(null);
       setComment("");
     } catch (err) {
-      setNotice({ tone: "err", text: errorMessage(err) });
+      const msg = errorMessage(err);
+      // Si el servidor dice que ya fue respondida, no se vuelve a ofrecer
+      if (!/ya fue aprobada|ya no está disponible|expiró/i.test(msg)) setAnswered(null);
+      setNotice({ tone: "err", text: msg });
     } finally {
       setBusy(false);
     }

@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "rapifix-prod-a1b2c",
+    "prod": "rapifix-prod-a1b2c"
+  }
+}

@@ -1,0 +1,198 @@
+rules_version = '2';
+
+// ============================================================================
+// RAPIFIX - Reglas de seguridad de Firestore
+// La seguridad real vive aquí y en Cloud Functions. Ocultar botones en la
+// interfaz es solo comodidad visual.
+//
+// Roles (custom claims del token): admin, manager, reception, technician,
+// warehouse, seller. Claim "tid" = taller (multi-tenant).
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+    function signedIn() { return request.auth != null; }
+    function role() { return request.auth.token.role; }
+    function inTenant(tid) {
+      return signedIn() && request.auth.token.tid == tid && request.auth.token.role is string;
+    }
+    function hasRole(tid, roles) { return inTenant(tid) && role() in roles; }
+
+    function writers() { return ['admin', 'manager', 'reception', 'seller']; }
+    function managers() { return ['admin', 'manager']; }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isStr(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function unchanged(field) {
+      return (field in existing()) == (field in incoming())
+        && (!(field in existing()) || incoming()[field] == existing()[field]);
+    }
+
+    // Metadatos obligatorios en toda escritura
+    function validCreateMeta() {
+      return incoming().createdBy == request.auth.uid
+        && incoming().updatedBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+    }
+    function validUpdateMeta() {
+      return unchanged('createdBy') && unchanged('createdAt')
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time;
+    }
+
+    // ---------- Usuarios (perfiles). Solo Cloud Functions escriben. ----------
+    match /users/{uid} {
+      allow read: if signedIn() && (
+        request.auth.uid == uid
+        || (resource.data.tid == request.auth.token.tid && role() in ['admin', 'manager'])
+      );
+      allow write: if false;
+    }
+
+    match /tenants/{tid} {
+      allow read: if inTenant(tid);
+      allow write: if false;
+
+      // ---------- Clientes ----------
+      function validCustomer(d) {
+        return d.keys().hasOnly([
+            'firstName', 'lastName', 'fullName', 'phone', 'whatsapp', 'email', 'idNumber', 'rtn',
+            'address', 'city', 'notes', 'status', 'vehicleCount', 'openOrders', 'balanceDue',
+            'lastVisitAt', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+          ])
+          && isStr(d.firstName, 1, 60)
+          && isStr(d.lastName, 1, 60)
+          && isStr(d.fullName, 1, 130)
+          && isStr(d.phone, 8, 20)
+          && isStr(d.whatsapp, 0, 20)
+          && isStr(d.email, 0, 120)
+          && isStr(d.idNumber, 0, 20)
+          && isStr(d.rtn, 0, 20)
+          && isStr(d.address, 0, 250)
+          && isStr(d.city, 0, 60)
+          && isStr(d.notes, 0, 1000)
+          && d.status in ['active', 'inactive']
+          && d.searchKeywords is list && d.searchKeywords.size() <= 200;
+      }
+
+      match /customers/{customerId} {
+        allow read: if inTenant(tid);
+        allow create: if hasRole(tid, writers())
+          && validCustomer(incoming())
+          && validCreateMeta()
+          && incoming().vehicleCount == 0
+          && incoming().openOrders == 0
+          && incoming().balanceDue == 0;
+        // Contadores y saldos solo los cambian Cloud Functions
+        allow update: if hasRole(tid, writers())
+          && validCustomer(incoming())
+          && validUpdateMeta()
+          && unchanged('vehicleCount') && unchanged('openOrders')
+          && unchanged('balanceDue') && unchanged('lastVisitAt');
+        allow delete: if false; // se desactivan, nunca se borran
+      }
+
+      // ---------- Vehículos ----------
+      function validVehicle(d) {
+        return d.keys().hasOnly([
+            'customerId', 'customer', 'make', 'model', 'year', 'color', 'plate', 'vin', 'mileage',
+            'mileageUpdatedAt', 'fuelType', 'engine', 'transmission', 'notes', 'coverPhotoUrl',
+            'photoCount', 'archived', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+          ])
+          && isStr(d.customerId, 1, 128)
+          && d.customer is map
+          && isStr(d.make, 1, 40)
+          && isStr(d.model, 1, 60)
+          && d.year is int && d.year >= 1950 && d.year <= 2100
+          && isStr(d.color, 0, 30)
+          && isStr(d.plate, 2, 12)
+          && isStr(d.vin, 0, 20)
+          && d.mileage is int && d.mileage >= 0 && d.mileage <= 2000000
+          && d.fuelType in ['gasolina', 'diesel', 'hibrido', 'electrico', 'gas']
+          && isStr(d.engine, 0, 40)
+          && d.transmission in ['automatica', 'manual', 'cvt', 'otra']
+          && isStr(d.notes, 0, 1000)
+          && isStr(d.coverPhotoUrl, 0, 2000)
+          && d.archived is bool
+          && d.searchKeywords is list && d.searchKeywords.size() <= 200
+          // El dueño debe existir en el mismo taller
+          && exists(/databases/$(database)/documents/tenants/$(tid)/customers/$(d.customerId));
+      }
+
+      match /vehicles/{vehicleId} {
+        allow read: if inTenant(tid);
+        allow create: if hasRole(tid, writers())
+          && validVehicle(incoming())
+          && validCreateMeta()
+          && incoming().photoCount == 0;
+        allow update: if hasRole(tid, writers())
+          && validVehicle(incoming())
+          && validUpdateMeta()
+          && unchanged('photoCount');
+        allow delete: if false;
+
+        // Historial de kilometraje: solo se agrega, nunca se edita ni borra
+        match /mileageLog/{entryId} {
+          allow read: if inTenant(tid);
+          allow create: if hasRole(tid, writers())
+            && incoming().keys().hasOnly(['mileage', 'source', 'note', 'at', 'by', 'byName'])
+            && incoming().mileage is int && incoming().mileage >= 0
+            && incoming().source in ['manual', 'reception', 'delivery']
+            && isStr(incoming().note, 0, 200)
+            && incoming().by == request.auth.uid
+            && incoming().at == request.time;
+          allow update, delete: if false;
+        }
+
+        match /photos/{photoId} {
+          allow read: if inTenant(tid);
+          allow create: if hasRole(tid, writers())
+            && incoming().keys().hasOnly(['url', 'storagePath', 'caption', 'at', 'by', 'byName'])
+            && isStr(incoming().url, 1, 2000)
+            && isStr(incoming().storagePath, 1, 300)
+            && incoming().storagePath.matches('tenants/' + tid + '/vehicles/' + vehicleId + '/photos/.*')
+            && isStr(incoming().caption, 0, 200)
+            && incoming().by == request.auth.uid
+            && incoming().at == request.time;
+          allow update: if hasRole(tid, writers())
+            && incoming().diff(existing()).affectedKeys().hasOnly(['caption'])
+            && isStr(incoming().caption, 0, 200);
+          allow delete: if hasRole(tid, managers());
+        }
+      }
+
+      // ---------- Configuración ----------
+      match /settings/{docId} {
+        allow read: if inTenant(tid);
+        allow write: if hasRole(tid, managers())
+          && incoming().updatedBy == request.auth.uid
+          && incoming().updatedAt == request.time;
+      }
+
+      // ---------- Auditoría: solo la escriben Cloud Functions ----------
+      match /auditLogs/{logId} {
+        allow read: if hasRole(tid, managers());
+        allow write: if false;
+      }
+
+      // ---------- Contadores y metadatos internos: solo Cloud Functions ----------
+      match /counters/{docId} {
+        allow read: if inTenant(tid);
+        allow write: if false;
+      }
+      match /meta/{docId} {
+        allow read, write: if false;
+      }
+    }
+
+    // Todo lo demás está cerrado por defecto
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

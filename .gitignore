@@ -1,0 +1,33 @@
+# Dependencias y builds
+node_modules/
+dist/
+functions/lib/
+*.tsbuildinfo
+
+# Variables de entorno y secretos (NUNCA subir)
+.env
+.env.*
+!.env.example
+*service-account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+
+# Sesiones de WhatsApp (gateway)
+auth_session/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+storage-debug.log*
+ui-debug.log*
+*.log
+emulator-data/
+
+# Sistema / editores
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/

@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// RAPIFIX - Reglas de Firebase Storage
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function inTenant(tid) {
+      return signedIn() && request.auth.token.tid == tid && request.auth.token.role is string;
+    }
+    function hasRole(tid, roles) { return inTenant(tid) && request.auth.token.role in roles; }
+    function isImage() { return request.resource.contentType.matches('image/(jpeg|png|webp)'); }
+    function maxMB(mb) { return request.resource.size < mb * 1024 * 1024; }
+
+    // Fotos de vehículos
+    match /tenants/{tid}/vehicles/{vehicleId}/photos/{fileName} {
+      allow read: if inTenant(tid);
+      allow create: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']) && isImage() && maxMB(10);
+      allow update: if false;
+      allow delete: if hasRole(tid, ['admin', 'manager']);
+    }
+
+    // Logo del taller (lectura pública: se muestra en el portal del cliente y en PDFs)
+    match /tenants/{tid}/branding/{fileName} {
+      allow read: if true;
+      allow write: if hasRole(tid, ['admin', 'manager']) && isImage() && maxMB(2);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

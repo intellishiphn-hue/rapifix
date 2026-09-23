@@ -37,6 +37,6 @@ export const recordQuoteDecision = callable<import("@rapifix/shared").RecordDeci
 export const convertQuoteToOrder = callable<import("@rapifix/shared").ConvertQuoteInput, { orderId: string; code: string }>("convertQuoteToOrder");
 
 /** Cotizaciones directas aprobadas que todavía no tienen orden (el carro no ha llegado). */
-export function usePendingIntakeQuotes() {
-  return useQueryData<Quote>(query(quotesCol(), where("status", "==", "approved"), where("orderId", "==", null), limit(20)), "quotes-pending-intake");
+export function usePendingIntakeQuotes(enabled = true) {
+  return useQueryData<Quote>(enabled ? query(quotesCol(), where("status", "==", "approved"), where("orderId", "==", null), limit(20)) : null, `quotes-pending-intake|${enabled}`);
 }

@@ -29,6 +29,16 @@ const PaymentsPage = page(() => import("@/features/payments/PaymentsPage"), "Pay
 const PrintReceiptPage = page(() => import("@/features/print/PrintPages"), "PrintReceiptPage");
 const PrintSalePage = page(() => import("@/features/print/PrintPages"), "PrintSalePage");
 const UsersPage = page(() => import("@/features/users/UsersPage"), "UsersPage");
+const AgendaPage = page(() => import("@/features/agenda/AgendaPage"), "AgendaPage");
+const MaintenancePage = page(() => import("@/features/maintenance/MaintenancePage"), "MaintenancePage");
+const SuppliersPage = page(() => import("@/features/finance/SuppliersPage"), "SuppliersPage");
+const SupplierDetailPage = page(() => import("@/features/finance/SupplierDetailPage"), "SupplierDetailPage");
+const PurchasesPage = page(() => import("@/features/finance/PurchasesPage"), "PurchasesPage");
+const NewPurchasePage = page(() => import("@/features/finance/NewPurchasePage"), "NewPurchasePage");
+const ExpensesPage = page(() => import("@/features/finance/ExpensesPage"), "ExpensesPage");
+const ReceivablesPage = page(() => import("@/features/finance/ReceivablesPage"), "ReceivablesPage");
+const EmployeesPage = page(() => import("@/features/employees/EmployeesPage"), "EmployeesPage");
+const ReportsPage = page(() => import("@/features/reports/ReportsPage"), "ReportsPage");
 function page<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K) {
   return lazy(() => loader().then((m) => ({ default: m[key] })));
 }
@@ -80,6 +90,16 @@ export const router = createBrowserRouter([
       { path: "pagos", element: <RequirePermission permission="payments.read"><S><PaymentsPage /></S></RequirePermission> },
       { path: "configuracion", element: <RequirePermission permission="settings.read"><S><SettingsPage /></S></RequirePermission> },
       { path: "usuarios", element: <RequirePermission permission="users.manage"><S><UsersPage /></S></RequirePermission> },
+      { path: "agenda", element: <RequirePermission permission="agenda.read"><S><AgendaPage /></S></RequirePermission> },
+      { path: "mantenimiento", element: <RequirePermission permission="maintenance.manage"><S><MaintenancePage /></S></RequirePermission> },
+      { path: "proveedores", element: <RequirePermission permission="suppliers.manage"><S><SuppliersPage /></S></RequirePermission> },
+      { path: "proveedores/:id", element: <RequirePermission permission="suppliers.manage"><S><SupplierDetailPage /></S></RequirePermission> },
+      { path: "compras", element: <RequirePermission permission="purchases.manage"><S><PurchasesPage /></S></RequirePermission> },
+      { path: "compras/nueva", element: <RequirePermission permission="purchases.manage"><S><NewPurchasePage /></S></RequirePermission> },
+      { path: "gastos", element: <RequirePermission permission="expenses.manage"><S><ExpensesPage /></S></RequirePermission> },
+      { path: "cuentas-por-cobrar", element: <RequirePermission permission="payments.read"><S><ReceivablesPage /></S></RequirePermission> },
+      { path: "empleados", element: <RequirePermission permission="employees.read"><S><EmployeesPage /></S></RequirePermission> },
+      { path: "reportes", element: <RequirePermission permission="reports.view"><S><ReportsPage /></S></RequirePermission> },
       ...COMING_SOON.map((i) => ({ path: i.to.slice(1), element: <ComingSoonPage /> })),
       { path: "*", element: <Navigate to="/" replace /> },
     ],

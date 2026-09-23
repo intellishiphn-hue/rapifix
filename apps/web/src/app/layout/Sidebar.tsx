@@ -25,7 +25,7 @@ export function Sidebar({
       {mobileOpen && <div className="fixed inset-0 z-40 bg-ink-950/60 lg:hidden" onClick={onCloseMobile} />}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col bg-ink-900 text-slate-300 transition-[width,transform] duration-200",
+          "fixed inset-y-0 left-0 z-50 flex flex-col print:hidden bg-ink-900 text-slate-300 transition-[width,transform] duration-200",
           collapsed ? "lg:w-[76px]" : "lg:w-64",
           "w-72",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",

@@ -23,6 +23,7 @@ import { OrderPhotos } from "./OrderPhotos";
 import { EventTimeline } from "./OrderHistory";
 import { OrderCommunication } from "./OrderCommunication";
 import { daysInShop } from "./OrderCard";
+import { ScheduleButton } from "@/features/agenda/AppointmentDialog";
 
 type Tab = "resumen" | "diagnostico" | "cotizacion" | "servicios" | "repuestos" | "fotos" | "historial" | "comunicacion" | "pagos" | "documentos";
 const UPCOMING: Partial<Record<Tab, { phase: number; text: string }>> = {};
@@ -32,7 +33,7 @@ export function WorkOrderDetailPage() {
   const [params, setParams] = useSearchParams();
   const { data: order, loading, error, exists } = useWorkOrder(id);
   const events = useOrderEvents(id);
-  const { role } = useAuth();
+  const { role, can } = useAuth();
   const status = useStatusChange();
   const tab = (params.get("tab") as Tab) || "resumen";
   const setTab = (t: Tab) => setParams((p) => { p.set("tab", t); return p; }, { replace: true });
@@ -88,6 +89,22 @@ export function WorkOrderDetailPage() {
           </div>
           <div className="flex shrink-0 flex-col items-stretch gap-2 lg:items-end">
           <PortalLinkButton order={order} />
+          {can("agenda.manage") && (
+            <ScheduleButton
+              label={order.status === "READY" ? "Agendar entrega" : "Agendar cita"}
+              preset={{
+                type: order.status === "READY" ? "delivery" : "appointment",
+                customerId: order.customerId,
+                customerName: order.customer.fullName,
+                phone: order.customer.whatsapp || order.customer.phone,
+                vehicleId: order.vehicleId,
+                vehicleLabel: `${order.vehicle.make} ${order.vehicle.model} ${order.vehicle.year ?? ""}`.trim(),
+                plate: order.vehicle.plate,
+                workOrderId: order.id,
+                workOrderCode: order.code,
+              }}
+            />
+          )}
           <div className="flex shrink-0 gap-6 rounded-xl bg-slate-50 px-5 py-3 lg:text-right">
             <div><div className="text-xs text-slate-500">Total</div><div className="tabular text-lg font-bold">{formatMoney(order.totals?.total ?? 0)}</div></div>
             <div><div className="text-xs text-slate-500">Saldo</div><div className="tabular text-lg font-bold">{formatMoney(order.balance ?? 0)}</div></div>

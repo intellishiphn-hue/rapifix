@@ -11,7 +11,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   const [menu, setMenu] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur sm:px-6">
+    <header className="sticky top-0 z-30 print:hidden flex h-16 items-center gap-3 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur sm:px-6">
       <button onClick={onOpenMobile} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Abrir menú">
         <Menu className="h-5 w-5" />
       </button>

@@ -52,6 +52,7 @@ export const createPurchase = onCall({ region: REGION }, async (request) => {
   const subtotal = items.reduce((a, it) => a + it.lineTotal, 0);
   const total = subtotal + input.tax;
   const payAmount = input.payment?.amount ?? 0;
+  if (payAmount > 0 && !FINANCE.includes(caller.role)) throw new HttpsError("permission-denied", "Solo administración o gerencia puede registrar pagos a proveedores.");
   if (payAmount > total) throw new HttpsError("invalid-argument", "El pago no puede ser mayor al total de la compra.");
 
   // Cantidades por producto (una compra puede traer el mismo producto en dos líneas)

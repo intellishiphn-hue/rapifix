@@ -17,6 +17,7 @@ import { AuditTrail } from "@/features/audit/AuditTrail";
 import { useVehicleOrders } from "@/features/work-orders/api";
 import { OrdersMiniList } from "@/features/work-orders/OrdersMiniList";
 import { StatusBadge } from "@/features/work-orders/StatusBadge";
+import { VehicleMaintenanceCard } from "@/features/maintenance/VehicleMaintenanceCard";
 import { setVehicleArchived, useMileageLog, useVehicle } from "./api";
 import { PlateTag } from "./VehicleCard";
 import { VehicleFormDialog } from "./VehicleFormDialog";
@@ -39,7 +40,7 @@ export function VehicleDetailPage() {
   const { data: vehicle, loading, error, exists } = useVehicle(id);
   const mileage = useMileageLog(id);
   const orders = useVehicleOrders(id);
-  const { can, user } = useAuth();
+  const { can, role, user } = useAuth();
   const [tab, setTab] = useState<Tab>("timeline");
   const [editing, setEditing] = useState(false);
   const [km, setKm] = useState(false);
@@ -148,6 +149,8 @@ export function VehicleDetailPage() {
           </div>
         </Card>
       </div>
+
+      {role && ["admin", "manager", "reception", "seller"].includes(role) && <VehicleMaintenanceCard vehicleId={vehicle.id} />}
 
       <Card className="mt-5">
         <div className="px-3 pt-1"><Tabs tabs={tabs} value={tab} onChange={setTab} /></div>

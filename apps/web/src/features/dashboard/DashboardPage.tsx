@@ -17,6 +17,8 @@ import { useOpenOrders } from "@/features/work-orders/api";
 import { usePendingIntakeQuotes } from "@/features/quotes/api";
 import { daysInShop } from "@/features/work-orders/OrderCard";
 import { StatusBadge } from "@/features/work-orders/StatusBadge";
+import { hnDate, hnParts, hnTodayStart } from "@/features/reports/period";
+import { CollectedChartCard, MaintenanceCard, MyOrdersCard, OverduePayablesCard, TodayAppointmentsCard } from "./widgets";
 
 const monthStart = (offset = 0) => {
   const d = new Date();
@@ -75,13 +77,14 @@ function useMoney(enabled: boolean) {
   const [m, setM] = useState<{ today: number; month: number; receivable: number } | null>(null);
   useEffect(() => {
     if (!enabled) return;
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
+    // Hora de Honduras, aunque el equipo tenga otra zona horaria
+    const d = hnTodayStart();
+    const hp = hnParts();
     const pays = collection(db, catalogCol.payments(TENANT_ID));
     const q = (since: Date) => getAggregateFromServer(query(pays, where("status", "==", "valid"), where("at", ">=", Timestamp.fromDate(since))), { total: sum("amount") });
     Promise.all([
       q(d),
-      q(new Date(d.getFullYear(), d.getMonth(), 1)),
+      q(hnDate(hp.y, hp.m, 1)),
       getAggregateFromServer(query(collection(db, orderCol.workOrders(TENANT_ID)), where("balance", ">", 0)), { total: sum("balance") }),
     ])
       .then(([a, b, c]) => setM({ today: a.data().total ?? 0, month: b.data().total ?? 0, receivable: c.data().total ?? 0 }))
@@ -190,8 +193,9 @@ function NewCustomersChart() {
 
 export function DashboardPage() {
   const name = useDisplayName();
-  const { can, role } = useAuth();
+  const { can, role, user } = useAuth();
   const staff = role !== "technician";
+  const isTech = role === "technician";
   const { kpis } = useKpis(staff);
   const open = useOpenOrders();
   const oc = (statuses: string[]) => (open.loading ? undefined : open.data.filter((o) => statuses.includes(o.status)).length);
@@ -204,7 +208,7 @@ export function DashboardPage() {
   const greeting = hour < 12 ? "Buenos días" : hour < 18 ? "Buenas tardes" : "Buenas noches";
   const isEmpty = kpis && kpis.customers === 0 && kpis.vehicles === 0;
   const recentOrders = open.data.slice(0, 5);
-  const pendingIntake = usePendingIntakeQuotes();
+  const pendingIntake = usePendingIntakeQuotes(role !== "technician");
   const money = useMoney(can("dashboard.financials"));
 
   return (
@@ -232,6 +236,13 @@ export function DashboardPage() {
         </Card>
       )}
 
+      {isTech && user && (
+        <div className="grid gap-5 xl:grid-cols-3">
+          <div className="xl:col-span-2"><MyOrdersCard orders={open.data} loading={open.loading} /></div>
+          <TodayAppointmentsCard technicianId={user.uid} title="Mis citas de hoy" />
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Vehículos en taller" value={open.loading ? undefined : open.data.length} icon={<Car className="h-5 w-5" />} tone="bg-brand-50 text-brand-600" />
         <Kpi label="En diagnóstico" value={oc(["RECEIVED", "INSPECTION", "DIAGNOSIS", "AWAITING_QUOTE"])} icon={<Stethoscope className="h-5 w-5" />} tone="bg-indigo-50 text-indigo-600" />
@@ -244,6 +255,20 @@ export function DashboardPage() {
           <MoneyKpi label="Cobrado hoy" value={money?.today} tone="text-slate-900" />
           <MoneyKpi label="Cobrado este mes" value={money?.month} tone="text-emerald-700" />
           <MoneyKpi label="Cuentas por cobrar" value={money?.receivable} hint="Saldos pendientes en órdenes" tone="text-amber-700" />
+        </div>
+      )}
+
+      {can("dashboard.financials") && (
+        <div className="grid gap-5 xl:grid-cols-3">
+          <div className="xl:col-span-2"><CollectedChartCard /></div>
+          <OverduePayablesCard />
+        </div>
+      )}
+
+      {staff && (can("agenda.read") || can("maintenance.manage")) && (
+        <div className={`grid gap-5 ${can("agenda.read") && can("maintenance.manage") ? "xl:grid-cols-3" : ""}`}>
+          {can("agenda.read") && <div className={can("maintenance.manage") ? "xl:col-span-2" : ""}><TodayAppointmentsCard /></div>}
+          {can("maintenance.manage") && <MaintenanceCard />}
         </div>
       )}
 

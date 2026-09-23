@@ -42,6 +42,15 @@ export interface Totals {
   total: number;
 }
 
+export const DECISION_CHANNELS = ["portal", "phone", "in_person", "whatsapp"] as const;
+export type DecisionChannel = (typeof DECISION_CHANNELS)[number];
+export const DECISION_CHANNEL_LABELS: Record<DecisionChannel, string> = {
+  portal: "Link del cliente",
+  phone: "Por teléfono",
+  in_person: "En persona",
+  whatsapp: "Por WhatsApp",
+};
+
 export interface QuoteDecision {
   result: "approved" | "rejected";
   at: TimestampLike;
@@ -50,16 +59,24 @@ export interface QuoteDecision {
   userAgent: string | null;
   name: string;
   comment: string;
+  channel?: DecisionChannel;
+  recordedBy?: string | null; // uid del empleado que la registró (si no fue por el link)
+  recordedByName?: string | null;
 }
 
 export interface Quote extends BaseDoc {
   number: number;
   code: string; // COT-0001
   version: number;
-  orderId: string;
-  orderCode: string;
+  /** "order": nace de una orden. "direct": cotización previa, sin orden (se convierte al llegar el carro). */
+  source?: "order" | "direct";
+  orderId: string | null;
+  orderCode: string | null;
+  vehicleId?: string;
   customerId: string;
   customerName: string;
+  customerPhone?: string;
+  publicToken?: string;
   vehicleLabel: string;
   plate: string;
   technicianIds: string[];
@@ -110,7 +127,8 @@ export const quoteItemInput = z.object({
 export type QuoteItemInput = z.infer<typeof quoteItemInput>;
 
 export const saveQuoteSchema = z.object({
-  orderId: z.string().min(1),
+  orderId: z.string().nullish(),
+  vehicleId: z.string().nullish(), // cotización directa (sin orden)
   quoteId: z.string().nullish(),
   items: z.array(quoteItemInput).min(1, "Agregue al menos una línea").max(100),
   notes: z.string().trim().max(2000),
@@ -129,6 +147,15 @@ export const respondQuoteSchema = z.object({
 });
 export type RespondQuoteInput = z.infer<typeof respondQuoteSchema>;
 
+export const recordDecisionSchema = z.object({
+  quoteId: z.string().min(1),
+  action: z.enum(["approve", "reject"]),
+  channel: z.enum(["phone", "in_person", "whatsapp"]),
+  name: z.string().trim().max(80).nullish(),
+  comment: z.string().trim().max(1000).nullish(),
+});
+export type RecordDecisionInput = z.infer<typeof recordDecisionSchema>;
+
 export const portalTokenSchema = z.object({ token: z.string().regex(/^[2-9A-HJ-NP-Z]{10}$/, "Link no válido") });
 
 // ---------- Portal público ----------
@@ -139,8 +166,10 @@ export interface PortalStep {
 }
 
 export interface PublicPortal {
+  /** "order": seguimiento de una orden. "quote": cotización directa, aún sin orden. */
+  kind?: "order" | "quote";
   tid: string;
-  orderId: string;
+  orderId: string | null;
   orderCode: string;
   workshop: { name: string; logoUrl: string; phone: string; whatsapp: string; address: string; city: string; hours: string };
   customerFirstName: string;

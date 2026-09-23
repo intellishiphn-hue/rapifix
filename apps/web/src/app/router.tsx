@@ -16,6 +16,7 @@ const WorkOrdersPage = page(() => import("@/features/work-orders/WorkOrdersPage"
 const NewWorkOrderPage = page(() => import("@/features/work-orders/NewWorkOrderPage"), "NewWorkOrderPage");
 const WorkOrderDetailPage = page(() => import("@/features/work-orders/WorkOrderDetailPage"), "WorkOrderDetailPage");
 const QuotesPage = page(() => import("@/features/quotes/QuotesPage"), "QuotesPage");
+const DirectQuotePage = page(() => import("@/features/quotes/DirectQuotePage"), "DirectQuotePage");
 const PortalLinksPage = page(() => import("@/features/portal/PortalLinksPage"), "PortalLinksPage");
 const PortalPage = page(() => import("@/features/portal/PortalPage"), "PortalPage");
 const PrintOrderPage = page(() => import("@/features/print/PrintPages"), "PrintOrderPage");
@@ -60,6 +61,8 @@ export const router = createBrowserRouter([
       { path: "ordenes/nueva", element: <RequirePermission permission="orders.create"><S><NewWorkOrderPage /></S></RequirePermission> },
       { path: "ordenes/:id", element: <RequirePermission permission="orders.read"><S><WorkOrderDetailPage /></S></RequirePermission> },
       { path: "cotizaciones", element: <RequirePermission permission="orders.read"><S><QuotesPage /></S></RequirePermission> },
+      { path: "cotizaciones/nueva", element: <RequirePermission permission="quotes.manage"><S><DirectQuotePage /></S></RequirePermission> },
+      { path: "cotizaciones/:id", element: <RequirePermission permission="orders.read"><S><DirectQuotePage /></S></RequirePermission> },
       { path: "portal", element: <RequirePermission permission="orders.read"><S><PortalLinksPage /></S></RequirePermission> },
       { path: "configuracion", element: <RequirePermission permission="settings.read"><S><SettingsPage /></S></RequirePermission> },
       { path: "usuarios", element: <RequirePermission permission="users.manage"><S><UsersPage /></S></RequirePermission> },

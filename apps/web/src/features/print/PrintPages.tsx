@@ -116,7 +116,7 @@ export function PrintQuotePage() {
   return (
     <PrintShell settings={settings} title="Cotización" code={`${q.code}${q.version > 1 ? ` v${q.version}` : ""}`} date={formatDate(q.sentAt ?? q.createdAt)}>
       <div className="grid grid-cols-2 gap-6">
-        <Box title="Preparado para"><KV rows={[["Cliente", q.customerName], ["Orden", q.orderCode]]} /></Box>
+        <Box title="Preparado para"><KV rows={[["Cliente", q.customerName], ["Orden", q.orderCode ?? "Cotización previa"]]} /></Box>
         <Box title="Vehículo"><KV rows={[["Vehículo", q.vehicleLabel], ["Placa", formatPlate(q.plate)]]} /></Box>
       </div>
       <table className="w-full border-collapse">

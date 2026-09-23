@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { collection, getCountFromServer, limit, orderBy, query, Timestamp, where } from "firebase/firestore";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AlertTriangle, ArrowRight, Car, CheckCircle2, ClipboardList, Clock, FileClock, Plus, Stethoscope, UserPlus, Users, Wrench } from "lucide-react";
-import { col, KANBAN_COLUMNS, orderCol, type Customer, type Vehicle, type WorkOrder } from "@rapifix/shared";
+import { col, formatMoney, KANBAN_COLUMNS, orderCol, type Customer, type Vehicle, type WorkOrder } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { useQueryData } from "@/lib/firestore/hooks";
 import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/Feedback";
 import { Avatar } from "@/components/common/Avatar";
 import { VehicleCard, PlateTag } from "@/features/vehicles/VehicleCard";
 import { useOpenOrders } from "@/features/work-orders/api";
+import { usePendingIntakeQuotes } from "@/features/quotes/api";
 import { daysInShop } from "@/features/work-orders/OrderCard";
 import { StatusBadge } from "@/features/work-orders/StatusBadge";
 
@@ -173,6 +174,7 @@ export function DashboardPage() {
   const greeting = hour < 12 ? "Buenos días" : hour < 18 ? "Buenas tardes" : "Buenas noches";
   const isEmpty = kpis && kpis.customers === 0 && kpis.vehicles === 0;
   const recentOrders = open.data.slice(0, 5);
+  const pendingIntake = usePendingIntakeQuotes();
 
   return (
     <div className="space-y-6">
@@ -216,6 +218,23 @@ export function DashboardPage() {
           {open.loading ? <div className="p-5"><Skeleton className="h-40" /></div> : <AlertsCard orders={open.data} />}
         </Card>
       </div>
+
+      {staff && pendingIntake.data.length > 0 && (
+        <Card>
+          <CardHeader title="Cotizaciones aprobadas, pendientes de ingreso" description="El cliente aprobó pero el vehículo aún no llega. Al recibirlo, conviértala en orden." />
+          <ul className="divide-y divide-slate-100">
+            {pendingIntake.data.map((q) => (
+              <li key={q.id}>
+                <Link to={`/cotizaciones/${q.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
+                  <PlateTag plate={q.plate} />
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{q.code} · {q.vehicleLabel}</span><span className="block text-xs text-slate-500">{q.customerName} · aprobada {formatRelative(q.decision?.at)}</span></span>
+                  <span className="tabular text-sm font-semibold">{formatMoney(q.totals.total)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {staff && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

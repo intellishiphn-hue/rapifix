@@ -14,5 +14,5 @@ export {
 export { seedDemoOrders } from "./callable/seedOrders";
 export { onWorkOrderWritten, onOrderPhotoWritten, onOrderPhotoUpdated, onOrderEventCreated, onUserWritten } from "./triggers/orders";
 // Fase 3: cotizaciones y portal del cliente
-export { saveQuote, sendQuote, newQuoteVersion, ensurePortal } from "./callable/quotes";
+export { saveQuote, sendQuote, newQuoteVersion, ensurePortal, recordQuoteDecision, convertQuoteToOrder } from "./callable/quotes";
 export { respondToQuote, markQuoteViewed } from "./public/portal";

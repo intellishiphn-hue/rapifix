@@ -187,6 +187,18 @@ export const createWorkOrderSchema = z.object({
 });
 export type CreateWorkOrderInput = z.infer<typeof createWorkOrderSchema>;
 
+/** Convertir una cotización directa aprobada en orden de trabajo (al llegar el vehículo). */
+export const convertQuoteSchema = z.object({
+  quoteId: z.string().min(1),
+  reason: text(1000).min(3, "Describa el motivo de ingreso"),
+  type: z.enum(WORK_TYPES),
+  priority: z.enum(PRIORITIES),
+  technicianIds: z.array(z.string()).max(5),
+  promisedAt: z.string().nullable(),
+  reception: receptionSchema,
+});
+export type ConvertQuoteInput = z.infer<typeof convertQuoteSchema>;
+
 export const updateWorkOrderSchema = z.object({
   orderId: z.string().min(1),
   reason: text(1000).min(3, "Describa el motivo de ingreso").optional(),

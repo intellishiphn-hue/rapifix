@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { FieldValue, Timestamp, type DocumentReference } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  addOrderEventSchema, buildSearchKeywords, canTransition, changeStatusSchema, col, createWorkOrderSchema,
+  addOrderEventSchema, canTransition, changeStatusSchema, col, createWorkOrderSchema,
   isOpenStatus, orderCol, saveSectionSchema, STATUS_META, updateWorkOrderSchema,
   type OrderEventType, type Role, type WorkOrderStatus,
 } from "@rapifix/shared";
@@ -9,7 +9,7 @@ import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput, requireRole, type Caller } from "../lib/guards";
 import { actorName } from "../lib/actors";
-import { secureToken } from "../lib/token";
+import { insertWorkOrder, logMileage, resolveTechnicians } from "../lib/orders";
 
 const ALL_STAFF: Role[] = ["admin", "manager", "reception", "technician", "warehouse", "seller"];
 const DESK: Role[] = ["admin", "manager", "reception"];
@@ -40,102 +40,12 @@ function assertCanWork(caller: Caller, order: FirebaseFirestore.DocumentData) {
   throw new HttpsError("permission-denied", "No está asignado a esta orden.");
 }
 
-async function resolveTechnicians(tid: string, ids: string[]) {
-  const unique = [...new Set(ids)];
-  const snaps = await Promise.all(unique.map((id) => db.doc(`${orderCol.staff(tid)}/${id}`).get()));
-  return snaps.map((s) => {
-    if (!s.exists || s.get("active") === false) throw new HttpsError("invalid-argument", "Uno de los técnicos no existe o está desactivado.");
-    return { id: s.id, name: (s.get("displayName") as string) ?? "Técnico" };
-  });
-}
-
-async function logMileage(vehicleRef: DocumentReference, mileage: number, source: "reception" | "delivery", caller: Caller, name: string, note: string) {
-  const v = await vehicleRef.get();
-  if (!v.exists || mileage <= ((v.get("mileage") as number) ?? 0)) return;
-  const batch = db.batch();
-  batch.update(vehicleRef, { mileage, mileageUpdatedAt: FieldValue.serverTimestamp() });
-  batch.set(vehicleRef.collection("mileageLog").doc(), { mileage, source, note, at: FieldValue.serverTimestamp(), by: caller.uid, byName: name });
-  await batch.commit();
-}
-
 /** Crea una orden de trabajo con numeración correlativa y token de portal. */
 export const createWorkOrder = onCall({ region: REGION }, async (request) => {
   const caller = requireRole(request, DESK);
   const input = parseInput(createWorkOrderSchema, request.data);
-  const tid = caller.tid;
   const name = await actorName(caller.uid, caller.email);
-
-  const vehicleRef = db.doc(`${col.vehicles(tid)}/${input.vehicleId}`);
-  const vehicle = await vehicleRef.get();
-  if (!vehicle.exists || vehicle.get("archived")) throw new HttpsError("not-found", "El vehículo no existe o está archivado.");
-  const customerId = vehicle.get("customerId") as string;
-  const customer = await db.doc(`${col.customers(tid)}/${customerId}`).get();
-  if (!customer.exists) throw new HttpsError("not-found", "El cliente del vehículo no existe.");
-
-  // Evita dos órdenes abiertas para el mismo vehículo
-  const open = await db.collection(orderCol.workOrders(tid)).where("vehicleId", "==", input.vehicleId).where("isOpen", "==", true).limit(1).get();
-  if (!open.empty) {
-    throw new HttpsError("already-exists", `Este vehículo ya tiene una orden abierta (${open.docs[0]!.get("code")}).`);
-  }
-
-  const technicians = await resolveTechnicians(tid, input.technicianIds);
-  const settings = await db.doc(`${col.settings(tid)}/general`).get();
-  const prefix = (settings.get("workOrderPrefix") as string) || "OT";
-  const counterRef = db.doc(`${col.counters(tid)}/workOrders`);
-  const ref = db.collection(orderCol.workOrders(tid)).doc();
-  const now = FieldValue.serverTimestamp();
-
-  const v = vehicle.data()!;
-  const c = customer.data()!;
-  let code = "";
-
-  await db.runTransaction(async (tx) => {
-    const counter = await tx.get(counterRef);
-    const number = (counter.exists ? (counter.get("next") as number) : 1001) || 1001;
-    code = `${prefix}-${number}`;
-    tx.set(counterRef, { next: number + 1 }, { merge: true });
-    tx.set(ref, {
-      number,
-      code,
-      status: "RECEIVED",
-      isOpen: true,
-      statusChangedAt: now,
-      statusChangedBy: caller.uid,
-      type: input.type,
-      priority: input.priority,
-      reason: input.reason,
-      customerId,
-      customer: { fullName: c.fullName, phone: c.phone, whatsapp: c.whatsapp || c.phone },
-      vehicleId: input.vehicleId,
-      vehicle: { make: v.make, model: v.model, year: v.year, color: v.color ?? "", plate: v.plate },
-      technicianIds: technicians.map((t) => t.id),
-      technicians,
-      reception: { ...input.reception, receivedAt: now, receivedBy: caller.uid },
-      diagnosis: input.reason ? { reportedProblem: input.reason, technicianDiagnosis: "", recommendations: "", observations: "", testsPerformed: "", obdCodes: [], completedAt: null, completedBy: null } : null,
-      qc: null,
-      totals: { subtotal: 0, discount: 0, tax: 0, total: 0 },
-      paid: 0,
-      balance: 0,
-      portalToken: secureToken(),
-      portalEnabled: true,
-      promisedAt: input.promisedAt ? Timestamp.fromDate(new Date(input.promisedAt)) : null,
-      deliveredAt: null,
-      mileageOut: null,
-      cancelReason: "",
-      photoCount: 0,
-      searchKeywords: buildSearchKeywords([code, String(number), v.plate, v.make, v.model, c.fullName, c.phone]),
-      createdAt: now,
-      createdBy: caller.uid,
-      updatedAt: now,
-      updatedBy: caller.uid,
-    });
-    tx.set(ref.collection("events").doc(), eventData(caller, name, "created", `Vehículo recibido. Motivo: ${input.reason}`, {
-      toStatus: "RECEIVED", visibleToCustomer: true,
-    }));
-  });
-
-  await logMileage(vehicleRef, input.reception.mileageIn, "reception", caller, name, `Recepción ${code}`);
-  return { orderId: ref.id, code };
+  return insertWorkOrder(caller, name, input);
 });
 
 /** Cambia el estado validando el flujo y el rol. Deja historial. */

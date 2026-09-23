@@ -1,16 +1,30 @@
 import { useEffect, useState } from "react";
 import { Copy, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
-import type { WorkOrder } from "@rapifix/shared";
+import { whatsappLink, type WorkOrder } from "@rapifix/shared";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Field";
-import { openWhatsApp } from "./whatsapp";
 
 /**
  * Mensaje semiautomático: el sistema lo prepara, el empleado lo revisa y lo envía.
  * (WhatsApp Web automático llega en la Fase 6; esto es el respaldo manual que siempre existirá.)
  */
-export function WhatsAppComposer({ order, initial, onSent, compact }: { order: WorkOrder; initial: string; onSent?: () => void; compact?: boolean }) {
+export function WhatsAppComposer({
+  order,
+  to,
+  initial,
+  onSent,
+  compact,
+}: {
+  order?: WorkOrder;
+  /** Destinatario directo (cuando no hay orden, ej. cotización directa) */
+  to?: { phone: string; name: string };
+  initial: string;
+  onSent?: () => void;
+  compact?: boolean;
+}) {
+  const phone = to?.phone ?? order?.customer.whatsapp ?? order?.customer.phone ?? "";
+  const name = to?.name ?? order?.customer.fullName ?? "el cliente";
   const [text, setText] = useState(initial);
   useEffect(() => setText(initial), [initial]);
 
@@ -30,9 +44,9 @@ export function WhatsAppComposer({ order, initial, onSent, compact }: { order: W
         <Button
           className="bg-[#1faa53] hover:bg-[#178a43]"
           icon={<MessageCircle className="h-4 w-4" />}
-          disabled={!text.trim()}
+          disabled={!text.trim() || !phone}
           onClick={() => {
-            openWhatsApp(order, text.trim());
+            window.open(whatsappLink(phone, text.trim()), "_blank", "noopener");
             onSent?.();
           }}
         >
@@ -40,7 +54,7 @@ export function WhatsAppComposer({ order, initial, onSent, compact }: { order: W
         </Button>
         <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => void copy()} disabled={!text.trim()}>Copiar</Button>
       </div>
-      <p className="text-xs text-slate-500">Se abre WhatsApp con el mensaje listo para {order.customer.fullName}. Solo toque enviar.</p>
+      <p className="text-xs text-slate-500">Se abre WhatsApp con el mensaje listo para {name}. Solo toque enviar.</p>
     </div>
   );
 }

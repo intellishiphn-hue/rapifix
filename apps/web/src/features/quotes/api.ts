@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth/useAuth";
 const quotesCol = () => collection(db, quoteCol.quotes(TENANT_ID));
 
 export const saveQuote = callable<SaveQuoteInput, { quoteId: string }>("saveQuote");
-export const sendQuote = callable<{ quoteId: string }, { orderId: string }>("sendQuote");
+export const sendQuote = callable<{ quoteId: string }, { orderId: string | null; token: string | null }>("sendQuote");
 export const newQuoteVersion = callable<{ quoteId: string }, { quoteId: string }>("newQuoteVersion");
 export const ensurePortal = callable<{ orderId: string }, { token: string }>("ensurePortal");
 
@@ -31,4 +31,12 @@ export function useQuotesList(status: QuoteStatus | "all", pageSize: number) {
 
 export function useQuote(id: string | undefined) {
   return useDocData<Quote>(id ? doc(db, quoteCol.quotes(TENANT_ID), id) : null, `quote-${id}`);
+}
+
+export const recordQuoteDecision = callable<import("@rapifix/shared").RecordDecisionInput, { approvalId: string }>("recordQuoteDecision");
+export const convertQuoteToOrder = callable<import("@rapifix/shared").ConvertQuoteInput, { orderId: string; code: string }>("convertQuoteToOrder");
+
+/** Cotizaciones directas aprobadas que todavía no tienen orden (el carro no ha llegado). */
+export function usePendingIntakeQuotes() {
+  return useQueryData<Quote>(query(quotesCol(), where("status", "==", "approved"), where("orderId", "==", null), limit(20)), "quotes-pending-intake");
 }

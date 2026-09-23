@@ -1,14 +1,17 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  col, computeQuote, formatMoney, newVersionSchema, orderCol, quoteCol, saveQuoteSchema, sendQuoteSchema,
+  col, computeQuote, convertQuoteSchema, formatMoney, newVersionSchema, orderCol, quoteCol, recordDecisionSchema, saveQuoteSchema, sendQuoteSchema,
   type Role, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput, requireRole } from "../lib/guards";
 import { actorName } from "../lib/actors";
-import { buildPortal } from "../lib/portal";
+import { buildPortal, buildQuotePortal } from "../lib/portal";
+import { applyDecision } from "../lib/quoteDecision";
+import { insertWorkOrder } from "../lib/orders";
+import { secureToken } from "../lib/token";
 
 const DESK: Role[] = ["admin", "manager", "reception"];
 /** Estados en los que enviar una cotización mueve la orden a "Cotización enviada". */
@@ -19,23 +22,45 @@ export const saveQuote = onCall({ region: REGION }, async (request) => {
   const caller = requireRole(request, DESK);
   const input = parseInput(saveQuoteSchema, request.data);
   const tid = caller.tid;
-  const orderRef = db.doc(`${orderCol.workOrders(tid)}/${input.orderId}`);
-  const order = await orderRef.get();
-  if (!order.exists) throw new HttpsError("not-found", "La orden no existe.");
-  if (!order.get("isOpen")) throw new HttpsError("failed-precondition", "La orden está cerrada.");
-
   const settings = await db.doc(`${col.settings(tid)}/general`).get();
   const taxRate = Number(settings.get("taxRate") ?? 15);
   const { items, totals } = computeQuote(input.items, taxRate);
   const now = FieldValue.serverTimestamp();
-  const o = order.data()!;
+
+  // Contexto: orden existente o cotización directa (vehículo sin orden)
+  let ctx: Record<string, unknown>;
+  if (input.orderId) {
+    const order = await db.doc(`${orderCol.workOrders(tid)}/${input.orderId}`).get();
+    if (!order.exists) throw new HttpsError("not-found", "La orden no existe.");
+    if (!order.get("isOpen")) throw new HttpsError("failed-precondition", "La orden está cerrada.");
+    const o = order.data()!;
+    ctx = {
+      source: "order", orderId: input.orderId, orderCode: o.code, vehicleId: o.vehicleId, customerId: o.customerId,
+      customerName: o.customer.fullName, customerPhone: o.customer.whatsapp || o.customer.phone,
+      vehicleLabel: `${o.vehicle.make} ${o.vehicle.model} ${o.vehicle.year}`, plate: o.vehicle.plate, technicianIds: o.technicianIds ?? [],
+    };
+  } else {
+    if (!input.vehicleId) throw new HttpsError("invalid-argument", "Seleccione el vehículo.");
+    const vehicle = await db.doc(`${col.vehicles(tid)}/${input.vehicleId}`).get();
+    if (!vehicle.exists) throw new HttpsError("not-found", "El vehículo no existe.");
+    const v = vehicle.data()!;
+    const customer = await db.doc(`${col.customers(tid)}/${v.customerId}`).get();
+    if (!customer.exists) throw new HttpsError("not-found", "El cliente no existe.");
+    const c = customer.data()!;
+    ctx = {
+      source: "direct", orderId: null, orderCode: null, vehicleId: input.vehicleId, customerId: v.customerId,
+      customerName: c.fullName, customerPhone: c.whatsapp || c.phone,
+      vehicleLabel: `${v.make} ${v.model} ${v.year}`, plate: v.plate, technicianIds: [],
+    };
+  }
 
   if (input.quoteId) {
     const ref = db.doc(`${quoteCol.quotes(tid)}/${input.quoteId}`);
     const q = await ref.get();
-    if (!q.exists || q.get("orderId") !== input.orderId) throw new HttpsError("not-found", "La cotización no existe.");
+    if (!q.exists) throw new HttpsError("not-found", "La cotización no existe.");
+    if ((q.get("orderId") ?? null) !== (ctx.orderId ?? null)) throw new HttpsError("failed-precondition", "La cotización pertenece a otra orden.");
     if (q.get("status") !== "draft") throw new HttpsError("failed-precondition", "Solo se puede editar un borrador. Cree una nueva versión.");
-    await ref.update({ items, totals, taxRate, notes: input.notes, validDays: input.validDays, technicianIds: o.technicianIds ?? [], updatedAt: now, updatedBy: caller.uid });
+    await ref.update({ ...ctx, items, totals, taxRate, notes: input.notes, validDays: input.validDays, updatedAt: now, updatedBy: caller.uid });
     return { quoteId: ref.id };
   }
 
@@ -47,31 +72,16 @@ export const saveQuote = onCall({ region: REGION }, async (request) => {
     const number = (c.exists ? (c.get("next") as number) : 1) || 1;
     tx.set(counterRef, { next: number + 1 }, { merge: true });
     tx.set(ref, {
+      ...ctx,
       number,
       code: `${prefix}-${String(number).padStart(4, "0")}`,
       version: 1,
-      orderId: input.orderId,
-      orderCode: o.code,
-      customerId: o.customerId,
-      customerName: o.customer.fullName,
-      vehicleLabel: `${o.vehicle.make} ${o.vehicle.model} ${o.vehicle.year}`,
-      plate: o.vehicle.plate,
-      technicianIds: o.technicianIds ?? [],
+      publicToken: ctx.orderId ? null : secureToken(),
       status: "draft",
-      items,
-      taxRate,
-      totals,
-      notes: input.notes,
-      validDays: input.validDays,
-      validUntil: null,
-      sentAt: null,
-      viewedAt: null,
-      decision: null,
-      questions: [],
-      createdAt: now,
-      createdBy: caller.uid,
-      updatedAt: now,
-      updatedBy: caller.uid,
+      items, taxRate, totals,
+      notes: input.notes, validDays: input.validDays,
+      validUntil: null, sentAt: null, viewedAt: null, decision: null, questions: [],
+      createdAt: now, createdBy: caller.uid, updatedAt: now, updatedBy: caller.uid,
     });
   });
   return { quoteId: ref.id };
@@ -84,6 +94,17 @@ export const sendQuote = onCall({ region: REGION }, async (request) => {
   const tid = caller.tid;
   const name = await actorName(caller.uid, caller.email);
   const quoteRef = db.doc(`${quoteCol.quotes(tid)}/${input.quoteId}`);
+
+  // Cotización directa (sin orden): se congela y se publica en su propio link
+  const pre = await quoteRef.get();
+  if (!pre.exists) throw new HttpsError("not-found", "La cotización no existe.");
+  if (!pre.get("orderId")) {
+    if (pre.get("status") !== "draft") throw new HttpsError("failed-precondition", "Esta cotización ya fue enviada.");
+    const validUntil = Timestamp.fromMillis(Date.now() + (pre.get("validDays") as number) * 86400000);
+    await quoteRef.update({ status: "sent", sentAt: FieldValue.serverTimestamp(), validUntil, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
+    const token = await buildQuotePortal(tid, quoteRef.id);
+    return { orderId: null, token };
+  }
 
   const result = await db.runTransaction(async (tx) => {
     const q = await tx.get(quoteRef);
@@ -126,8 +147,8 @@ export const sendQuote = onCall({ region: REGION }, async (request) => {
     return { orderId: orderRef.id };
   });
 
-  await buildPortal(tid, result.orderId);
-  return result;
+  const token = await buildPortal(tid, result.orderId);
+  return { ...result, token };
 });
 
 /** Crea una nueva versión editable a partir de una cotización enviada (la anterior expira). */
@@ -170,4 +191,57 @@ export const ensurePortal = onCall({ region: REGION }, async (request) => {
   const token = await buildPortal(caller.tid, orderId);
   if (!token) throw new HttpsError("not-found", "La orden no existe.");
   return { token };
+});
+
+/** El taller registra la aprobación o rechazo del cliente (por teléfono, en persona o WhatsApp). */
+export const recordQuoteDecision = onCall({ region: REGION }, async (request) => {
+  const caller = requireRole(request, DESK);
+  const input = parseInput(recordDecisionSchema, request.data);
+  const staffName = await actorName(caller.uid, caller.email);
+  const q = await db.doc(`${quoteCol.quotes(caller.tid)}/${input.quoteId}`).get();
+  if (!q.exists) throw new HttpsError("not-found", "La cotización no existe.");
+  return applyDecision(caller.tid, input.quoteId, {
+    approved: input.action === "approve",
+    name: input.name?.trim() || (q.get("customerName") as string) || "Cliente",
+    comment: input.comment?.trim() ?? "",
+    channel: input.channel,
+    ip: null,
+    userAgent: null,
+    recordedBy: caller.uid,
+    recordedByName: staffName,
+  });
+});
+
+/**
+ * Convierte una cotización directa aprobada en orden de trabajo cuando llega el vehículo.
+ * La orden nace en "Aprobado" con los totales de la cotización y conserva el mismo link del cliente.
+ */
+export const convertQuoteToOrder = onCall({ region: REGION }, async (request) => {
+  const caller = requireRole(request, DESK);
+  const input = parseInput(convertQuoteSchema, request.data);
+  const tid = caller.tid;
+  const name = await actorName(caller.uid, caller.email);
+  const quoteRef = db.doc(`${quoteCol.quotes(tid)}/${input.quoteId}`);
+  const q = await quoteRef.get();
+  if (!q.exists) throw new HttpsError("not-found", "La cotización no existe.");
+  if (q.get("orderId")) throw new HttpsError("already-exists", `Esta cotización ya tiene la orden ${q.get("orderCode")}.`);
+  if (q.get("status") !== "approved") throw new HttpsError("failed-precondition", "Primero registre la aprobación del cliente.");
+  const vehicleId = q.get("vehicleId") as string | undefined;
+  if (!vehicleId) throw new HttpsError("failed-precondition", "La cotización no tiene vehículo.");
+
+  const { orderId, code } = await insertWorkOrder(caller, name, {
+    vehicleId,
+    reason: input.reason,
+    type: input.type,
+    priority: input.priority,
+    technicianIds: input.technicianIds,
+    promisedAt: input.promisedAt,
+    reception: input.reception,
+    status: "APPROVED",
+    portalToken: (q.get("publicToken") as string | null) ?? undefined,
+    fromQuote: { id: quoteRef.id, code: q.get("code") as string, totals: q.get("totals") },
+  });
+  await quoteRef.update({ orderId, orderCode: code, source: "direct", updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
+  await buildPortal(tid, orderId);
+  return { orderId, code };
 });

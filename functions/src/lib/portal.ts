@@ -45,6 +45,7 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
   const expired = !!deliveredAt && Date.now() - deliveredAt.toMillis() > 30 * 86400000;
 
   const portal: Omit<PublicPortal, "updatedAt"> & { updatedAt: FirebaseFirestore.FieldValue } = {
+    kind: "order",
     tid,
     orderId,
     orderCode: o.code,
@@ -89,4 +90,52 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
   };
   await db.doc(`${quoteCol.portal}/${token}`).set(portal);
   return token;
+}
+
+function workshopInfo(s: FirebaseFirestore.DocumentData) {
+  return {
+    name: s.name || "RAPIFIX", logoUrl: s.logoUrl || "", phone: s.phone || "", whatsapp: s.whatsapp || s.phone || "",
+    address: s.address || "", city: s.city || "", hours: s.hours || "",
+  };
+}
+
+/** Portal de una cotización directa (sin orden): solo muestra la cotización para aprobar. */
+export async function buildQuotePortal(tid: string, quoteId: string): Promise<string | null> {
+  const snap = await db.doc(`${quoteCol.quotes(tid)}/${quoteId}`).get();
+  if (!snap.exists) return null;
+  const q = { id: snap.id, ...snap.data() } as Quote;
+  if (!q.publicToken || q.orderId) return q.publicToken ?? null;
+  const [settings, vehicle] = await Promise.all([
+    db.doc(`${col.settings(tid)}/general`).get(),
+    q.vehicleId ? db.doc(`${col.vehicles(tid)}/${q.vehicleId}`).get() : Promise.resolve(null),
+  ]);
+  const v = vehicle?.data();
+  const portal = {
+    kind: "quote",
+    tid,
+    orderId: null,
+    orderCode: q.code,
+    workshop: workshopInfo(settings.data() ?? {}),
+    customerFirstName: (q.customerName ?? "").split(" ")[0] ?? "",
+    vehicle: { make: v?.make ?? "", model: v?.model ?? q.vehicleLabel, year: v?.year ?? 0, color: v?.color ?? "", plate: q.plate },
+    status: "RECEIVED",
+    statusLabel: "Cotización",
+    percent: 0,
+    steps: [],
+    nextStep: "",
+    cancelled: false,
+    delivered: false,
+    updates: [],
+    photos: [],
+    diagnosis: null,
+    quote: q.status === "draft" ? null : {
+      id: q.id, code: q.code, status: q.status,
+      items: q.items.map((it) => ({ type: it.type, description: it.description, qty: it.qty, unitPrice: it.unitPrice, discount: it.discount, lineTotal: it.lineTotal })),
+      totals: q.totals, taxRate: q.taxRate, notes: q.notes, validUntil: q.validUntil, decidedAt: q.decision?.at ?? null,
+    },
+    active: true,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  await db.doc(`${quoteCol.portal}/${q.publicToken}`).set(portal);
+  return q.publicToken;
 }

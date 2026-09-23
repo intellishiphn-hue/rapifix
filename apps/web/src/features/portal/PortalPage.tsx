@@ -27,7 +27,7 @@ function Shell({ children, portal }: { children: React.ReactNode; portal?: Publi
               <div className="text-lg font-extrabold tracking-tight">RAPI<span className="text-brand-400">FIX</span></div>
             </>
           )}
-          <span className="ml-auto text-xs text-slate-400">Estado de su vehículo</span>
+          <span className="ml-auto text-xs text-slate-400">{portal?.kind === "quote" ? "Cotización" : "Estado de su vehículo"}</span>
         </div>
       </header>
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-5">{children}</main>
@@ -128,8 +128,21 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
 
   return (
     <Shell portal={p}>
+      {/* Cotización previa (aún sin orden) */}
+      {p.kind === "quote" && (
+        <section className={card}>
+          <p className="text-sm text-slate-500">Hola{p.customerFirstName ? ` ${p.customerFirstName}` : ""}, esta es la cotización para su</p>
+          <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight">{p.vehicle.make} {p.vehicle.model} {p.vehicle.year || ""}</h1>
+          <div className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+            <span className="rounded-md border-2 border-slate-800 px-1.5 font-mono text-xs font-bold text-slate-900">{formatPlate(p.vehicle.plate)}</span>
+            {p.orderCode}
+          </div>
+          {q?.status === "approved" && <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">¡Gracias! Su cotización está aprobada. Cuando traiga su vehículo, en este mismo link podrá seguir el avance de la reparación.</p>}
+        </section>
+      )}
+
       {/* Vehículo y estado */}
-      <section className={card}>
+      {p.kind !== "quote" && <section className={card}>
         <p className="text-sm text-slate-500">Hola{p.customerFirstName ? ` ${p.customerFirstName}` : ""}, este es el estado de su</p>
         <h1 className="mt-0.5 text-2xl font-extrabold tracking-tight">{p.vehicle.make} {p.vehicle.model} {p.vehicle.year}</h1>
         <div className="mt-1 flex items-center gap-2 text-sm text-slate-500">
@@ -172,7 +185,7 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
           </div>
         )}
         {p.nextStep && <p className="mt-3 text-sm text-slate-600">Próximo paso: <b>{p.nextStep}</b></p>}
-      </section>
+      </section>}
 
       {notice && (
         <div className={cn("rounded-2xl p-4 text-sm font-medium", notice.tone === "ok" ? "bg-emerald-600 text-white" : "bg-red-50 text-red-800")}>{notice.text}</div>

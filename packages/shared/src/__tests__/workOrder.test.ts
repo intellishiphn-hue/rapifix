@@ -54,3 +54,18 @@ describe("plantillas con link", () => {
     expect(renderTemplate("Hola {{cliente}}, listo. Puede ver los detalles aquí: {{link}}", { cliente: "Ana" })).toBe("Hola Ana, listo.");
   });
 });
+
+import { DEFAULT_TEMPLATES } from "../templates";
+describe("mensaje de cotización con el formato de RAPIFIX", () => {
+  it("coincide con el ejemplo", () => {
+    const t = DEFAULT_TEMPLATES.find((x) => x.key === "cotizacion_enviada")!;
+    const msg = renderTemplate(t.body, { cliente: "SERGIO", vehiculo: "Toyota PRADO 2026", orden: "OT-1002", total: "L 1,955.00", link: "https://rapifix-prod-a1b2c.web.app/orden/TTW66KVJ6F", taller: "RAPIFIX" });
+    expect(msg).toBe("¡Hola SERGIO! 🏁\n\nLe enviamos la cotización de su vehículo: *Toyota PRADO 2026*\n(Orden OT-1002)\n\n*El total es de L 1,955.00*\n\nPuede revisarla y aprobarla aquí: https://rapifix-prod-a1b2c.web.app/orden/TTW66KVJ6F\n\nGracias por su preferencia en *RAPIFIX* 👨‍🔧");
+  });
+  it("sin link quita la línea completa", () => {
+    const t = DEFAULT_TEMPLATES.find((x) => x.key === "reparacion")!;
+    const msg = renderTemplate(t.body, { cliente: "Ana", vehiculo: "Kia Rio", orden: "OT-1", taller: "RAPIFIX" });
+    expect(msg).not.toContain("aquí");
+    expect(msg).not.toMatch(/\n\n\n/);
+  });
+});

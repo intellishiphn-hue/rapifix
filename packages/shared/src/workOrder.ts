@@ -272,3 +272,8 @@ export const EMPTY_RECEPTION: ReceptionInput = {
 export const EMPTY_DIAGNOSIS: DiagnosisInput = {
   reportedProblem: "", technicianDiagnosis: "", recommendations: "", observations: "", testsPerformed: "", obdCodes: [],
 };
+
+export const deleteWorkOrderSchema = z.object({
+  orderId: z.string().min(1),
+  reason: z.string().trim().min(3, "Indique el motivo").max(300),
+});

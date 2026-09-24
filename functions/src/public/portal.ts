@@ -35,7 +35,9 @@ export const respondToQuote = onCall({ region: REGION }, async (request) => {
   const quoteRef = db.doc(`${quoteCol.quotes(tid)}/${quoteId}`);
   const ip = clientIp(request.rawRequest as unknown as { headers: Record<string, unknown>; ip?: string });
   const userAgent = String(request.rawRequest.headers["user-agent"] ?? "").slice(0, 300) || null;
-  const name = input.name?.trim() || "Cliente";
+  // El nombre ya lo conocemos: no se le pide al cliente
+  const quoteSnap = await quoteRef.get();
+  const name = input.name?.trim() || String(quoteSnap.get("customerName") ?? "").trim() || "Cliente";
   const comment = input.comment?.trim() ?? "";
 
   if (input.action === "question") {

@@ -24,6 +24,7 @@ import { EventTimeline } from "./OrderHistory";
 import { OrderCommunication } from "./OrderCommunication";
 import { daysInShop } from "./OrderCard";
 import { ScheduleButton } from "@/features/agenda/AppointmentDialog";
+import { DeleteOrderButton } from "./DeleteOrderButton";
 
 type Tab = "resumen" | "diagnostico" | "cotizacion" | "servicios" | "repuestos" | "fotos" | "historial" | "comunicacion" | "pagos" | "documentos";
 const UPCOMING: Partial<Record<Tab, { phase: number; text: string }>> = {};
@@ -105,6 +106,7 @@ export function WorkOrderDetailPage() {
               }}
             />
           )}
+          {(role === "admin" || role === "manager") && <DeleteOrderButton order={order} />}
           <div className="flex shrink-0 gap-6 rounded-xl bg-slate-50 px-5 py-3 lg:text-right">
             <div><div className="text-xs text-slate-500">Total</div><div className="tabular text-lg font-bold">{formatMoney(order.totals?.total ?? 0)}</div></div>
             <div><div className="text-xs text-slate-500">Saldo</div><div className="tabular text-lg font-bold">{formatMoney(order.balance ?? 0)}</div></div>

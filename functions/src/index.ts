@@ -29,3 +29,5 @@ export { saveAppointment, setAppointmentStatus, saveMaintenance, maintenanceActi
 export { saveSupplier, createPurchase, paySupplier, voidPurchase, saveExpense, voidExpense } from "./callable/finance";
 export { onOrderDelivered, dailyMaintenance } from "./scheduled/daily";
 export { importProducts } from "./callable/importProducts";
+export { deleteWorkOrder } from "./callable/deleteWorkOrder";
+export { onSettingsBranding } from "./triggers/branding";

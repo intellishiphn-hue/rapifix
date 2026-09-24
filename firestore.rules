@@ -46,6 +46,12 @@ service cloud.firestore {
     }
 
     // ---------- Usuarios (perfiles). Solo Cloud Functions escriben. ----------
+    // Logo y nombre del taller para la pantalla de inicio de sesión (lo escribe el servidor)
+    match /publicBranding/{tid} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
     // Preferencias personales (orden del Dashboard). Cada usuario solo la suya.
     match /userPrefs/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;

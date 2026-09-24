@@ -1,13 +1,17 @@
 import type { ReactNode } from "react";
 import { Logo } from "@/components/common/Logo";
+import { usePublicLogo } from "@/lib/branding";
 
 export function AuthLayout({ children }: { children: ReactNode }) {
+  const logo = usePublicLogo();
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       <div className="relative hidden overflow-hidden bg-ink-900 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-brand-600/30 blur-3xl" />
         <div className="absolute -bottom-40 -left-20 h-[26rem] w-[26rem] rounded-full bg-brand-500/20 blur-3xl" />
-        <div className="relative"><Logo light /></div>
+        <div className="relative">
+          {logo ? <img src={logo} alt="RAPIFIX" className="h-16 max-w-[240px] rounded-xl bg-white p-2 object-contain" /> : <Logo light />}
+        </div>
         <div className="relative max-w-md">
           <h1 className="text-4xl font-extrabold leading-tight tracking-tight">
             Cada vehículo, <span className="text-brand-400">bajo control.</span>
@@ -20,7 +24,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
       </div>
       <div className="flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-sm">
-          <div className="mb-10 lg:hidden"><Logo /></div>
+          <div className="mb-10 lg:hidden">{logo ? <img src={logo} alt="RAPIFIX" className="h-14 max-w-[220px] object-contain" /> : <Logo />}</div>
           {children}
         </div>
       </div>

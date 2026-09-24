@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { Check, CheckCircle2, Clock, CreditCard, HelpCircle, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
-import { formatMoney, QUOTE_ITEM_LABELS, whatsappLink, type PublicPortal } from "@rapifix/shared";
+import { Check, CheckCircle2, Clock, CreditCard, HelpCircle, Phone, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
+import { formatMoney, normalizePhone, QUOTE_ITEM_LABELS, whatsappLink, type PublicPortal } from "@rapifix/shared";
+
+/** Número de RAPIFIX (9285-4852) si en Configuración no se ha puesto otro */
+const RAPIFIX_PHONE = "92854852";
 import { callable, db } from "@/lib/firebase";
 import { errorMessage } from "@/lib/errors";
 import { formatDate, formatPlate } from "@/lib/format";
@@ -152,7 +155,6 @@ export function PortalPage() {
 
 export function PortalView({ portal, token }: { portal: PublicPortal; token: string }) {
   const [action, setAction] = useState<Action | null>(null);
-  const [name, setName] = useState("");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
@@ -174,8 +176,14 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
   const p = portal;
   const q = p.quote;
   const pending = q && (q.status === "sent" || q.status === "viewed") && answered !== q.id;
-  const contact = p.workshop.whatsapp ? whatsappLink(p.workshop.whatsapp, `Hola, les escribo por la orden ${p.orderCode} (${p.vehicle.make} ${p.vehicle.model}, placa ${formatPlate(p.vehicle.plate)}).`) : null;
+  // WhatsApp y teléfono del taller (Configuración); si aún no están puestos, los de RAPIFIX
+  const waNumber = p.workshop.whatsapp || p.workshop.phone || RAPIFIX_PHONE;
+  const callNumber = normalizePhone(p.workshop.phone || p.workshop.whatsapp || RAPIFIX_PHONE);
+  const vehicleText = `${p.vehicle.make} ${p.vehicle.model}${p.vehicle.plate ? ` (placa ${formatPlate(p.vehicle.plate)})` : ""}`;
+  const contact = whatsappLink(waNumber, `Hola, les escribo por la orden ${p.orderCode} de mi ${vehicleText}.`);
   const last = p.updates[0];
+  // "Tengo una pregunta" abre el WhatsApp del taller con el mensaje listo
+  const questionLink = q ? whatsappLink(waNumber, `Hola, tengo una pregunta sobre la cotización ${q.code} de mi ${vehicleText}.`) : null;
 
   const submit = async () => {
     if (!action) return;
@@ -187,7 +195,7 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
     setNotice(null);
     try {
       if (q && action !== "question") setAnswered(q.id);
-      await respondToQuote({ token, action, ...(name.trim() ? { name: name.trim() } : {}), ...(comment.trim() ? { comment: comment.trim() } : {}) });
+      await respondToQuote({ token, action, ...(comment.trim() ? { comment: comment.trim() } : {}) });
       setNotice({
         tone: "ok",
         text: action === "approve" ? "¡Gracias! Su aprobación quedó registrada. Iniciaremos el trabajo." : action === "reject" ? "Registramos su respuesta. El taller se comunicará con usted." : "Enviamos su pregunta al taller. Le responderemos pronto.",
@@ -313,16 +321,20 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
             <div className="mt-5 grid gap-2">
               <button onClick={() => setAction("approve")} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700"><CheckCircle2 className="h-5 w-5" /> APROBAR COTIZACIÓN</button>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setAction("question")} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><HelpCircle className="h-4 w-4" /> Tengo una pregunta</button>
+                {questionLink ? (
+                  <a href={questionLink} target="_blank" rel="noreferrer" className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><HelpCircle className="h-4 w-4" /> Tengo una pregunta</a>
+                ) : (
+                  <button onClick={() => setAction("question")} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><HelpCircle className="h-4 w-4" /> Tengo una pregunta</button>
+                )}
                 <button onClick={() => setAction("reject")} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-red-600 hover:bg-red-50"><XCircle className="h-4 w-4" /> Rechazar</button>
               </div>
+              <a href={`tel:${callNumber}`} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Phone className="h-4 w-4" /> Llamar a {p.workshop.name}</a>
             </div>
           )}
 
           {action && (
             <div className="mt-5 space-y-3 rounded-xl bg-slate-50 p-4">
               <p className="font-semibold">{action === "approve" ? `Confirmar aprobación por ${formatMoney(q.totals.total)}` : action === "reject" ? "Rechazar cotización" : "Enviar una pregunta al taller"}</p>
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Su nombre" className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-brand-500 focus:outline-none" />
               <textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1000} rows={3} placeholder={action === "approve" ? "Comentario (opcional)" : action === "reject" ? "Motivo" : "Su pregunta"} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm focus:border-brand-500 focus:outline-none" />
               {action === "approve" && <p className="text-xs text-slate-500">Al confirmar, autoriza a {p.workshop.name} a realizar los trabajos cotizados. Se guardará la fecha y hora de su aprobación.</p>}
               <div className="flex gap-2">
@@ -370,9 +382,14 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
 
       {/* Contacto */}
       <section className={cn(card, "space-y-3")}>
-        {contact && (
+        {(
           <a href={contact} target="_blank" rel="noreferrer" className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#1faa53] text-base font-bold text-white hover:bg-[#178a43]">
-            <MessageCircle className="h-5 w-5" /> Contactar a {p.workshop.name}
+            <MessageCircle className="h-5 w-5" /> Escribir por WhatsApp
+          </a>
+        )}
+        {(
+          <a href={`tel:${callNumber}`} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 text-base font-bold text-slate-800 hover:bg-slate-50">
+            <Phone className="h-5 w-5" /> Llamar a {p.workshop.name}
           </a>
         )}
         {(p.workshop.address || p.workshop.hours) && (

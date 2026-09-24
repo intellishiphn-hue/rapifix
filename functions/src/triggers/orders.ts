@@ -37,6 +37,7 @@ export const onOrderPhotoWritten = onDocumentWritten(
     if (!created && !deleted) return;
     const { tid, orderId } = event.params;
     const ref = db.doc(`${orderCol.workOrders(tid)}/${orderId}`);
+    if (!(await ref.get()).exists) return; // la orden fue eliminada
     const count = await ref.collection("photos").count().get();
     await ref.update({ photoCount: count.data().count });
   },
@@ -49,6 +50,7 @@ export const onOrderPhotoUpdated = onDocumentWritten(
     const before = event.data?.before.data();
     const after = event.data?.after.data();
     if (before && after && before.visibleToCustomer === after.visibleToCustomer && before.caption === after.caption) return;
+    if (!after) return; // foto eliminada (o la orden completa)
     await buildPortal(event.params.tid, event.params.orderId);
   },
 );

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowDownUp, Package, Pencil, Plus, Search } from "lucide-react";
+import { ArrowDownUp, FileSpreadsheet, Package, Pencil, Plus, Search } from "lucide-react";
+import { ImportProductsDialog } from "./ImportProductsDialog";
 import { formatMoney, type Product } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useDebounced } from "@/lib/firestore/hooks";
@@ -26,6 +27,7 @@ export function ProductsPage() {
   const [pageSize, setPageSize] = useState(50);
   const [editing, setEditing] = useState<Product | null | undefined>(undefined);
   const [moving, setMoving] = useState<Product | null>(null);
+  const [importing, setImporting] = useState(false);
   const debounced = useDebounced(search, 300);
   const { data, loading, error, hasMore } = useProducts({ search: debounced, showInactive: inactive, pageSize });
   const manage = can("catalog.manage");
@@ -33,7 +35,12 @@ export function ProductsPage() {
 
   return (
     <>
-      <PageHeader title="Productos y repuestos" description="Catálogo con precios y existencias. Se usan en cotizaciones y en el punto de venta." actions={manage && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setEditing(null)}>Nuevo producto</Button>} />
+      <PageHeader title="Productos y repuestos" description="Catálogo con precios y existencias. Se usan en cotizaciones y en el punto de venta." actions={manage && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" icon={<FileSpreadsheet className="h-4 w-4" />} onClick={() => setImporting(true)}>Subir desde Excel</Button>
+          <Button icon={<Plus className="h-4 w-4" />} onClick={() => setEditing(null)}>Nuevo producto</Button>
+        </div>
+      )} />
       <Card>
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center">
           <div className="relative flex-1">
@@ -68,6 +75,7 @@ export function ProductsPage() {
       </Card>
       <ProductFormDialog open={editing !== undefined} onClose={() => setEditing(undefined)} product={editing} />
       <MovementDialog product={moving} onClose={() => setMoving(null)} />
+      <ImportProductsDialog open={importing} onClose={() => setImporting(false)} />
     </>
   );
 }

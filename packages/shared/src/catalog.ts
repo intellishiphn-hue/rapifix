@@ -266,3 +266,30 @@ export interface OnlinePayConfigStatus {
   webhookUrl: string;
   lastEventAt: TimestampLike | null;
 }
+
+// ---------------- Carga masiva de productos (Excel) ----------------
+export const importProductRowSchema = z.object({
+  /** fila del Excel (para mostrar errores) */
+  row: z.number().int().min(1).max(100000),
+  sku: text(40),
+  name: text(120).min(2, "El nombre es obligatorio"),
+  category: text(60),
+  brand: text(60),
+  supplier: text(80),
+  unit: text(20).min(1),
+  price: cents,
+  cost: cents.nullish(),
+  stock: z.number().min(0).max(1_000_000).nullish(),
+  minStock: z.number().min(0).max(100000),
+  location: text(60),
+  taxable: z.boolean(),
+  active: z.boolean(),
+});
+export type ImportProductRow = z.infer<typeof importProductRowSchema>;
+
+export const importProductsSchema = z.object({
+  rows: z.array(importProductRowSchema).min(1).max(200),
+  /** productos que ya existen: ajustar la existencia a la del Excel (ajuste por conteo) */
+  updateStock: z.boolean(),
+});
+export type ImportProductsInput = z.infer<typeof importProductsSchema>;

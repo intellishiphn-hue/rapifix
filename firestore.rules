@@ -46,6 +46,17 @@ service cloud.firestore {
     }
 
     // ---------- Usuarios (perfiles). Solo Cloud Functions escriben. ----------
+    // Preferencias personales (orden del Dashboard). Cada usuario solo la suya.
+    match /userPrefs/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['dashboard', 'updatedAt'])
+        && request.resource.data.dashboard is map
+        && request.resource.data.dashboard.keys().hasOnly(['order', 'hidden'])
+        && request.resource.data.dashboard.order is list && request.resource.data.dashboard.order.size() <= 40
+        && request.resource.data.dashboard.hidden is list && request.resource.data.dashboard.hidden.size() <= 40;
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid

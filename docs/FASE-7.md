@@ -16,6 +16,9 @@ Incluye lo de la Fase 6 que no necesita servidor. El envío 100% automático de 
 | Crear usuarios | Mensajes de error claros y recuperación si un intento anterior quedó a medias |
 | Rendimiento | El panel se divide en partes (Firebase, gráficos, React) que el navegador guarda en caché: las actualizaciones descargan menos |
 | Dominio propio | Campo en Configuración; permite pagos en línea desde ese dominio |
+| Dashboard personalizable | Botón "Personalizar": cada usuario sube, baja, oculta o muestra las secciones. Se guarda en su usuario (sirve en cualquier computadora o celular) |
+| Productos desde Excel | Productos → "Subir desde Excel": plantilla descargable con ejemplos e instrucciones, o "Descargar mis productos" para editarlos y volver a subirlos. Antes de guardar muestra cuáles son nuevos, cuáles se actualizan y cuáles tienen errores. La existencia inicial queda como entrada de inventario; en productos existentes solo se ajusta si se marca (ajuste por conteo) |
+| Citas | Al crear una cita se abre el WhatsApp de confirmación. En el Dashboard, "Citas de mañana" con recordatorios uno por uno. Plantillas de cita editables |
 
 ## Pasos manuales
 

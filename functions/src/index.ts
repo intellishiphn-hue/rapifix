@@ -28,3 +28,4 @@ export { createOnlinePayment, checkOnlinePayment, rokiWebhook, reconcileOnlinePa
 export { saveAppointment, setAppointmentStatus, saveMaintenance, maintenanceAction, saveEmployeeProfile, backfillMaintenance } from "./callable/operations";
 export { saveSupplier, createPurchase, paySupplier, voidPurchase, saveExpense, voidExpense } from "./callable/finance";
 export { onOrderDelivered, dailyMaintenance } from "./scheduled/daily";
+export { importProducts } from "./callable/importProducts";

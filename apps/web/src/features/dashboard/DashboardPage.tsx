@@ -1,8 +1,9 @@
+import { DashboardCustomizer, arrange, useDashboardPrefs, type DashSection } from "./customize";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { collection, getAggregateFromServer, getCountFromServer, limit, orderBy, query, sum, Timestamp, where } from "firebase/firestore";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, ArrowRight, Car, CheckCircle2, ClipboardList, Clock, FileClock, Plus, Stethoscope, UserPlus, Users, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowRight, Car, CheckCircle2, ClipboardList, Clock, FileClock, Plus, SlidersHorizontal, Stethoscope, UserPlus, Users, Wrench } from "lucide-react";
 import { catalogCol, col, formatMoney, KANBAN_COLUMNS, orderCol, type Customer, type Vehicle, type WorkOrder } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { useQueryData } from "@/lib/firestore/hooks";
@@ -212,46 +213,32 @@ export function DashboardPage() {
   const recentOrders = open.data.slice(0, 5);
   const pendingIntake = usePendingIntakeQuotes(role !== "technician");
   const money = useMoney(can("dashboard.financials"));
+  const { prefs, save: savePrefs } = useDashboardPrefs(user?.uid);
+  const [customizing, setCustomizing] = useState(false);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-[26px]">{greeting}, {name.split(" ")[0]}</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {new Intl.DateTimeFormat("es-HN", { weekday: "long", day: "numeric", month: "long" }).format(new Date())} · Resumen de RAPIFIX
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {can("customers.write") && <Link to="/clientes"><Button variant="secondary" icon={<UserPlus className="h-4 w-4" />}>Clientes</Button></Link>}
-          {can("orders.create") && <Link to="/ordenes/nueva"><Button icon={<Plus className="h-4 w-4" />}>Nueva orden</Button></Link>}
-        </div>
-      </div>
-
-      {isEmpty && can("settings.write") && (
-        <Card className="flex flex-col gap-3 border-brand-200 bg-brand-50/60 p-5 sm:flex-row sm:items-center">
-          <div className="flex-1">
-            <div className="font-semibold text-brand-900">Su taller está listo para empezar</div>
-            <div className="text-sm text-brand-800/80">Registre clientes y vehículos, o cargue los datos de demostración desde Configuración para probar el sistema.</div>
-          </div>
-          <Link to="/configuracion"><Button variant="secondary">Ir a Configuración</Button></Link>
-        </Card>
-      )}
-
+  const sections: DashSection[] = [
+    { id: "tech", label: "Mis órdenes y mis citas de hoy", show: isTech && !!user, node: (
+        <>
       {isTech && user && (
         <div className="grid gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2"><MyOrdersCard orders={open.data} loading={open.loading} /></div>
           <TodayAppointmentsCard technicianId={user.uid} title="Mis citas de hoy" />
         </div>
       )}
-
+        </>
+      ) },
+    { id: "kpis", label: "Vehículos en taller (resumen)", show: true, node: (
+        <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Vehículos en taller" value={open.loading ? undefined : open.data.length} icon={<Car className="h-5 w-5" />} tone="bg-brand-50 text-brand-600" />
         <Kpi label="En diagnóstico" value={oc(["RECEIVED", "INSPECTION", "DIAGNOSIS", "AWAITING_QUOTE"])} icon={<Stethoscope className="h-5 w-5" />} tone="bg-indigo-50 text-indigo-600" />
         <Kpi label="Esperando aprobación" value={oc(["QUOTE_SENT", "AWAITING_APPROVAL"])} icon={<FileClock className="h-5 w-5" />} tone="bg-amber-50 text-amber-600" />
         <Kpi label="Listos para entrega" value={oc(["READY"])} icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-green-50 text-green-600" />
       </div>
-
+        </>
+      ) },
+    { id: "money", label: "Cobrado hoy, del mes y por cobrar", show: can("dashboard.financials"), node: (
+        <>
       {can("dashboard.financials") && (
         <div className="grid gap-4 sm:grid-cols-3">
           <MoneyKpi label="Cobrado hoy" value={money?.today} tone="text-slate-900" />
@@ -259,23 +246,28 @@ export function DashboardPage() {
           <MoneyKpi label="Cuentas por cobrar" value={money?.receivable} hint="Saldos pendientes en órdenes" tone="text-amber-700" />
         </div>
       )}
-
+        </>
+      ) },
+    { id: "cash", label: "Gráfica de cobros y cuentas por pagar", show: can("dashboard.financials"), node: (
+        <>
       {can("dashboard.financials") && (
         <div className="grid gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2"><CollectedChartCard /></div>
           <OverduePayablesCard />
         </div>
       )}
-
-      {staff && (can("agenda.read") || can("maintenance.manage")) && (
+        </>
+      ) },
+    { id: "today", label: "Citas de hoy y mantenimientos", show: staff && (can("agenda.read") || can("maintenance.manage")), node: (
         <div className={`grid gap-5 ${can("agenda.read") && can("maintenance.manage") ? "xl:grid-cols-3" : ""}`}>
           {can("agenda.read") && <div className={can("maintenance.manage") ? "xl:col-span-2" : ""}><TodayAppointmentsCard /></div>}
           {can("maintenance.manage") && <MaintenanceCard />}
-          {can("agenda.manage") && <div className="xl:col-span-3"><TomorrowRemindersCard /></div>}
-          {can("maintenance.manage") && <div className="xl:col-span-3"><ReminderQueueCard /></div>}
         </div>
-      )}
-
+      ) },
+    { id: "tomorrow", label: "Citas de mañana (recordatorios)", show: staff && can("agenda.manage"), node: <TomorrowRemindersCard /> },
+    { id: "maintQueue", label: "Toca mantenimiento (avisos por WhatsApp)", show: staff && can("maintenance.manage"), node: <ReminderQueueCard /> },
+    { id: "orders", label: "Estado de las órdenes y lo que requiere atención", show: true, node: (
+        <>
       <div className="grid gap-5 xl:grid-cols-3">
         <Card>
           <CardHeader title="Estado de las órdenes" action={<Link to="/ordenes" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700">Tablero <ArrowRight className="h-4 w-4" /></Link>} />
@@ -286,7 +278,10 @@ export function DashboardPage() {
           {open.loading ? <div className="p-5"><Skeleton className="h-40" /></div> : <AlertsCard orders={open.data} />}
         </Card>
       </div>
-
+        </>
+      ) },
+    { id: "intake", label: "Cotizaciones aprobadas pendientes de ingreso", show: staff, node: (
+        <>
       {staff && pendingIntake.data.length > 0 && (
         <Card>
           <CardHeader title="Cotizaciones aprobadas, pendientes de ingreso" description="El cliente aprobó pero el vehículo aún no llega. Al recibirlo, conviértala en orden." />
@@ -303,7 +298,10 @@ export function DashboardPage() {
           </ul>
         </Card>
       )}
-
+        </>
+      ) },
+    { id: "counts", label: "Clientes y vehículos (números)", show: staff, node: (
+        <>
       {staff && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Kpi label="Clientes activos" value={kpis?.customers} icon={<Users className="h-5 w-5" />} tone="bg-slate-100 text-slate-600" />
@@ -312,7 +310,10 @@ export function DashboardPage() {
           <Kpi label="Clientes nuevos" value={kpis?.newCustomers} hint="Este mes" icon={<UserPlus className="h-5 w-5" />} tone="bg-violet-50 text-violet-600" />
         </div>
       )}
-
+        </>
+      ) },
+    { id: "activity", label: "Clientes nuevos por mes y movimiento reciente", show: true, node: (
+        <>
       <div className="grid gap-5 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader title="Clientes nuevos por mes" description="Últimos 6 meses" />
@@ -339,7 +340,10 @@ export function DashboardPage() {
           )}
         </Card>
       </div>
-
+        </>
+      ) },
+    { id: "recent", label: "Últimos clientes y vehículos", show: true, node: (
+        <>
       <div className="grid gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader title="Últimos clientes" action={<Link to="/clientes" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700">Ver todos <ArrowRight className="h-4 w-4" /></Link>} />
@@ -379,6 +383,41 @@ export function DashboardPage() {
           </div>
         </Card>
       </div>
+        </>
+      ) },
+  ];
+  const ordered = arrange(sections, prefs).filter((sec) => !prefs.hidden.includes(sec.id));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-[26px]">{greeting}, {name.split(" ")[0]}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {new Intl.DateTimeFormat("es-HN", { weekday: "long", day: "numeric", month: "long" }).format(new Date())} · Resumen de RAPIFIX
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" icon={<SlidersHorizontal className="h-4 w-4" />} onClick={() => setCustomizing((c) => !c)}>Personalizar</Button>
+          {can("customers.write") && <Link to="/clientes"><Button variant="secondary" icon={<UserPlus className="h-4 w-4" />}>Clientes</Button></Link>}
+          {can("orders.create") && <Link to="/ordenes/nueva"><Button icon={<Plus className="h-4 w-4" />}>Nueva orden</Button></Link>}
+        </div>
+      </div>
+
+      {isEmpty && can("settings.write") && (
+        <Card className="flex flex-col gap-3 border-brand-200 bg-brand-50/60 p-5 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <div className="font-semibold text-brand-900">Su taller está listo para empezar</div>
+            <div className="text-sm text-brand-800/80">Registre clientes y vehículos, o cargue los datos de demostración desde Configuración para probar el sistema.</div>
+          </div>
+          <Link to="/configuracion"><Button variant="secondary">Ir a Configuración</Button></Link>
+        </Card>
+      )}
+
+      {customizing ? (
+        <DashboardCustomizer sections={sections} prefs={prefs} onSave={savePrefs} onDone={() => setCustomizing(false)} />
+      ) : null}
+      {ordered.map((sec) => <div key={sec.id} className="empty:hidden">{sec.node}</div>)}
 
       {open.error && <p className="flex items-center gap-2 text-sm text-amber-700"><AlertTriangle className="h-4 w-4" />{open.error}</p>}
     </div>

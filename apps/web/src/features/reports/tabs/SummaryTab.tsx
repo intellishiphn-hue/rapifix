@@ -19,7 +19,7 @@ async function load(p: TabProps) {
   const { start, end } = p.period;
   const [payments, sales, expenses, supplierPayments, ordersDue, salesDue, purchasesDue] = await Promise.all([
     fetchRange<Payment>(catalogCol.payments(TENANT_ID), "at", start, end),
-    fetchRange<Sale>(catalogCol.sales(TENANT_ID), "at", start, end),
+    fetchRange<Sale>(catalogCol.sales(TENANT_ID), "at", start, end).then((l) => l.filter((x) => x.status !== "voided")),
     fetchRange<Expense>(financeCol.expenses(TENANT_ID), "date", start, end),
     fetchRange<SupplierPayment>(financeCol.supplierPayments(TENANT_ID), "at", start, end),
     fetchAll<WorkOrder>(orderCol.workOrders(TENANT_ID), where("balance", ">", 0), limit(1000)),

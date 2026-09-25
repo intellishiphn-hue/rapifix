@@ -18,6 +18,7 @@ import { useCustomer } from "@/features/customers/api";
 import { StatusBadge } from "@/features/work-orders/StatusBadge";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
 import { orderVars } from "@/features/work-orders/whatsapp";
+import { VoidSaleButton } from "./VoidSaleButton";
 import { useReceivableOrders, useReceivableSales } from "./api";
 import { StatCard } from "./parts";
 
@@ -30,7 +31,7 @@ const daysSince = (ms: number) => Math.max(0, Math.floor((Date.now() - ms) / 864
 type Charge = { kind: "order"; order: WorkOrder } | { kind: "sale"; sale: Sale };
 
 export function ReceivablesPage() {
-  const { can } = useAuth();
+  const { can, role } = useAuth();
   const orders = useReceivableOrders();
   const sales = useReceivableSales(can("payments.read"));
   const [tab, setTab] = useState<"orders" | "sales">("orders");
@@ -106,7 +107,7 @@ export function ReceivablesPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-900">{s.code}</span>
-                    <Badge tone="blue">Abonada</Badge>
+                    {s.paid > 0 ? <Badge tone="blue">Abonada</Badge> : <Badge tone="amber">A crédito</Badge>}
                     {s.at?.toMillis && <span className="text-xs text-slate-500">hace {daysSince(s.at.toMillis())} días</span>}
                   </div>
                   <div className="truncate text-sm text-slate-700">{s.customerName || "Cliente de mostrador"}</div>
@@ -117,6 +118,7 @@ export function ReceivablesPage() {
                   <Button size="sm" icon={<HandCoins className="h-4 w-4" />} onClick={() => setCharging({ kind: "sale", sale: s })}>Cobrar</Button>
                   <Button size="sm" variant="secondary" className="text-[#178a43]" icon={<MessageCircle className="h-4 w-4" />} disabled={!s.customerId} onClick={() => setMessaging({ kind: "sale", sale: s })} aria-label="Recordatorio por WhatsApp" title={s.customerId ? "Recordatorio por WhatsApp" : "Venta sin cliente registrado"} />
                   <a href={`/imprimir/venta/${s.id}`} target="_blank" rel="noopener" className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] text-slate-500 hover:bg-slate-100" aria-label="Ver venta" title="Ver venta"><ExternalLink className="h-4 w-4" /></a>
+                  {(role === "admin" || role === "manager") && <VoidSaleButton sale={s} />}
                 </div>
               </li>
             ))}

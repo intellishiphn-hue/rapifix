@@ -12,7 +12,7 @@ async function load(p: TabProps, withCosts: boolean, withSales: boolean) {
   const { start, end } = p.period;
   const [delivered, sales, costs] = await Promise.all([
     fetchRange<WorkOrder>(orderCol.workOrders(TENANT_ID), "deliveredAt", start, end).then((l) => l.filter((o) => o.status === "DELIVERED")),
-    withSales ? fetchRange<Sale>(catalogCol.sales(TENANT_ID), "at", start, end) : Promise.resolve([] as Sale[]),
+    withSales ? fetchRange<Sale>(catalogCol.sales(TENANT_ID), "at", start, end).then((l) => l.filter((x) => x.status !== "voided")) : Promise.resolve([] as Sale[]),
     withCosts ? fetchAll<ProductCost & { id: string }>(catalogCol.productCosts(TENANT_ID)) : Promise.resolve([] as Array<ProductCost & { id: string }>),
   ]);
   const quotes = await fetchApprovedQuotes(delivered);

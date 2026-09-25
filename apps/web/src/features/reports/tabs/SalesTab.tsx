@@ -9,7 +9,7 @@ import { loaderKey, type TabProps } from "./common";
 
 export function SalesTab(props: TabProps) {
   const { data, loading, error } = useLoader(
-    () => fetchRange<Sale>(catalogCol.sales(TENANT_ID), "at", props.period.start, props.period.end),
+    () => fetchRange<Sale>(catalogCol.sales(TENANT_ID), "at", props.period.start, props.period.end).then((l) => l.filter((x) => x.status !== "voided")),
     loaderKey("sales", props),
   );
 

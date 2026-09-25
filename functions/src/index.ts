@@ -31,3 +31,4 @@ export { onOrderDelivered, dailyMaintenance } from "./scheduled/daily";
 export { importProducts } from "./callable/importProducts";
 export { deleteWorkOrder } from "./callable/deleteWorkOrder";
 export { onSettingsBranding } from "./triggers/branding";
+export { voidSale } from "./callable/voidSale";

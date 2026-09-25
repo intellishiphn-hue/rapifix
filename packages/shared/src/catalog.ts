@@ -199,7 +199,8 @@ export interface Sale {
   totals: Totals;
   paid: number;
   balance: number;
-  status: "paid" | "partial";
+  status: "paid" | "partial" | "voided";
+  voidReason?: string;
   by: string;
   byName: string;
   at: TimestampLike;
@@ -293,3 +294,8 @@ export const importProductsSchema = z.object({
   updateStock: z.boolean(),
 });
 export type ImportProductsInput = z.infer<typeof importProductsSchema>;
+
+export const voidSaleSchema = z.object({
+  saleId: z.string().min(1),
+  reason: text(300).min(3, "Indique el motivo"),
+});

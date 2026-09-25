@@ -18,7 +18,17 @@ import { registerInventoryMovement, saveProduct, useMovements, useProductCost } 
 
 const EMPTY: ProductInput = { sku: "", name: "", category: "", brand: "", supplier: "", unit: "unidad", price: 0, minStock: 1, location: "", taxable: true, active: true };
 
-export function ProductFormDialog({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Product | null }) {
+export function ProductFormDialog({ open, onClose, product, onSaved, initial, hideInitialStock }: {
+  open: boolean;
+  onClose: () => void;
+  product?: Product | null;
+  /** Al crear: devuelve el producto nuevo (ej. para agregarlo directo a una compra) */
+  onSaved?: (p: { id: string; name: string; sku: string }) => void;
+  /** Valores iniciales al crear (ej. el nombre que se buscó, el proveedor de la compra) */
+  initial?: Partial<ProductInput>;
+  /** En compras la existencia entra con la compra: no se pide existencia inicial */
+  hideInitialStock?: boolean;
+}) {
   const { user, can } = useAuth();
   const seeCost = can("inventory.manage");
   const costDoc = useProductCost(product?.id, open && seeCost);
@@ -30,8 +40,9 @@ export function ProductFormDialog({ open, onClose, product }: { open: boolean; o
 
   useEffect(() => {
     if (!open) return;
-    reset(product ? { sku: product.sku, name: product.name, category: product.category, brand: product.brand, supplier: product.supplier, unit: product.unit, price: product.price, minStock: product.minStock, location: product.location, taxable: product.taxable, active: product.active } : EMPTY);
+    reset(product ? { sku: product.sku, name: product.name, category: product.category, brand: product.brand, supplier: product.supplier, unit: product.unit, price: product.price, minStock: product.minStock, location: product.location, taxable: product.taxable, active: product.active } : { ...EMPTY, ...(initial ?? {}) });
     setInitialStock("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, product, reset]);
   useEffect(() => setCost(costDoc.data?.cost ?? 0), [costDoc.data?.cost]);
 
@@ -39,9 +50,10 @@ export function ProductFormDialog({ open, onClose, product }: { open: boolean; o
     if (!user) return;
     try {
       const id = await saveProduct(product?.id ?? null, v, seeCost ? cost : null, user.uid);
-      const qty = Number(initialStock);
+      const qty = hideInitialStock ? 0 : Number(initialStock);
       if (!product && qty > 0) await registerInventoryMovement({ productId: id, type: "in", qty, unitCost: seeCost ? cost : null, reason: "Existencia inicial" });
       toast.success(product ? "Producto actualizado" : "Producto creado");
+      if (!product) onSaved?.({ id, name: v.name, sku: v.sku.toUpperCase() });
       onClose();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -61,7 +73,7 @@ export function ProductFormDialog({ open, onClose, product }: { open: boolean; o
         <Field label="Unidad"><Select {...register("unit")}>{PRODUCT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</Select></Field>
         <Field label="Existencia mínima" error={errors.minStock?.message} hint="Se avisa cuando baje de aquí"><Input type="number" min={0} {...register("minStock", { valueAsNumber: true })} /></Field>
         <Field label="Ubicación"><Input {...register("location")} placeholder="Estante A-3" /></Field>
-        {!product && <Field label="Existencia inicial" hint="Se registra como entrada"><Input type="number" min={0} value={initialStock} onChange={(e) => setInitialStock(e.target.value)} /></Field>}
+        {!product && !hideInitialStock && <Field label="Existencia inicial" hint="Se registra como entrada"><Input type="number" min={0} value={initialStock} onChange={(e) => setInitialStock(e.target.value)} /></Field>}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("taxable")} /> Aplica ISV</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("active")} /> Activo</label>
         <button type="submit" className="hidden" />

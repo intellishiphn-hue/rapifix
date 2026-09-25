@@ -13,6 +13,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { CatalogPicker } from "@/features/catalog/CatalogPicker";
+import { ProductFormDialog } from "@/features/catalog/ProductDialogs";
 import { costRef } from "@/features/catalog/api";
 import { addDaysKey, createPurchase, dayKeyToMs, useActiveSuppliers } from "./api";
 import { MethodPicker, SupplierFormDialog } from "./parts";
@@ -33,7 +34,7 @@ const lineKey = () => `l${++seq}`;
 export function NewPurchasePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { role } = useAuth();
+  const { role, can } = useAuth();
   const canSeeCost = COST_ROLES.includes(role ?? "");
   const canPay = role === "admin" || role === "manager";
   const suppliers = useActiveSuppliers();
@@ -52,6 +53,7 @@ export function NewPurchasePage() {
   const [payMethod, setPayMethod] = useState<ManualPaymentMethod>("cash");
   const [payRef, setPayRef] = useState("");
   const [picker, setPicker] = useState(false);
+  const [creating, setCreating] = useState<string | null>(null);
   const [newSupplier, setNewSupplier] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -158,6 +160,7 @@ export function NewPurchasePage() {
             <CardHeader title="Detalle" description="Productos del inventario o líneas libres (fletes, servicios, insumos no inventariados)." action={
               <div className="flex gap-2">
                 <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={() => setPicker(true)}>Producto</Button>
+                {can("catalog.manage") && <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating("")}>Producto nuevo</Button>}
                 <Button size="sm" variant="secondary" icon={<PenLine className="h-4 w-4" />} onClick={() => setLines((ls) => [...ls, { key: lineKey(), productId: null, sku: "", description: "", qty: 1, unitCost: 0 }])}>Línea libre</Button>
               </div>
             } />
@@ -252,7 +255,20 @@ export function NewPurchasePage() {
         </div>
       </div>
 
-      <CatalogPicker open={picker} onClose={() => setPicker(false)} only="product" onPick={(p) => { if (p.kind === "product") void addProduct(p.item); }} />
+      <CatalogPicker
+        open={picker}
+        onClose={() => setPicker(false)}
+        only="product"
+        onPick={(p) => { if (p.kind === "product") void addProduct(p.item); }}
+        onCreateNew={can("catalog.manage") ? (text) => setCreating(text) : undefined}
+      />
+      <ProductFormDialog
+        open={creating !== null}
+        onClose={() => setCreating(null)}
+        hideInitialStock
+        initial={{ name: creating ?? "", supplier: supplier?.name ?? "" }}
+        onSaved={(p) => void addProduct(p)}
+      />
       <SupplierFormDialog open={newSupplier} supplier={null} onClose={(id) => { setNewSupplier(false); if (id) setSupplierId(id); }} />
     </>
   );

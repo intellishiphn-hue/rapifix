@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { collection, getCountFromServer, limit, query, where } from "firebase/firestore";
+import { collection, getCountFromServer, limit, query, Timestamp, where } from "firebase/firestore";
 import { AlertTriangle, ArrowRight, BellRing, CalendarDays, CalendarClock, CheckCircle2, Truck } from "lucide-react";
 import {
   APPOINTMENT_STATUS_LABELS, APPOINTMENT_TYPE_LABELS, catalogCol, financeCol, formatMoney, hnDayKey, opsCol,
@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Feedback";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { StatusBadge } from "@/features/work-orders/StatusBadge";
-import { fetchAll, fetchRange, useLoader } from "@/features/reports/data";
+import { fetchAll, useLoader } from "@/features/reports/data";
 import { DailyAmountChart, paymentsByDay } from "@/features/reports/charts";
 import { dayKeys, hnTodayStart, keyToDate } from "@/features/reports/period";
 
@@ -29,10 +29,13 @@ export function CollectedChartCard() {
     const today = keyToDate(day);
     return { start: new Date(today.getTime() - 29 * 86400000), end: new Date(today.getTime() + 86400000) };
   }, [day]);
-  const { data, loading, error } = useLoader(
-    () => fetchRange<Payment>(catalogCol.payments(TENANT_ID), "at", range.start, range.end, 3000),
+  // En tiempo real: un pago o venta nueva aparece sin recargar la página
+  const live = useQueryData<Payment>(
+    query(collection(db, catalogCol.payments(TENANT_ID)), where("at", ">=", Timestamp.fromDate(range.start)), limit(3000)),
     `dash-collected-30|${day}`,
   );
+  const data = live.loading ? null : live.data;
+  const { loading, error } = live;
   const series = useMemo(() => (data ? paymentsByDay(data, dayKeys(range.start, range.end)) : []), [data, range]);
   const total = series.reduce((a, d) => a + d.amount, 0);
   return (

@@ -1,10 +1,11 @@
 import { DashboardCustomizer, arrange, useDashboardPrefs, type DashSection } from "./customize";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, getAggregateFromServer, getCountFromServer, limit, orderBy, query, sum, Timestamp, where } from "firebase/firestore";
+import { collection, getCountFromServer, limit, onSnapshot, orderBy, query, Timestamp, where } from "firebase/firestore";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AlertTriangle, ArrowRight, Car, CheckCircle2, ClipboardList, Clock, FileClock, Plus, SlidersHorizontal, Stethoscope, UserPlus, Users, Wrench } from "lucide-react";
-import { catalogCol, col, formatMoney, KANBAN_COLUMNS, orderCol, type Customer, type Vehicle, type WorkOrder } from "@rapifix/shared";
+import { catalogCol, col, formatMoney, hnDayKey, KANBAN_COLUMNS, orderCol, type Customer, type Payment, type Vehicle, type WorkOrder } from "@rapifix/shared";
+import { errorMessage } from "@/lib/errors";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { useQueryData } from "@/lib/firestore/hooks";
 import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
@@ -76,24 +77,40 @@ function Kpi({ label, value, icon, hint, tone }: { label: string; value: number 
 }
 
 /** Cobrado hoy / este mes y cuentas por cobrar (solo quien ve finanzas). */
+/**
+ * Cobrado hoy / este mes y cuentas por cobrar, EN TIEMPO REAL (se actualiza solo al registrar
+ * un pago, una venta del POS o un pago en línea). Cuentas por cobrar = órdenes + ventas con saldo.
+ */
 function useMoney(enabled: boolean) {
-  const [m, setM] = useState<{ today: number; month: number; receivable: number } | null>(null);
+  const [pays, setPays] = useState<Payment[] | null>(null);
+  const [orderBal, setOrderBal] = useState<number | null>(null);
+  const [saleBal, setSaleBal] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const monthKey = hnDayKey(Date.now()).slice(0, 7);
   useEffect(() => {
     if (!enabled) return;
-    // Hora de Honduras, aunque el equipo tenga otra zona horaria
-    const d = hnTodayStart();
     const hp = hnParts();
-    const pays = collection(db, catalogCol.payments(TENANT_ID));
-    const q = (since: Date) => getAggregateFromServer(query(pays, where("status", "==", "valid"), where("at", ">=", Timestamp.fromDate(since))), { total: sum("amount") });
-    Promise.all([
-      q(d),
-      q(hnDate(hp.y, hp.m, 1)),
-      getAggregateFromServer(query(collection(db, orderCol.workOrders(TENANT_ID)), where("balance", ">", 0)), { total: sum("balance") }),
-    ])
-      .then(([a, b, c]) => setM({ today: a.data().total ?? 0, month: b.data().total ?? 0, receivable: c.data().total ?? 0 }))
-      .catch(() => setM({ today: 0, month: 0, receivable: 0 }));
-  }, [enabled]);
-  return m;
+    const since = Timestamp.fromDate(hnDate(hp.y, hp.m, 1));
+    const fail = (err: unknown) => {
+      console.error("[Dashboard] cobros", err);
+      setError(errorMessage(err));
+    };
+    const u1 = onSnapshot(query(collection(db, catalogCol.payments(TENANT_ID)), where("at", ">=", since)), (snap) => setPays(snap.docs.map((d) => d.data() as Payment)), fail);
+    const u2 = onSnapshot(query(collection(db, orderCol.workOrders(TENANT_ID)), where("balance", ">", 0)), (snap) => setOrderBal(snap.docs.reduce((t, d) => t + (d.get("status") === "CANCELLED" ? 0 : Number(d.get("balance") ?? 0)), 0)), fail);
+    const u3 = onSnapshot(query(collection(db, catalogCol.sales(TENANT_ID)), where("balance", ">", 0)), (snap) => setSaleBal(snap.docs.reduce((t, d) => t + (d.get("status") === "voided" ? 0 : Number(d.get("balance") ?? 0)), 0)), fail);
+    return () => { u1(); u2(); u3(); };
+  }, [enabled, monthKey]);
+  if (!enabled) return null;
+  if (error) return { today: 0, month: 0, receivable: 0, error };
+  if (!pays || orderBal === null || saleBal === null) return null;
+  const todayMs = hnTodayStart().getTime();
+  const valid = pays.filter((p) => p.status === "valid");
+  return {
+    today: valid.filter((p) => (p.at?.toMillis?.() ?? Date.now()) >= todayMs).reduce((t, p) => t + p.amount, 0),
+    month: valid.reduce((t, p) => t + p.amount, 0),
+    receivable: orderBal + saleBal,
+    error: null as string | null,
+  };
 }
 
 function MoneyKpi({ label, value, hint, tone }: { label: string; value: number | undefined; hint?: string; tone: string }) {
@@ -243,7 +260,8 @@ export function DashboardPage() {
         <div className="grid gap-4 sm:grid-cols-3">
           <MoneyKpi label="Cobrado hoy" value={money?.today} tone="text-slate-900" />
           <MoneyKpi label="Cobrado este mes" value={money?.month} tone="text-emerald-700" />
-          <MoneyKpi label="Cuentas por cobrar" value={money?.receivable} hint="Saldos pendientes en órdenes" tone="text-amber-700" />
+          <MoneyKpi label="Cuentas por cobrar" value={money?.receivable} hint="Saldos pendientes en órdenes y ventas" tone="text-amber-700" />
+          {money?.error && <p className="flex items-center gap-2 text-sm text-amber-700 sm:col-span-3"><AlertTriangle className="h-4 w-4" />No se pudieron cargar los cobros: {money.error}</p>}
         </div>
       )}
         </>

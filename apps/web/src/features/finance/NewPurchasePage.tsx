@@ -157,13 +157,15 @@ export function NewPurchasePage() {
           </Card>
 
           <Card>
-            <CardHeader title="Detalle" description="Productos del inventario o líneas libres (fletes, servicios, insumos no inventariados)." action={
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" icon={<Package className="h-4 w-4" />} onClick={() => setPicker(true)}>Producto</Button>
-                {can("catalog.manage") && <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating("")}>Producto nuevo</Button>}
-                <Button size="sm" variant="secondary" icon={<PenLine className="h-4 w-4" />} onClick={() => setLines((ls) => [...ls, { key: lineKey(), productId: null, sku: "", description: "", qty: 1, unitCost: 0 }])}>Línea libre</Button>
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h3 className="text-[15px] font-semibold text-slate-900">Detalle</h3>
+              <p className="mt-0.5 text-sm text-slate-500">Productos del inventario o líneas libres (fletes, servicios, insumos no inventariados).</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <Button size="sm" variant="secondary" className="w-full" icon={<Package className="h-4 w-4" />} onClick={() => setPicker(true)}>Buscar producto</Button>
+                {can("catalog.manage") && <Button size="sm" variant="secondary" className="w-full" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating("")}>Producto nuevo</Button>}
+                <Button size="sm" variant="secondary" className="w-full" icon={<PenLine className="h-4 w-4" />} onClick={() => setLines((ls) => [...ls, { key: lineKey(), productId: null, sku: "", description: "", qty: 1, unitCost: 0 }])}>Línea libre</Button>
               </div>
-            } />
+            </div>
             {!lines.length ? (
               <div className="p-8 text-center text-sm text-slate-500">
                 Agregue los productos de la factura. <button className="font-semibold text-brand-700" onClick={() => setPicker(true)}>Buscar en el inventario</button>

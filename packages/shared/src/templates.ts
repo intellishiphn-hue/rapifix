@@ -26,7 +26,7 @@ export interface DefaultTemplate {
 const FIRMA = "Gracias por su preferencia en *{{taller}}* 🚗";
 
 export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
-  { key: "recibido", name: "Vehículo recibido", status: "RECEIVED", body: `¡Hola {{cliente}}! 👋\n\nRecibimos su vehículo: *{{vehiculo}}* (placa {{placa}})\n(Orden {{orden}})\n\nLe mantendremos informado del avance.\nPuede seguirlo aquí: {{link}}\n\n${FIRMA}` },
+  { key: "recibido", name: "Vehículo recibido", status: "RECEIVED", body: `¡Hola {{cliente}}! 👋\n\nRecibimos su vehículo: *{{vehiculo}}* (placa {{placa}})\n(Orden {{orden}})\n\nAquí puede ver las fotos y el detalle de cómo lo recibimos, y seguir el avance de la reparación: {{link}}\n\nLe mantendremos informado.\n\n${FIRMA}` },
   { key: "inspeccion", name: "Inspección completada", status: "INSPECTION", body: `¡Hola {{cliente}}! 🔎\n\nYa realizamos la inspección inicial de su *{{vehiculo}}*.\n(Orden {{orden}})\n\nSeguimos con el diagnóstico.\nAvance: {{link}}\n\n${FIRMA}` },
   { key: "diagnostico", name: "Diagnóstico listo", status: "AWAITING_QUOTE", body: `¡Hola {{cliente}}! 🧰\n\nEl diagnóstico de su *{{vehiculo}}* está listo.\n(Orden {{orden}})\n\nEn breve le enviamos la cotización.\nDetalles: {{link}}\n\n${FIRMA}` },
   { key: "cotizacion_enviada", name: "Cotización enviada", status: "QUOTE_SENT", body: `¡Hola {{cliente}}! 🏁\n\nLe enviamos la cotización de su vehículo: *{{vehiculo}}*\n(Orden {{orden}})\n\n*El total es de {{total}}*\n\nPuede revisarla y aprobarla aquí: {{link}}\n\n${FIRMA}` },

@@ -25,6 +25,7 @@ import { OrderCommunication } from "./OrderCommunication";
 import { daysInShop } from "./OrderCard";
 import { ScheduleButton } from "@/features/agenda/AppointmentDialog";
 import { DeleteOrderButton } from "./DeleteOrderButton";
+import { ReceivedNotice } from "./ReceivedNotice";
 
 type Tab = "resumen" | "diagnostico" | "cotizacion" | "servicios" | "repuestos" | "fotos" | "historial" | "comunicacion" | "pagos" | "documentos";
 const UPCOMING: Partial<Record<Tab, { phase: number; text: string }>> = {};
@@ -113,6 +114,7 @@ export function WorkOrderDetailPage() {
           </div>
           </div>
         </div>
+        {order.status === "RECEIVED" && can("orders.create") && <ReceivedNotice order={order} onGoPhotos={() => setTab("fotos")} />}
         {allowedTransitions(role, order.status).length > 0 && (
           <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3">
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Estado · toque para cambiar</div>

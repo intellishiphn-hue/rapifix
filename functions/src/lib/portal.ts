@@ -1,6 +1,6 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  catalogCol, col, orderCol, PORTAL_STEPS, quoteCol, STATUS_META,
+  catalogCol, col, orderCol, PORTAL_STEPS, quoteCol, RECEPTION_CHECKLIST, STATUS_META,
   type PublicPortal, type Quote, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "./admin";
@@ -75,6 +75,18 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
     delivered: status === "DELIVERED",
     updates: events.docs.map((d) => ({ at: d.get("at"), text: String(d.get("text") ?? "").replace(/\s*\(demo\)$/, "") })),
     photos: photos.docs.map((d) => ({ url: d.get("url"), caption: d.get("caption") ?? "", stage: d.get("stage") ?? "" })),
+    reception: o.reception
+      ? {
+          receivedAt: o.reception.receivedAt ?? o.createdAt ?? null,
+          mileageIn: Number(o.reception.mileageIn ?? 0),
+          fuelLevel: Number(o.reception.fuelLevel ?? 0),
+          items: RECEPTION_CHECKLIST.filter((c) => o.reception.checklist?.[c.key]).map((c) => c.label),
+          exteriorNotes: o.reception.exteriorNotes ?? "",
+          interiorNotes: o.reception.interiorNotes ?? "",
+          accessories: o.reception.accessories ?? "",
+          otherObjects: o.reception.otherObjects ?? "",
+        }
+      : null,
     diagnosis: o.diagnosis?.completedAt
       ? { summary: o.diagnosis.technicianDiagnosis ?? "", recommendations: o.diagnosis.recommendations ?? "" }
       : null,
@@ -142,6 +154,7 @@ export async function buildQuotePortal(tid: string, quoteId: string): Promise<st
     updates: [],
     photos: [],
     diagnosis: null,
+    reception: null,
     quote: q.status === "draft" ? null : {
       id: q.id, code: q.code, status: q.status,
       items: q.items.map((it) => ({ type: it.type, description: it.description, qty: it.qty, unitPrice: it.unitPrice, discount: it.discount, lineTotal: it.lineTotal })),

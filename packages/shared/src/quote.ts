@@ -188,6 +188,17 @@ export interface PublicPortal {
   updates: Array<{ at: TimestampLike; text: string }>;
   photos: Array<{ url: string; caption: string; stage: string }>;
   diagnosis: { summary: string; recommendations: string } | null;
+  /** Estado del vehículo al recibirlo (kilometraje, combustible, lo que dejó, observaciones) */
+  reception?: {
+    receivedAt: TimestampLike | null;
+    mileageIn: number;
+    fuelLevel: number;
+    items: string[];
+    exteriorNotes: string;
+    interiorNotes: string;
+    accessories: string;
+    otherObjects: string;
+  } | null;
   quote: {
     id: string;
     code: string;

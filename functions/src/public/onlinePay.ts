@@ -46,6 +46,14 @@ export const createOnlinePayment = onCall({ region: REGION }, async (request) =>
   if (order.get("status") === "CANCELLED") throw new HttpsError("failed-precondition", "La orden está cancelada.");
   const balance = Number(order.get("balance") ?? 0);
   if (balance <= 0) throw new HttpsError("failed-precondition", "Esta orden no tiene saldo pendiente.");
+  // Primero se aprueba la cotización y después se paga (evita pagos de algo que el cliente no ha aceptado)
+  const activeQuoteId = order.get("activeQuoteId") as string | null;
+  if (activeQuoteId) {
+    const aq = await db.doc(`${quoteCol.quotes(tid)}/${activeQuoteId}`).get();
+    if (aq.exists && ["sent", "viewed"].includes(aq.get("status"))) {
+      throw new HttpsError("failed-precondition", "Primero apruebe la cotización. Después podrá pagar aquí mismo.");
+    }
+  }
 
   // Reutiliza un link vigente por el mismo monto (evita cobros duplicados por doble clic)
   const opsCol = db.collection(catalogCol.onlinePayments(tid));

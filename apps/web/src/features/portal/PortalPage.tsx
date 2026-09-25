@@ -47,6 +47,7 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
   if (!op || portal.kind === "quote" || op.total <= 0) return null;
   const paidInFull = op.balance <= 0 && op.paid > 0;
   if (!op.enabled && !paidInFull) return null;
+  const quotePending = portal.quote && (portal.quote.status === "sent" || portal.quote.status === "viewed");
 
   const pay = async () => {
     setBusy(true);
@@ -70,6 +71,8 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
       </dl>
       {paidInFull ? (
         <p className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800"><CheckCircle2 className="h-5 w-5" /> ¡Orden pagada! Gracias.</p>
+      ) : quotePending ? (
+        <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">Primero apruebe la cotización. En cuanto la apruebe, aquí mismo le aparece el botón para pagar en línea.</p>
       ) : checking ? (
         <p className="mt-4 flex items-center gap-2 rounded-xl bg-brand-50 p-3 text-sm text-brand-800"><Loader2 className="h-4 w-4 animate-spin" /> Verificando su pago con el banco…</p>
       ) : (
@@ -88,6 +91,17 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
 }
 
 type Action = "approve" | "reject" | "question";
+
+const STAGE_LABELS: Record<string, string> = {
+  reception: "Recepción", damage: "Daños que ya tenía", diagnosis: "Diagnóstico", before: "Antes", during: "Durante la reparación", after: "Terminado",
+};
+const STAGE_ORDER = ["reception", "damage", "diagnosis", "before", "during", "after"];
+function photoGroups(photos: PublicPortal["photos"]): Array<[string, PublicPortal["photos"]]> {
+  const map = new Map<string, PublicPortal["photos"]>();
+  for (const ph of photos) map.set(ph.stage || "other", [...(map.get(ph.stage || "other") ?? []), ph]);
+  return [...map.entries()].sort((a, b) => (STAGE_ORDER.indexOf(a[0]) + 100) % 100 - (STAGE_ORDER.indexOf(b[0]) + 100) % 100);
+}
+const fuelLabel = (n: number) => (n <= 0 ? "Vacío" : n >= 8 ? "Lleno" : n === 4 ? "1/2 tanque" : n === 2 ? "1/4 de tanque" : n === 6 ? "3/4 de tanque" : `${n}/8 de tanque`);
 
 function Shell({ children, portal }: { children: React.ReactNode; portal?: PublicPortal | null }) {
   return (
@@ -350,18 +364,55 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
 
       <OnlinePaySection portal={p} token={token} />
 
-      {/* Fotos */}
+      {/* Recepción del vehículo */}
+      {p.kind !== "quote" && p.reception && (
+        <section className={card}>
+          <h2 className="font-bold">Así recibimos su vehículo</h2>
+          {p.reception.receivedAt && <p className="text-xs text-slate-500">{formatDate(p.reception.receivedAt, true)}</p>}
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-xl bg-slate-50 p-3">
+              <div className="text-xs text-slate-500">Kilometraje</div>
+              <div className="tabular font-bold">{new Intl.NumberFormat("es-HN").format(p.reception.mileageIn)} km</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <div className="text-xs text-slate-500">Combustible</div>
+              <div className="mt-1 flex gap-0.5" aria-label={`${p.reception.fuelLevel} de 8`}>
+                {Array.from({ length: 8 }, (_, i) => <span key={i} className={cn("h-3 flex-1 rounded-sm", i < p.reception!.fuelLevel ? "bg-emerald-500" : "bg-slate-200")} />)}
+              </div>
+              <div className="mt-1 text-xs text-slate-600">{fuelLabel(p.reception.fuelLevel)}</div>
+            </div>
+          </div>
+          {p.reception.items.length > 0 && (
+            <div className="mt-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lo que dejó con el vehículo</div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {p.reception.items.map((it) => <span key={it} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800"><Check className="h-3 w-3" />{it}</span>)}
+              </div>
+            </div>
+          )}
+          {[["Exterior", p.reception.exteriorNotes], ["Interior", p.reception.interiorNotes], ["Accesorios", p.reception.accessories], ["Otros objetos", p.reception.otherObjects]]
+            .filter(([, v]) => v)
+            .map(([label, v]) => <p key={label} className="mt-2 text-sm text-slate-700"><b>{label}:</b> {v}</p>)}
+        </section>
+      )}
+
+      {/* Fotos (por etapa) */}
       {p.photos.length > 0 && (
         <section className={card}>
           <h2 className="font-bold">Fotos de su vehículo</h2>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {p.photos.map((ph, i) => (
-              <a key={i} href={ph.url} target="_blank" rel="noreferrer" className="relative aspect-square overflow-hidden rounded-lg bg-slate-100">
-                <img src={ph.url} alt={ph.caption} loading="lazy" className="h-full w-full object-cover" />
-                {ph.caption && <span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-0.5 text-[10px] text-white">{ph.caption}</span>}
-              </a>
-            ))}
-          </div>
+          {photoGroups(p.photos).map(([stage, list]) => (
+            <div key={stage} className="mt-3">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{STAGE_LABELS[stage] ?? "Fotos"}</div>
+              <div className="grid grid-cols-3 gap-2">
+                {list.map((ph, i) => (
+                  <a key={i} href={ph.url} target="_blank" rel="noreferrer" className="relative aspect-square overflow-hidden rounded-lg bg-slate-100">
+                    <img src={ph.url} alt={ph.caption} loading="lazy" className="h-full w-full object-cover" />
+                    {ph.caption && <span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-0.5 text-[10px] text-white">{ph.caption}</span>}
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
       )}
 

@@ -42,3 +42,22 @@ export function usePublicLogo(): string | null {
   }, []);
   return url;
 }
+
+/** Ícono de la pestaña del navegador con el logo del taller (en vez del ícono genérico). */
+export function FaviconFromLogo() {
+  const logo = usePublicLogo();
+  useEffect(() => {
+    if (!logo) return;
+    for (const rel of ["icon", "apple-touch-icon"]) {
+      let link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = rel;
+        document.head.appendChild(link);
+      }
+      link.removeAttribute("type");
+      link.href = logo;
+    }
+  }, [logo]);
+  return null;
+}

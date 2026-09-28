@@ -4,10 +4,12 @@ import { RouterProvider } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { router } from "@/app/router";
+import { FaviconFromLogo } from "@/lib/branding";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    <FaviconFromLogo />
     <AuthProvider>
       <RouterProvider router={router} />
       <Toaster position="top-right" richColors closeButton toastOptions={{ style: { fontFamily: "Inter, sans-serif" } }} />

@@ -10,7 +10,7 @@ import { callable, db } from "@/lib/firebase";
 import { errorMessage } from "@/lib/errors";
 import { formatDate, formatPlate } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { LogoMark } from "@/components/common/Logo";
+import { usePublicLogo } from "@/lib/branding";
 
 const respondToQuote = callable<{ token: string; action: "approve" | "reject" | "question"; name?: string; comment?: string }, { result: string; approvalId?: string }>("respondToQuote");
 const markQuoteViewed = callable<{ token: string }, { ok: boolean }>("markQuoteViewed");
@@ -104,17 +104,17 @@ function photoGroups(photos: PublicPortal["photos"]): Array<[string, PublicPorta
 const fuelLabel = (n: number) => (n <= 0 ? "Vacío" : n >= 8 ? "Lleno" : n === 4 ? "1/2 tanque" : n === 2 ? "1/4 de tanque" : n === 6 ? "3/4 de tanque" : `${n}/8 de tanque`);
 
 function Shell({ children, portal }: { children: React.ReactNode; portal?: PublicPortal | null }) {
+  // Logo actual de Configuración; el del link es una copia de cuando se creó la orden
+  const liveLogo = usePublicLogo();
+  const logo = liveLogo || portal?.workshop.logoUrl || "";
   return (
     <div className="min-h-screen bg-canvas">
       <header className="bg-ink-900 text-white">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-4">
-          {portal?.workshop.logoUrl ? (
-            <img src={portal.workshop.logoUrl} alt={portal.workshop.name} className="h-9 max-w-[160px] rounded bg-white/95 object-contain p-1" />
+          {logo ? (
+            <img src={logo} alt={portal?.workshop.name ?? "RAPIFIX"} className="h-9 max-w-[160px] rounded bg-white/95 object-contain p-1" />
           ) : (
-            <>
-              <LogoMark />
-              <div className="text-lg font-extrabold tracking-tight">RAPI<span className="text-brand-400">FIX</span></div>
-            </>
+            <div className="text-lg font-extrabold tracking-tight">{portal?.workshop.name ?? "RAPIFIX"}</div>
           )}
           <span className="ml-auto text-xs text-slate-400">{portal?.kind === "quote" ? "Cotización" : "Estado de su vehículo"}</span>
         </div>

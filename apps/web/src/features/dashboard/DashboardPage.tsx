@@ -23,6 +23,7 @@ import { hnDate, hnParts, hnTodayStart } from "@/features/reports/period";
 import { ReminderQueueCard } from "@/features/maintenance/ReminderQueueCard";
 import { TomorrowRemindersCard } from "@/features/agenda/TomorrowRemindersCard";
 import { CollectedChartCard, MaintenanceCard, MyOrdersCard, OverduePayablesCard, TodayAppointmentsCard } from "./widgets";
+import { ProfitCard } from "./ProfitCard";
 
 const monthStart = (offset = 0) => {
   const d = new Date();
@@ -266,6 +267,7 @@ export function DashboardPage() {
       )}
         </>
       ) },
+    { id: "profit", label: "Utilidad del mes (estimada)", show: can("reports.financial"), node: <ProfitCard /> },
     { id: "cash", label: "Gráfica de cobros y cuentas por pagar", show: can("dashboard.financials"), node: (
         <>
       {can("dashboard.financials") && (

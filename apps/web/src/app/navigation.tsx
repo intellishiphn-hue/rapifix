@@ -1,7 +1,8 @@
 import type { LucideIcon } from "lucide-react";
+import { BadgeCheck, Droplets, ListChecks, PieChart, SlidersHorizontal } from "lucide-react";
 import {
   BarChart3, Boxes, CalendarDays, Car, ClipboardList, CreditCard, FileText, Globe, LayoutDashboard,
-  MessageCircle, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck, Users, Wrench, HardHat, CalendarClock, ClipboardPlus, HandCoins, Landmark,
+  MessageCircle, Package, Receipt, Repeat, Settings, ShieldCheck, ShoppingCart, Truck, Users, Wrench, HardHat, CalendarClock, ClipboardPlus, HandCoins, Landmark,
 } from "lucide-react";
 import type { Permission } from "@rapifix/shared";
 
@@ -12,6 +13,8 @@ export interface NavItem {
   permission?: Permission;
   /** Fase en la que se construye. Si existe, el módulo aún no está disponible. */
   phase?: number;
+  /** Activo solo con la ruta exacta (para rutas base con subrutas propias) */
+  end?: boolean;
 }
 
 export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
@@ -21,6 +24,16 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { label: "Dashboard", to: "/", icon: LayoutDashboard, permission: "dashboard.view" },
       { label: "Órdenes de trabajo", to: "/ordenes", icon: ClipboardList, permission: "orders.read" },
       { label: "Agenda", to: "/agenda", icon: CalendarDays, permission: "agenda.read" },
+    ],
+  },
+  {
+    label: "Carwash",
+    items: [
+      { label: "Cola de lavado", to: "/carwash", icon: Droplets, permission: "carwash.read", end: true },
+      { label: "Membresías", to: "/carwash/membresias", icon: BadgeCheck, permission: "carwash.charge" },
+      { label: "Menú y planes", to: "/carwash/menu", icon: ListChecks, permission: "carwash.manage" },
+      { label: "Reportes carwash", to: "/carwash/reportes", icon: PieChart, permission: "carwash.reports" },
+      { label: "Configuración carwash", to: "/carwash/config", icon: SlidersHorizontal, permission: "carwash.manage" },
     ],
   },
   {
@@ -42,6 +55,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { label: "Finanzas", to: "/finanzas", icon: Landmark, permission: "reports.financial" },
       { label: "Cuentas por cobrar", to: "/cuentas-por-cobrar", icon: HandCoins, permission: "payments.read" },
       { label: "Gastos", to: "/gastos", icon: Receipt, permission: "expenses.manage" },
+      { label: "Gastos fijos", to: "/gastos-fijos", icon: Repeat, permission: "expenses.manage" },
       { label: "Reportes", to: "/reportes", icon: BarChart3, permission: "reports.view" },
     ],
   },

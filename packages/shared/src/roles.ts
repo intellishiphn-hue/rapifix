@@ -1,4 +1,4 @@
-export const ROLES = ["admin", "manager", "reception", "technician", "warehouse", "seller"] as const;
+export const ROLES = ["admin", "manager", "reception", "technician", "warehouse", "seller", "washer"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -8,6 +8,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   technician: "Técnico",
   warehouse: "Bodega",
   seller: "Vendedor",
+  washer: "Lavador",
 };
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
@@ -17,6 +18,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   technician: "Órdenes asignadas, diagnóstico, fotos y repuestos.",
   warehouse: "Inventario, repuestos y proveedores.",
   seller: "Punto de venta, clientes y ventas.",
+  washer: "Carwash: ver la cola, registrar carros y cambiar su estado. No cobra.",
 };
 
 export const PERMISSIONS = [
@@ -51,6 +53,11 @@ export const PERMISSIONS = [
   "reports.view",
   "reports.financial",
   "messages.read",
+  "carwash.read",
+  "carwash.create",
+  "carwash.charge",
+  "carwash.manage",
+  "carwash.reports",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -68,6 +75,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "orders.read", "orders.create", "orders.diagnose", "quotes.manage",
     "catalog.read", "sales.create", "payments.read",
     "agenda.read", "agenda.manage", "maintenance.manage", "employees.read", "reports.view", "messages.read",
+    "carwash.read", "carwash.create", "carwash.charge",
   ],
   technician: ["dashboard.view", "customers.read", "vehicles.read", "orders.read", "orders.diagnose", "catalog.read", "agenda.read"],
   warehouse: [
@@ -77,7 +85,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   seller: [
     "dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "orders.read",
     "catalog.read", "sales.create", "payments.read", "agenda.read", "reports.view", "messages.read",
+    "carwash.read", "carwash.create", "carwash.charge",
   ],
+  washer: ["carwash.read", "carwash.create"],
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {

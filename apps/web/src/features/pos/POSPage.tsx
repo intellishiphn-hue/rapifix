@@ -101,6 +101,7 @@ export function POSPage() {
         items: cart.map(({ stock: _s, ...l }) => ({ ...l, description: l.description.trim() })),
         payments: payments.filter((p) => p.amount > 0).map((p) => {
           const cash = p.method === "cash";
+          if (p.method === "card" && !p.bank && (settings.cardTerminals ?? []).length === 1) p = { ...p, bank: settings.cardTerminals[0]! };
           return {
             amount: p.amount, method: p.method, reference: cash ? "" : p.reference.trim(),
             ...(!cash && p.bank.trim() ? { bank: p.bank.trim() } : {}),

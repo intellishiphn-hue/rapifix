@@ -9,6 +9,8 @@ export interface FinTabProps {
   fileRange: string;
   /** cambia al presionar Actualizar */
   refresh: number;
+  /** cambiar de pestaña (ej. "Ver cierre del mes" desde el Resumen) */
+  openTab?: (tab: "closing") => void;
 }
 
 export const finKey = (name: string, p: FinTabProps, extra = "") =>

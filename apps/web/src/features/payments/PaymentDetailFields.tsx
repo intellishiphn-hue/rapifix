@@ -58,6 +58,9 @@ export function PaymentDetailFields({ method, value, onChange }: { method: strin
   const isCard = method === "card";
   const options = isBank ? settings.bankAccounts ?? [] : isCard ? settings.cardTerminals ?? [] : [];
   const set = (p: Partial<PaymentDetail>) => onChange({ ...value, ...p });
+  // Con una sola terminal (ROKI) no se pregunta: se guarda sola.
+  const singleTerminal = isCard && options.length === 1 ? options[0]! : null;
+  if (singleTerminal && value.bank !== singleTerminal) queueMicrotask(() => onChange({ ...value, bank: singleTerminal }));
   return (
     <div className="space-y-4">
       {(isBank || (isCard && options.length > 1)) && (

@@ -68,4 +68,12 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
       - name: Pruebas de firestore.rules y storage.rules
-        run: npm run test:rules
+        run: |
+          set -o pipefail
+          npm run test:rules 2>&1 | tee rules.log
+      # Si falla, las últimas líneas del log quedan como anotación (visible sin iniciar sesión)
+      - name: Resumen del error
+        if: failure()
+        run: |
+          tail -n 60 rules.log | sed 's/\x1b\[[0-9;]*m//g' > tail.log || true
+          echo "::error title=Log de pruebas de reglas::$(sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' tail.log)"

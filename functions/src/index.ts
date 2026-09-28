@@ -28,7 +28,16 @@ export { createOnlinePayment, checkOnlinePayment, rokiWebhook, reconcileOnlinePa
 export { saveAppointment, setAppointmentStatus, saveMaintenance, maintenanceAction, saveEmployeeProfile, backfillMaintenance } from "./callable/operations";
 export { saveSupplier, createPurchase, paySupplier, voidPurchase, saveExpense, voidExpense } from "./callable/finance";
 export { onOrderDelivered, dailyMaintenance } from "./scheduled/daily";
+// Gastos fijos, presupuesto y cierre del mes
+export { saveFixedCost, generateFixedCosts, payPendingExpense, adjustPendingExpense, saveFinanceBudget } from "./callable/fixedCosts";
+export { dailyFixedCosts } from "./scheduled/fixedCosts";
 export { importProducts } from "./callable/importProducts";
 export { deleteWorkOrder } from "./callable/deleteWorkOrder";
 export { onSettingsBranding } from "./triggers/branding";
 export { voidSale } from "./callable/voidSale";
+// Carwash: menú, cola, cobros, lealtad y membresías
+export {
+  saveCarwashService, reorderCarwashServices, seedCarwashMenu, saveCarwashPlan, carwashLookup, saveWash, setWashStatus,
+  assignWasher, cancelWash, chargeWash, sellMembership, cancelMembership,
+} from "./callable/carwash";
+export { carwashDaily } from "./scheduled/carwash";

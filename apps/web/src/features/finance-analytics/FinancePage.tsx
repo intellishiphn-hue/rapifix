@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, CalendarRange, ClipboardList, CreditCard, Package, Receipt, RefreshCw } from "lucide-react";
+import { BarChart3, CalendarCheck, CalendarRange, ClipboardList, CreditCard, Package, Receipt, RefreshCw } from "lucide-react";
 import { hnDayKey } from "@rapifix/shared";
 import { cn } from "@/lib/cn";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -17,11 +17,13 @@ import { ProductsTab } from "./tabs/ProductsTab";
 import { OrdersTab } from "./tabs/OrdersTab";
 import { ExpensesTab } from "./tabs/ExpensesTab";
 import { MonthlyTab } from "./tabs/MonthlyTab";
+import { ClosingTab } from "./tabs/ClosingTab";
 
-type TabKey = "summary" | "payments" | "products" | "orders" | "expenses" | "monthly";
+type TabKey = "summary" | "closing" | "payments" | "products" | "orders" | "expenses" | "monthly";
 
 const TABS: Array<{ value: TabKey; label: string; icon: React.ReactNode }> = [
   { value: "summary", label: "Resumen", icon: <BarChart3 className="h-4 w-4" /> },
+  { value: "closing", label: "Cierre del mes", icon: <CalendarCheck className="h-4 w-4" /> },
   { value: "payments", label: "Cómo nos pagan", icon: <CreditCard className="h-4 w-4" /> },
   { value: "products", label: "Productos y servicios", icon: <Package className="h-4 w-4" /> },
   { value: "orders", label: "Rentabilidad por orden", icon: <ClipboardList className="h-4 w-4" /> },
@@ -33,6 +35,9 @@ const TAB_KEY = "rapifix.finance.tab";
 
 export function FinancePage() {
   const [tab, setTab] = useState<TabKey>(() => {
+    // Enlace directo a una pestaña: /finanzas?tab=closing (ej. desde el Dashboard)
+    const q = new URLSearchParams(window.location.search).get("tab") as TabKey | null;
+    if (q && TABS.some((t) => t.value === q)) return q;
     try {
       const v = sessionStorage.getItem(TAB_KEY) as TabKey | null;
       return v && TABS.some((t) => t.value === v) ? v : "summary";
@@ -55,7 +60,8 @@ export function FinancePage() {
   const period = useMemo(() => computePeriod(periodKey, custom), [periodKey, custom]);
   const prev = useMemo(() => previousPeriod(periodKey, period), [periodKey, period]);
   const fileRange = `${hnDayKey(period.start)} a ${hnDayKey(period.end.getTime() - 1)}`;
-  const props: FinTabProps = { periodKey, period, prev, fileRange, refresh };
+  const props: FinTabProps = { periodKey, period, prev, fileRange, refresh, openTab: (t) => { setTab(t); window.scrollTo({ top: 0, behavior: "smooth" }); } };
+  const ownPeriod = tab === "monthly" || tab === "closing";
 
   return (
     <>
@@ -63,19 +69,19 @@ export function FinancePage() {
       <div className="print:hidden">
         <PageHeader
           title="Finanzas"
-          description="Utilidad, márgenes, lo más rentable y cómo le pagan al taller. Montos sin ISV salvo donde se indica, en hora de Honduras."
+          description="Cuánto ganamos, márgenes, lo más rentable y cómo le pagan al taller. Montos sin ISV salvo donde se indica, en hora de Honduras."
           actions={<Button variant="secondary" icon={<RefreshCw className="h-4 w-4" />} onClick={() => setRefresh((n) => n + 1)}>Actualizar</Button>}
         />
       </div>
       <div className="mb-3 hidden print:block">
         <div className="text-xl font-extrabold tracking-tight">RAPI<span className="text-brand-600">FIX</span> · Finanzas</div>
         <div className="text-sm text-slate-600">
-          {tab === "monthly" ? "Últimos 12 meses" : period.label} · Impreso el{" "}
+          {tab === "monthly" ? "Últimos 12 meses" : tab === "closing" ? "Cierre del mes" : period.label} · Impreso el{" "}
           {new Intl.DateTimeFormat("es-HN", { dateStyle: "long", timeStyle: "short", timeZone: "America/Tegucigalpa" }).format(new Date())}
         </div>
       </div>
 
-      {tab !== "monthly" && (
+      {!ownPeriod && (
         <Card className="mb-5 p-3 print:hidden">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
@@ -116,6 +122,7 @@ export function FinancePage() {
       </div>
 
       {tab === "summary" && <SummaryTab {...props} />}
+      {tab === "closing" && <ClosingTab {...props} />}
       {tab === "payments" && <PaymentsTab {...props} />}
       {tab === "products" && <ProductsTab {...props} />}
       {tab === "orders" && <OrdersTab {...props} />}

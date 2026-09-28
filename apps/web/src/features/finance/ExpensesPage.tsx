@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Ban, FileText, Image as ImageIcon, Paperclip, Pencil, Plus, Receipt, X } from "lucide-react";
 import {
-  EXPENSE_CATEGORIES, formatMoney, hnDayKey, PAYMENT_METHOD_LABELS, saveExpenseSchema,
-  type Expense, type ManualPaymentMethod,
+  EXPENSE_CATEGORIES, EXPENSE_UNIT_LABELS, EXPENSE_UNITS, formatMoney, hnDayKey, PAYMENT_METHOD_LABELS, saveExpenseSchema,
+  type Expense, type ExpenseUnit, type ManualPaymentMethod,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
@@ -18,15 +18,20 @@ import { Badge } from "@/components/ui/Badge";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { currentMonth, dayKeyToMs, MAX_RECEIPT_MB, monthLabel, openReceipt, saveExpense, uploadExpenseReceipt, useActiveSuppliers, useExpenses, voidExpense } from "./api";
 import { MethodPicker, MonthSwitcher, StatCard } from "./parts";
+import { PendingExpensesCard, useEnsureFixedCostsGenerated } from "./PendingExpenses";
 
 export function ExpensesPage() {
   const [month, setMonth] = useState(currentMonth());
   const [category, setCategory] = useState("");
-  const { data, loading, error } = useExpenses(month);
+  const monthData = useExpenses(month);
+  const { loading, error } = monthData;
+  // Los pendientes (gastos fijos por pagar) se ven en su propia sección: aquí solo pagados y anulados.
+  const data = useMemo(() => monthData.data.filter((e) => e.status !== "pending"), [monthData.data]);
+  useEnsureFixedCostsGenerated();
   const [editing, setEditing] = useState<Expense | null | undefined>(undefined);
   const [voiding, setVoiding] = useState<Expense | null>(null);
 
-  const valid = data.filter((e) => e.status !== "voided");
+  const valid = data.filter((e) => e.status === "valid");
   const total = valid.reduce((a, e) => a + e.amount, 0);
   const byCategory = useMemo(() => {
     const m = new Map<string, number>();
@@ -34,18 +39,19 @@ export function ExpensesPage() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [valid]);
   const shown = category ? data.filter((e) => e.category === category) : data;
-  const shownTotal = shown.filter((e) => e.status !== "voided").reduce((a, e) => a + e.amount, 0);
+  const shownTotal = shown.filter((e) => e.status === "valid").reduce((a, e) => a + e.amount, 0);
   const top = byCategory[0]?.[1] ?? 0;
 
   return (
     <>
-      <PageHeader title="Gastos" description="Gastos del taller por mes: alquiler, servicios, salarios, insumos y más." actions={<>
+      <PageHeader title="Gastos" description="Gastos pagados por mes: alquiler, servicios, salarios, insumos y más. Los gastos fijos aparecen solos cada mes en Por pagar." actions={<>
         <MonthSwitcher month={month} onChange={setMonth} />
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setEditing(null)}>Nuevo gasto</Button>
       </>} />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <div className="order-2 space-y-5 lg:order-1">
+          <PendingExpensesCard />
           <Card>
             <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
               <Select value={category} onChange={(e) => setCategory(e.target.value)} className="sm:w-64">
@@ -65,10 +71,11 @@ export function ExpensesPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={cn("font-semibold text-slate-900", voided && "line-through")}>{e.description}</span>
-                          {voided && <Badge tone="gray">Anulado</Badge>}
+                          {voided && <Badge tone="gray">{e.fixedCostId ? "No aplicó" : "Anulado"}</Badge>}
+                          {e.fixedCostId && !voided && <Badge tone="blue">Fijo</Badge>}
                         </div>
                         <div className="text-xs text-slate-500">
-                          {[e.code, formatDate(e.date), e.category, PAYMENT_METHOD_LABELS[e.method], e.reference, e.supplierName].filter(Boolean).join(" · ")}
+                          {[e.code, formatDate(e.date), e.category, e.unit && e.unit !== "general" ? EXPENSE_UNIT_LABELS[e.unit] : "", PAYMENT_METHOD_LABELS[e.method], e.bank, e.reference, e.supplierName].filter(Boolean).join(" · ")}
                         </div>
                         {voided && e.voidReason && <div className="text-xs text-slate-500">Motivo: {e.voidReason}</div>}
                       </div>
@@ -92,7 +99,7 @@ export function ExpensesPage() {
         </div>
 
         <div className="order-1 space-y-4 lg:order-2">
-          <StatCard label={`Gastos de ${monthLabel(month).toLowerCase()}`} value={formatMoney(total)} hint={`${valid.length} gastos${data.length > valid.length ? ` · ${data.length - valid.length} anulados` : ""}`} />
+          <StatCard label={`Pagado en ${monthLabel(month).toLowerCase()}`} value={formatMoney(total)} hint={`${valid.length} gastos${data.length > valid.length ? ` · ${data.length - valid.length} anulados` : ""}`} />
           {byCategory.length > 0 && (
             <Card>
               <CardHeader title="Por categoría" />
@@ -133,6 +140,7 @@ function ExpenseFormDialog({ open, expense, onClose }: { open: boolean; expense:
   const [method, setMethod] = useState<ManualPaymentMethod>("cash");
   const [reference, setReference] = useState("");
   const [supplierId, setSupplierId] = useState("");
+  const [unit, setUnit] = useState<ExpenseUnit>("general");
   const [file, setFile] = useState<File | null>(null);
   const [keepReceipt, setKeepReceipt] = useState(true);
   const [progress, setProgress] = useState<number | null>(null);
@@ -147,6 +155,7 @@ function ExpenseFormDialog({ open, expense, onClose }: { open: boolean; expense:
     setMethod(expense?.method ?? "cash");
     setReference(expense?.reference ?? "");
     setSupplierId(expense?.supplierId ?? "");
+    setUnit(expense?.unit ?? "general");
     setFile(null);
     setKeepReceipt(true);
     setProgress(null);
@@ -170,6 +179,7 @@ function ExpenseFormDialog({ open, expense, onClose }: { open: boolean; expense:
       ...(expense ? { expenseId: expense.id } : {}),
       category, description: description.trim(), amount, date: dayKeyToMs(dateKey), method, reference: reference.trim(),
       ...(supplierId ? { supplierId } : {}),
+      unit,
     };
     const check = saveExpenseSchema.safeParse(base);
     if (!check.success) {
@@ -214,6 +224,11 @@ function ExpenseFormDialog({ open, expense, onClose }: { open: boolean; expense:
             <option value="">Ninguno</option>
             {suppliers.data.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             {expense?.supplierId && !suppliers.data.some((s) => s.id === expense.supplierId) && <option value={expense.supplierId}>{expense.supplierName || "Proveedor"}</option>}
+          </Select>
+        </Field>
+        <Field label="Negocio" hint="A qué negocio corresponde (para el cierre del mes)">
+          <Select value={unit} onChange={(e) => setUnit(e.target.value as ExpenseUnit)}>
+            {EXPENSE_UNITS.map((u) => <option key={u} value={u}>{u === "general" ? "General (taller y carwash)" : EXPENSE_UNIT_LABELS[u]}</option>)}
           </Select>
         </Field>
         <Field label="Método de pago" className="sm:col-span-2"><MethodPicker value={method} onChange={setMethod} /></Field>

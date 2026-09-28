@@ -336,3 +336,78 @@ export function DonutChart({ data }: { data: Array<{ name: string; value: number
 
 /** Tono para márgenes: rojo si pierde, ámbar si es bajo. */
 export const marginTone = (m: number | null, low = 20) => (m === null ? undefined : m < 0 ? "text-red-700 font-semibold" : m < low ? "text-amber-700 font-semibold bg-amber-50/70" : undefined);
+
+// ---------------- Cascada de utilidad (para no contadores) ----------------
+export interface ProfitSteps {
+  revenue: number;
+  cost: number;
+  fixed: number;
+  variable: number;
+}
+
+/**
+ * "Vendimos → menos costo de lo vendido → Utilidad bruta → menos gastos fijos → menos gastos variables → Ganancia".
+ * Cada fila tiene una barra flotante (cascada) y una explicación corta.
+ */
+export function ProfitWaterfall({ steps, periodWord = "del mes", fixedHint, footer }: {
+  steps: ProfitSteps;
+  /** "del mes" | "del período" */
+  periodWord?: string;
+  fixedHint?: string;
+  footer?: ReactNode;
+}) {
+  const { revenue, cost, fixed, variable } = steps;
+  const gross = revenue - cost;
+  const afterFixed = gross - fixed;
+  const net = afterFixed - variable;
+  const lo = Math.min(0, gross, afterFixed, net);
+  const hi = Math.max(revenue, gross, 1);
+  const x = (v: number) => ((v - lo) / (hi - lo)) * 100;
+  const margin = (v: number) => (revenue > 0 ? ` (${fmtPct((v / revenue) * 100)} de lo vendido)` : "");
+
+  type Row = { key: string; sign: "" | "−" | "="; label: string; help: string; value: number; from: number; to: number; kind: "base" | "minus" | "result" };
+  const rows: Row[] = [
+    { key: "rev", sign: "", label: "Vendimos", help: "Todo lo vendido: órdenes entregadas, mostrador y carwash, sin ISV.", value: revenue, from: 0, to: revenue, kind: "base" },
+    { key: "cost", sign: "−", label: "Costo de lo vendido", help: "Lo que nos costaron los repuestos y productos que se vendieron.", value: cost, from: gross, to: revenue, kind: "minus" },
+    { key: "gross", sign: "=", label: "Utilidad bruta", help: `Lo que dejan las ventas${margin(gross)}.`, value: gross, from: 0, to: gross, kind: "result" },
+    { key: "fixed", sign: "−", label: "Gastos fijos", help: fixedHint ?? "Alquiler, salarios, luz, internet: lo que se paga todos los meses.", value: fixed, from: afterFixed, to: gross, kind: "minus" },
+    { key: "var", sign: "−", label: "Gastos variables", help: "Otros gastos pagados: insumos, combustible, publicidad, reparaciones.", value: variable, from: net, to: afterFixed, kind: "minus" },
+    { key: "net", sign: "=", label: `Ganancia ${periodWord}`, help: `Lo que realmente le quedó al negocio${margin(net)}. También se llama utilidad neta.`, value: net, from: 0, to: net, kind: "result" },
+  ];
+
+  return (
+    <div>
+      <ol className="divide-y divide-slate-100">
+        {rows.map((r) => {
+          const left = x(Math.min(r.from, r.to));
+          const width = r.value === 0 ? 0 : Math.max(0.8, Math.abs(x(r.to) - x(r.from)));
+          const negative = r.kind === "result" && r.value < 0;
+          const final = r.key === "net";
+          const bar = r.kind === "minus" ? "bg-red-400" : r.kind === "base" ? "bg-brand-500" : negative ? "bg-red-600" : "bg-emerald-500";
+          const amountTone = r.kind === "minus" ? "text-red-700" : r.kind === "base" ? "text-slate-900" : negative ? "text-red-700" : "text-emerald-700";
+          return (
+            <li key={r.key} className={cn("px-4 py-3 sm:px-5", r.kind === "result" && "bg-slate-50/70", final && (negative ? "bg-red-50/70" : "bg-emerald-50/70"))}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className={cn("flex items-baseline gap-2 text-slate-800", r.kind === "result" ? "font-bold" : "font-medium", final && "text-base sm:text-lg")}>
+                    <span className="inline-block w-3 shrink-0 text-center text-slate-400">{r.sign}</span>
+                    {r.label}
+                  </div>
+                  <div className="pl-5 text-xs leading-snug text-slate-500">{r.help}</div>
+                </div>
+                <div className={cn("tabular shrink-0 text-right font-semibold", r.kind === "result" && "font-bold", final && "text-lg sm:text-2xl", amountTone)}>
+                  {r.kind === "minus" && r.value > 0 ? `− ${formatMoney(r.value)}` : formatMoney(r.value)}
+                </div>
+              </div>
+              <div className="relative ml-5 mt-2 h-2.5 rounded-full bg-slate-100 print:hidden" aria-hidden>
+                {lo < 0 && <div className="absolute inset-y-[-3px] w-px bg-slate-400" style={{ left: `${x(0)}%` }} />}
+                <div className={cn("absolute inset-y-0 rounded-full", bar)} style={{ left: `${left}%`, width: `${width}%` }} />
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {footer && <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600 sm:px-5">{footer}</div>}
+    </div>
+  );
+}

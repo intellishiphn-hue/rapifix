@@ -6,7 +6,7 @@ rules_version = '2';
 // interfaz es solo comodidad visual.
 //
 // Roles (custom claims del token): admin, manager, reception, technician,
-// warehouse, seller. Claim "tid" = taller (multi-tenant).
+// warehouse, seller, washer (lavador del carwash). Claim "tid" = taller (multi-tenant).
 // ============================================================================
 
 service cloud.firestore {
@@ -306,7 +306,7 @@ service cloud.firestore {
       // Se crea desde el panel, no se edita ni se borra.
       match /messages/{id} {
         allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
-        allow create: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'technician', 'warehouse'])
+        allow create: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'technician', 'warehouse', 'washer'])
           && incoming().keys().hasOnly(['to', 'name', 'body', 'orderId', 'orderCode', 'context', 'mode', 'createdBy', 'createdByName', 'at'])
           && isStr(incoming().to, 5, 20)
           && isStr(incoming().name, 0, 120)
@@ -338,6 +338,39 @@ service cloud.firestore {
       }
       match /expenses/{id} {
         allow read: if hasRole(tid, ['admin', 'manager']);
+        allow write: if false;
+      }
+      // Gastos fijos (plantillas) y metadatos de finanzas (meses generados, presupuesto): solo por Functions
+      match /fixedCosts/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager']);
+        allow write: if false;
+      }
+      match /financeMeta/{docId} {
+        allow read: if hasRole(tid, ['admin', 'manager']);
+        allow write: if false;
+      }
+
+      // ---------- CARWASH ----------
+      // Todo lo escriben Cloud Functions (numeración, lealtad, membresías y cobros en transacción).
+      // El lavador (washer) ve el menú, la cola y las tarjetas de lealtad; no ve planes ni membresías.
+      match /carwashServices/{id} {
+        allow read: if inTenant(tid);
+        allow write: if false;
+      }
+      match /carwashWashes/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'washer']);
+        allow write: if false;
+      }
+      match /carwashLoyalty/{plate} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'washer']);
+        allow write: if false;
+      }
+      match /carwashPlans/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
+      match /carwashMemberships/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
         allow write: if false;
       }
 

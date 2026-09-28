@@ -203,6 +203,7 @@ export const saveExpense = onCall({ region: REGION }, async (request) => {
     supplierId: input.supplierId ?? null, supplierName: supplier?.exists ? (supplier.get("name") as string) : "",
     receiptPath: input.receiptPath ?? null,
     receiptType: input.receiptPath ? (input.receiptPath.endsWith(".pdf") ? "application/pdf" : "image") : null,
+    ...(input.unit ? { unit: input.unit } : {}),
     updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
   };
   if (input.expenseId) {
@@ -210,6 +211,7 @@ export const saveExpense = onCall({ region: REGION }, async (request) => {
     const e = await ref.get();
     if (!e.exists) throw new HttpsError("not-found", "El gasto no existe.");
     if (e.get("status") === "voided") throw new HttpsError("failed-precondition", "El gasto está anulado.");
+    if (e.get("status") === "pending") throw new HttpsError("failed-precondition", "Este gasto fijo está pendiente: use \"Marcar pagado\" o \"Cambiar monto\".");
     await ref.update(data);
     return { expenseId: ref.id, code: e.get("code") as string };
   }
@@ -230,6 +232,7 @@ export const voidExpense = onCall({ region: REGION }, async (request) => {
   const ref = db.doc(`${financeCol.expenses(caller.tid)}/${input.expenseId}`);
   const e = await ref.get();
   if (!e.exists) throw new HttpsError("not-found", "El gasto no existe.");
+  if (e.get("status") === "voided") throw new HttpsError("failed-precondition", "El gasto ya está anulado.");
   await ref.update({ status: "voided", voidReason: input.reason, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
   return { ok: true };
 });

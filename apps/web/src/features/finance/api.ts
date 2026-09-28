@@ -1,7 +1,9 @@
 import { collection, doc, limit, orderBy, query, Timestamp, where, type QueryConstraint } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import {
-  catalogCol, financeCol, financeStoragePath, hnDayKey, orderCol, searchToken,
+  catalogCol, financeCol, financeStoragePath, FINANCE_META_DOCS, hnDayKey, orderCol, searchToken,
+  type AdjustPendingExpenseInput, type FinanceBudget, type FixedCost, type FixedCostsMeta, type PayPendingExpenseInput,
+  type SaveFinanceBudgetInput, type SaveFixedCostInput,
   type CreatePurchaseInput, type Expense, type ManualPaymentMethod, type Purchase, type Sale, type SaveExpenseInput,
   type SaveSupplierInput, type Supplier, type SupplierPayment, type WorkOrder,
 } from "@rapifix/shared";
@@ -21,6 +23,11 @@ export const paySupplier = callable<{ purchaseId: string; amount: number; method
 export const voidPurchase = callable<{ purchaseId: string; reason: string }, { ok: boolean }>("voidPurchase");
 export const saveExpense = callable<SaveExpenseInput, { expenseId: string; code: string }>("saveExpense");
 export const voidExpense = callable<{ expenseId: string; reason: string }, { ok: boolean }>("voidExpense");
+export const saveFixedCost = callable<SaveFixedCostInput, { fixedCostId: string }>("saveFixedCost");
+export const generateFixedCosts = callable<{ month: string }, { created: number; skipped: number }>("generateFixedCosts");
+export const payPendingExpense = callable<PayPendingExpenseInput, { code: string }>("payPendingExpense");
+export const adjustPendingExpense = callable<AdjustPendingExpenseInput, { ok: boolean }>("adjustPendingExpense");
+export const saveFinanceBudget = callable<SaveFinanceBudgetInput, { ok: boolean }>("saveFinanceBudget");
 
 // ---------- Fechas (hora de Honduras, UTC-6 sin horario de verano) ----------
 const HN_OFFSET = 6 * 3600 * 1000;
@@ -164,4 +171,36 @@ export function useReceivableOrders() {
 
 export function useReceivableSales(enabled: boolean) {
   return useQueryData<Sale>(enabled ? query(collection(db, catalogCol.sales(TENANT_ID)), where("balance", ">", 0), orderBy("balance", "desc"), limit(500)) : null, `receivables-sales-${enabled}`);
+}
+
+// ---------- Gastos fijos ----------
+const fixedCostsCol = () => collection(db, financeCol.fixedCosts(TENANT_ID));
+export const financeMetaRef = (docId: string) => doc(db, financeCol.financeMeta(TENANT_ID), docId);
+
+export function useFixedCosts() {
+  const state = useQueryData<FixedCost>(query(fixedCostsCol(), limit(500)), "fixed-costs");
+  const data = [...state.data].sort((a, b) => a.category.localeCompare(b.category, "es") || a.name.localeCompare(b.name, "es"));
+  return { ...state, data };
+}
+
+/** Gastos pendientes (por pagar) de cualquier mes. Un solo filtro: no necesita índice compuesto. */
+export function usePendingExpenses() {
+  const state = useQueryData<Expense>(query(expensesCol(), where("status", "==", "pending"), limit(500)), "expenses-pending");
+  const data = [...state.data].sort((a, b) => (a.date?.toMillis?.() ?? 0) - (b.date?.toMillis?.() ?? 0));
+  return { ...state, data };
+}
+
+export function useFixedCostsMeta() {
+  return useDocData<FixedCostsMeta>(financeMetaRef(FINANCE_META_DOCS.fixedCosts), "finance-meta-fixed");
+}
+
+export function useFinanceBudget() {
+  return useDocData<FinanceBudget>(financeMetaRef(FINANCE_META_DOCS.budget), "finance-meta-budget");
+}
+
+/** Vencido: la fecha de vencimiento ya pasó (hora de Honduras). */
+export function isExpenseOverdue(e: Pick<Expense, "status" | "dueDate" | "date">): boolean {
+  if (e.status !== "pending") return false;
+  const due = e.dueDate ?? e.date;
+  return !!due?.toMillis && hnDayKey(due.toMillis()) < hnDayKey(Date.now());
 }

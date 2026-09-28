@@ -31,6 +31,9 @@ const SAMPLE = (taller: string) => ({
   taller,
   servicio: "su cambio de aceite",
   ultimo: "Su último servicio con nosotros fue el 5 jun 2026 a los 80,000 km.",
+  fecha: "15 oct 2026",
+  sellos: "Tarjeta de lealtad: 7 de 10 sellos. Le faltan 3 para un lavado gratis.",
+  plan: "Lavado ilimitado turismo",
 });
 
 /** Muestra *negritas* como en WhatsApp */

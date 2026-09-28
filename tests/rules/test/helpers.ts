@@ -11,7 +11,7 @@ export const PROJECT_ID = "demo-rapifix";
 export const TID = "rapifix";
 export const T = `tenants/${TID}`;
 
-export const ROLES = ["admin", "manager", "reception", "technician", "warehouse", "seller"] as const;
+export const ROLES = ["admin", "manager", "reception", "technician", "warehouse", "seller", "washer"] as const;
 export type Role = (typeof ROLES)[number];
 
 const root = (file: string) => fileURLToPath(new URL(`../../../${file}`, import.meta.url));
@@ -30,7 +30,7 @@ export function createEnv(opts: { storage?: boolean } = {}): Promise<RulesTestEn
   });
 }
 
-/** uid por defecto de cada rol: admin1, manager1, reception1, tech1, warehouse1, seller1 */
+/** uid por defecto de cada rol: admin1, manager1, reception1, tech1, warehouse1, seller1, washer1 */
 export function uidOf(role: Role): string {
   return role === "technician" ? "tech1" : `${role}1`;
 }

@@ -125,12 +125,27 @@ export const EXPENSE_CATEGORIES = [
   "Bancos y comisiones", "Otros",
 ] as const;
 
+/**
+ * Estado del gasto:
+ * - valid: pagado (es el ÚNICO que suma como gasto en Finanzas y reportes)
+ * - pending: gasto fijo generado para el mes, todavía por pagar
+ * - voided: anulado (o "no aplica este mes")
+ */
+export const EXPENSE_STATUSES = ["valid", "pending", "voided"] as const;
+export type ExpenseStatus = (typeof EXPENSE_STATUSES)[number];
+
+/** A qué negocio pertenece un gasto. "general" = compartido (taller y carwash). */
+export const EXPENSE_UNITS = ["shop", "carwash", "general"] as const;
+export type ExpenseUnit = (typeof EXPENSE_UNITS)[number];
+export const EXPENSE_UNIT_LABELS: Record<ExpenseUnit, string> = { shop: "Taller", carwash: "Carwash", general: "General" };
+
 export interface Expense extends BaseDoc {
   number: number;
   code: string; // GAS-0001
   category: string;
   description: string;
   amount: number;
+  /** Pagado: fecha del pago. Pendiente: fecha de vencimiento. */
   date: TimestampLike;
   method: ManualPaymentMethod;
   reference: string;
@@ -138,9 +153,27 @@ export interface Expense extends BaseDoc {
   supplierName: string;
   receiptPath: string | null; // Storage (imagen o PDF)
   receiptType: string | null;
-  status: "valid" | "voided";
+  status: ExpenseStatus;
   voidReason: string;
+  /** Sin valor = general */
+  unit?: ExpenseUnit;
+  /** Transferencia/depósito: banco o cuenta de donde salió el dinero */
+  bank?: string;
+  // ----- Solo gastos generados desde un gasto fijo -----
+  fixedCostId?: string | null;
+  /** Mes al que corresponde el gasto fijo ("YYYY-MM"), aunque se pague otro mes */
+  period?: string | null;
+  /** 1 = pago mensual o primera quincena, 2 = segunda quincena */
+  part?: number | null;
+  dueDate?: TimestampLike | null;
+  employeeId?: string | null;
+  employeeName?: string;
+  /** el monto de este mes se cambió a mano: ya no se actualiza desde la plantilla */
+  adjusted?: boolean;
+  paidAt?: TimestampLike | null;
 }
+
+export const expenseReceiptPathRe = /^tenants\/[a-z0-9-]+\/expenses\/[A-Za-z0-9_-]+\.(jpg|png|webp|pdf)$/;
 
 export const saveExpenseSchema = z.object({
   expenseId: id.nullish(),
@@ -151,7 +184,8 @@ export const saveExpenseSchema = z.object({
   method: z.enum(MANUAL_PAYMENT_METHODS),
   reference: text(80),
   supplierId: id.nullish(),
-  receiptPath: z.string().max(300).regex(/^tenants\/[a-z0-9-]+\/expenses\/[A-Za-z0-9_-]+\.(jpg|png|webp|pdf)$/, "Comprobante no válido").nullish(),
+  receiptPath: z.string().max(300).regex(expenseReceiptPathRe, "Comprobante no válido").nullish(),
+  unit: z.enum(EXPENSE_UNITS).nullish(),
 });
 export type SaveExpenseInput = z.infer<typeof saveExpenseSchema>;
 

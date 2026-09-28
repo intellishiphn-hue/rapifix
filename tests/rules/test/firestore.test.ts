@@ -30,6 +30,8 @@ const SERVER_ONLY = [
   "purchases",
   "supplierPayments",
   "expenses",
+  "fixedCosts",
+  "financeMeta",
   "appointments",
   "maintenance",
   "inventoryMovements",
@@ -38,6 +40,11 @@ const SERVER_ONLY = [
   "quotes",
   "workOrders",
   "meta",
+  "carwashServices",
+  "carwashWashes",
+  "carwashLoyalty",
+  "carwashPlans",
+  "carwashMemberships",
 ] as const;
 
 beforeAll(async () => {
@@ -375,6 +382,19 @@ describe("lecturas restringidas por rol", () => {
     await canRead(`${T}/expenses/x1`, ["admin", "manager"]);
   });
 
+  it("gastos fijos y metadatos de finanzas: solo admin y gerente", async () => {
+    await canRead(`${T}/fixedCosts/x1`, ["admin", "manager"]);
+    await canRead(`${T}/financeMeta/x1`, ["admin", "manager"]);
+    await assertFails(db("reception").collection(`${T}/fixedCosts`).get());
+    await assertSucceeds(db("manager").collection(`${T}/fixedCosts`).get());
+  });
+
+  it("nadie marca pagado un gasto ni cambia el presupuesto desde el cliente", async () => {
+    await assertFails(db("admin").doc(`${T}/expenses/x1`).update({ status: "valid" }));
+    await assertFails(db("manager").doc(`${T}/financeMeta/budget`).set({ budgets: { Publicidad: 100 } }));
+    await assertFails(db("manager").doc(`${T}/financeMeta/fixedCosts`).set({ generated: { "2026-09": true } }));
+  });
+
   it("auditoría: solo admin y gerente", async () => {
     await canRead(`${T}/auditLogs/x1`, ["admin", "manager"]);
   });
@@ -412,6 +432,61 @@ describe("lecturas restringidas por rol", () => {
 
   it("nadie escribe en private", async () => {
     await assertFails(db("admin").doc(`${T}/private/roki`).set({ secretKey: "robada" }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("carwash", () => {
+  const canRead = async (path: string, allowed: readonly Role[]) => {
+    for (const r of ROLES) {
+      const q = db(r).doc(path).get();
+      if (allowed.includes(r)) await assertSucceeds(q);
+      else await assertFails(q);
+    }
+  };
+
+  it("menú de lavados: todo el taller lo lee", async () => {
+    await canRead(`${T}/carwashServices/x1`, ROLES);
+  });
+
+  it("cola de lavados y tarjetas de lealtad: caja, gerencia y lavador (sin técnico ni bodega)", async () => {
+    for (const c of ["carwashWashes", "carwashLoyalty"]) {
+      await canRead(`${T}/${c}/x1`, ["admin", "manager", "reception", "seller", "washer"]);
+    }
+  });
+
+  it("planes y membresías: caja y gerencia (el lavador no)", async () => {
+    for (const c of ["carwashPlans", "carwashMemberships"]) {
+      await canRead(`${T}/${c}/x1`, ["admin", "manager", "reception", "seller"]);
+    }
+  });
+
+  it("el lavador lista la cola pero no ve ventas, pagos ni gastos", async () => {
+    await assertSucceeds(db("washer").collection(`${T}/carwashWashes`).get());
+    for (const c of ["sales", "payments", "expenses", "maintenance", "carwashMemberships"]) {
+      await assertFails(db("washer").doc(`${T}/${c}/x1`).get());
+    }
+  });
+
+  it("nadie escribe lavados, lealtad, planes ni membresías desde el cliente (ni el admin)", async () => {
+    for (const c of ["carwashServices", "carwashWashes", "carwashLoyalty", "carwashPlans", "carwashMemberships"]) {
+      await assertFails(db("admin").doc(`${T}/${c}/nuevo`).set({ name: "x", total: 0, paid: true }));
+      await assertFails(db("washer").doc(`${T}/${c}/x1`).update({ paid: true }));
+    }
+  });
+
+  it("el lavador lee la configuración del carwash pero no la cambia", async () => {
+    await assertSucceeds(db("washer").doc(`${T}/settings/general`).get());
+    await assertFails(db("washer").doc(`${T}/settings/carwash`).set({ loyaltyEvery: 1, updatedBy: "washer1", updatedAt: serverTs() }));
+    await assertSucceeds(db("manager").doc(`${T}/settings/carwash`).set({ loyaltyEvery: 8, updatedBy: "manager1", updatedAt: serverTs() }));
+  });
+
+  it("el lavador registra en el historial el WhatsApp de carro listo", async () => {
+    await assertSucceeds(db("washer").collection(`${T}/messages`).add({
+      to: "+50499998888", name: "Juan", body: "Su vehículo está listo", orderId: null, orderCode: null,
+      context: "carwash", mode: "manual", createdBy: "washer1", createdByName: "Lavador", at: serverTs(),
+    }));
+    await assertFails(db("washer").doc(`${T}/messages/x1`).get());
   });
 });
 

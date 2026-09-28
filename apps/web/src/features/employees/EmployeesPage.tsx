@@ -34,7 +34,7 @@ interface Row {
   stats: TechStats | undefined;
 }
 
-const ROLE_ORDER: Role[] = ["technician", "reception", "warehouse", "seller", "manager", "admin"];
+const ROLE_ORDER: Role[] = ["technician", "washer", "reception", "warehouse", "seller", "manager", "admin"];
 
 /** Órdenes abiertas + entregadas en el mes (hora de Honduras) + horas facturadas por técnico. */
 async function loadStats() {

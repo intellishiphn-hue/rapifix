@@ -1,9 +1,9 @@
-import { where, limit } from "firebase/firestore";
+import { doc, getDoc, where, limit } from "firebase/firestore";
 import {
-  catalogCol, financeCol, normalizeText, orderCol, QUOTE_ITEM_LABELS,
-  type Expense, type InventoryMovement, type Payment, type ProductCost, type Purchase, type QuoteItemType, type Sale, type WorkOrder,
+  catalogCol, financeCol, FINANCE_META_DOCS, normalizeText, orderCol, QUOTE_ITEM_LABELS,
+  type Expense, type FinanceBudget, type InventoryMovement, type SupplierPayment, type Payment, type ProductCost, type Purchase, type QuoteItemType, type Sale, type WorkOrder,
 } from "@rapifix/shared";
-import { TENANT_ID } from "@/lib/firebase";
+import { db, TENANT_ID } from "@/lib/firebase";
 import { toDate } from "@/lib/format";
 import { fetchAll, fetchApprovedQuotes, fetchRange } from "@/features/reports/data";
 
@@ -228,6 +228,36 @@ export function loadExpenses(start: Date, end: Date, refresh: number): Promise<E
   return cached(rk("expenses", start, end, refresh), () =>
     fetchRange<Expense>(financeCol.expenses(TENANT_ID), "date", start, end).then((l) => l.filter((e) => e.status === "valid")),
   );
+}
+
+/**
+ * Gastos generados desde gastos fijos para esos meses ("YYYY-MM"), pagados o pendientes (sin anulados).
+ * Se agrupan por el mes al que corresponden (`period`), aunque se hayan pagado otro mes.
+ */
+export function loadFixedExpenses(months: string[], refresh: number): Promise<Expense[]> {
+  const uniq = [...new Set(months)].sort();
+  return cached(`fixedExp|${uniq.join(",")}|${refresh}`, () =>
+    fetchIn<Expense>(financeCol.expenses(TENANT_ID), "period", uniq).then((l) => l.filter((e) => e.fixedCostId && e.status !== "voided")),
+  );
+}
+
+/** Todos los gastos pendientes de pagar (gastos fijos generados). */
+export function loadPendingExpenses(refresh: number): Promise<Expense[]> {
+  return cached(`pendingExp|${refresh}`, () => fetchAll<Expense>(financeCol.expenses(TENANT_ID), where("status", "==", "pending"), limit(2000)));
+}
+
+export function loadSupplierPayments(start: Date, end: Date, refresh: number): Promise<SupplierPayment[]> {
+  return cached(rk("supplierPayments", start, end, refresh), () =>
+    fetchRange<SupplierPayment>(financeCol.supplierPayments(TENANT_ID), "at", start, end).then((l) => l.filter((p) => p.status === "valid")),
+  );
+}
+
+/** Presupuesto mensual por categoría (gastos variables). */
+export function loadBudget(refresh: number): Promise<Record<string, number>> {
+  return cached(`budget|${refresh}`, async () => {
+    const snap = await getDoc(doc(db, financeCol.financeMeta(TENANT_ID), FINANCE_META_DOCS.budget));
+    return ((snap.data() as FinanceBudget | undefined)?.budgets ?? {}) as Record<string, number>;
+  });
 }
 
 export interface Balances {

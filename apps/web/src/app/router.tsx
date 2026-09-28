@@ -4,6 +4,7 @@ import { PageLoader } from "@/components/ui/Feedback";
 import { AppShell } from "./layout/AppShell";
 import { RequireAuth, RequirePermission } from "./guards/Guards";
 import { COMING_SOON } from "./navigation";
+import { useAuth } from "@/lib/auth/useAuth";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage";
 const DashboardPage = page(() => import("@/features/dashboard/DashboardPage"), "DashboardPage");
@@ -36,11 +37,27 @@ const SupplierDetailPage = page(() => import("@/features/finance/SupplierDetailP
 const PurchasesPage = page(() => import("@/features/finance/PurchasesPage"), "PurchasesPage");
 const NewPurchasePage = page(() => import("@/features/finance/NewPurchasePage"), "NewPurchasePage");
 const ExpensesPage = page(() => import("@/features/finance/ExpensesPage"), "ExpensesPage");
+const FixedCostsPage = page(() => import("@/features/finance/FixedCostsPage"), "FixedCostsPage");
 const ReceivablesPage = page(() => import("@/features/finance/ReceivablesPage"), "ReceivablesPage");
 const EmployeesPage = page(() => import("@/features/employees/EmployeesPage"), "EmployeesPage");
 const WhatsAppPage = page(() => import("@/features/whatsapp/WhatsAppPage"), "WhatsAppPage");
 const ReportsPage = page(() => import("@/features/reports/ReportsPage"), "ReportsPage");
 const FinancePage = page(() => import("@/features/finance-analytics/FinancePage"), "FinancePage");
+// Carwash
+const CarwashQueuePage = page(() => import("@/features/carwash/CarwashQueuePage"), "CarwashQueuePage");
+const CarwashHistoryPage = page(() => import("@/features/carwash/CarwashHistoryPage"), "CarwashHistoryPage");
+const CarwashMembershipsPage = page(() => import("@/features/carwash/MembershipsPage"), "MembershipsPage");
+const CarwashMenuPage = page(() => import("@/features/carwash/CarwashMenuPage"), "CarwashMenuPage");
+const CarwashPlansPage = page(() => import("@/features/carwash/CarwashPlansPage"), "CarwashPlansPage");
+const CarwashReportsPage = page(() => import("@/features/carwash/CarwashReportsPage"), "CarwashReportsPage");
+const CarwashConfigPage = page(() => import("@/features/carwash/CarwashConfigPage"), "CarwashConfigPage");
+const WashTicketPage = page(() => import("@/features/carwash/WashTicketPage"), "WashTicketPage");
+/** Inicio: el lavador (sin Dashboard) entra directo a la cola del carwash. */
+function HomeRoute() {
+  const { can } = useAuth();
+  if (!can("dashboard.view") && can("carwash.read")) return <Navigate to="/carwash" replace />;
+  return <RequirePermission permission="dashboard.view"><S><DashboardPage /></S></RequirePermission>;
+}
 function page<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K) {
   return lazy(() => loader().then((m) => ({ default: m[key] })));
 }
@@ -65,6 +82,7 @@ export const router = createBrowserRouter([
   { path: "/imprimir/recibo/:id", element: <RequireAuth><S><PrintReceiptPage /></S></RequireAuth> },
   { path: "/imprimir/venta/:id", element: <RequireAuth><S><PrintSalePage /></S></RequireAuth> },
   { path: "/imprimir/cotizacion/:id", element: <RequireAuth><S><PrintQuotePage /></S></RequireAuth> },
+  { path: "/imprimir/lavado/:id", element: <RequireAuth><S><WashTicketPage /></S></RequireAuth> },
   {
     path: "/",
     element: (
@@ -73,7 +91,7 @@ export const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <RequirePermission permission="dashboard.view"><S><DashboardPage /></S></RequirePermission> },
+      { index: true, element: <HomeRoute /> },
       { path: "clientes", element: <RequirePermission permission="customers.read"><S><CustomersPage /></S></RequirePermission> },
       { path: "clientes/:id", element: <RequirePermission permission="customers.read"><S><CustomerDetailPage /></S></RequirePermission> },
       { path: "vehiculos", element: <RequirePermission permission="vehicles.read"><S><VehiclesPage /></S></RequirePermission> },
@@ -99,11 +117,19 @@ export const router = createBrowserRouter([
       { path: "compras", element: <RequirePermission permission="purchases.manage"><S><PurchasesPage /></S></RequirePermission> },
       { path: "compras/nueva", element: <RequirePermission permission="purchases.manage"><S><NewPurchasePage /></S></RequirePermission> },
       { path: "gastos", element: <RequirePermission permission="expenses.manage"><S><ExpensesPage /></S></RequirePermission> },
+      { path: "gastos-fijos", element: <RequirePermission permission="expenses.manage"><S><FixedCostsPage /></S></RequirePermission> },
       { path: "cuentas-por-cobrar", element: <RequirePermission permission="payments.read"><S><ReceivablesPage /></S></RequirePermission> },
       { path: "empleados", element: <RequirePermission permission="employees.read"><S><EmployeesPage /></S></RequirePermission> },
       { path: "whatsapp", element: <RequirePermission permission="messages.read"><S><WhatsAppPage /></S></RequirePermission> },
       { path: "finanzas", element: <RequirePermission permission="reports.financial"><S><FinancePage /></S></RequirePermission> },
       { path: "reportes", element: <RequirePermission permission="reports.view"><S><ReportsPage /></S></RequirePermission> },
+      { path: "carwash", element: <RequirePermission permission="carwash.read"><S><CarwashQueuePage /></S></RequirePermission> },
+      { path: "carwash/historial", element: <RequirePermission permission="carwash.charge"><S><CarwashHistoryPage /></S></RequirePermission> },
+      { path: "carwash/membresias", element: <RequirePermission permission="carwash.charge"><S><CarwashMembershipsPage /></S></RequirePermission> },
+      { path: "carwash/menu", element: <RequirePermission permission="carwash.manage"><S><CarwashMenuPage /></S></RequirePermission> },
+      { path: "carwash/planes", element: <RequirePermission permission="carwash.manage"><S><CarwashPlansPage /></S></RequirePermission> },
+      { path: "carwash/reportes", element: <RequirePermission permission="carwash.reports"><S><CarwashReportsPage /></S></RequirePermission> },
+      { path: "carwash/config", element: <RequirePermission permission="carwash.manage"><S><CarwashConfigPage /></S></RequirePermission> },
       ...COMING_SOON.map((i) => ({ path: i.to.slice(1), element: <ComingSoonPage /> })),
       { path: "*", element: <Navigate to="/" replace /> },
     ],

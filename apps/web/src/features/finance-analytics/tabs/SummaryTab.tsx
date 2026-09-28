@@ -1,18 +1,20 @@
 import { useMemo } from "react";
-import { Lightbulb } from "lucide-react";
+import { ArrowRight, Lightbulb } from "lucide-react";
 import { formatMoney, PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type Expense, type Payment } from "@rapifix/shared";
+import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { toDate } from "@/lib/format";
 import { useLoader } from "@/features/reports/data";
 import type { ColKind, ReportCell } from "@/features/reports/table";
 import { TabActions, TabError, TabHeader, TabSkeleton } from "@/features/reports/ui";
-import { aggregateTypes, loadBalances, loadCore, loadExpenses, loadPayments, orderMargin, pct, type Core } from "../data";
-import { buckets } from "../period";
-import { Delta, fmtPct, KpiCard, MoneyChart, Note, RichTable, toReportTable, type Col } from "../components";
+import { aggregateTypes, loadBalances, loadCore, loadExpenses, loadPayments, loadPendingExpenses, orderMargin, pct, type Core } from "../data";
+import { buckets, effectiveEnd } from "../period";
+import { Delta, fmtPct, KpiCard, MoneyChart, Note, ProfitWaterfall, RichTable, toReportTable, type Col } from "../components";
 import { finKey, type FinTabProps } from "./common";
 
 async function load(p: FinTabProps) {
   const { period, prev, refresh } = p;
-  const [cur, old, pay, payPrev, exp, expPrev, balances] = await Promise.all([
+  const [cur, old, pay, payPrev, exp, expPrev, balances, pending] = await Promise.all([
     loadCore(period.start, period.end, refresh),
     loadCore(prev.start, prev.end, refresh),
     loadPayments(period.start, period.end, refresh),
@@ -20,8 +22,16 @@ async function load(p: FinTabProps) {
     loadExpenses(period.start, period.end, refresh),
     loadExpenses(prev.start, prev.end, refresh),
     loadBalances(refresh),
+    loadPendingExpenses(refresh).catch(() => [] as Expense[]),
   ]);
-  return { cur, old, pay, payPrev, exp, expPrev, balances };
+  // Gastos fijos pendientes que vencen dentro del período (hasta hoy si el período no ha terminado)
+  const from = period.start.getTime();
+  const to = effectiveEnd(period).getTime();
+  const pendingInPeriod = pending.filter((e) => {
+    const t = toDate(e.dueDate ?? e.date)?.getTime() ?? 0;
+    return t >= from && t < to;
+  });
+  return { cur, old, pay, payPrev, exp, expPrev, balances, pendingInPeriod };
 }
 
 interface Figures {
@@ -32,6 +42,9 @@ interface Figures {
   profit: number;
   margin: number | null;
   expenses: number;
+  /** gastos fijos pagados (generados desde Gastos fijos) */
+  fixedPaid: number;
+  variable: number;
   net: number;
   netMargin: number | null;
   collected: number;
@@ -43,6 +56,7 @@ interface Figures {
 
 function figures(core: Core, payments: Payment[], expenses: Expense[]): Figures {
   const exp = expenses.reduce((a, e) => a + e.amount, 0);
+  const fixedPaid = expenses.filter((e) => e.fixedCostId).reduce((a, e) => a + e.amount, 0);
   return {
     revenue: core.revenue,
     orderRevenue: core.orderRevenue,
@@ -51,6 +65,8 @@ function figures(core: Core, payments: Payment[], expenses: Expense[]): Figures 
     profit: core.profit,
     margin: pct(core.profit, core.revenue),
     expenses: exp,
+    fixedPaid,
+    variable: exp - fixedPaid,
     net: core.profit - exp,
     netMargin: pct(core.profit - exp, core.revenue),
     collected: payments.reduce((a, x) => a + x.amount, 0),
@@ -127,8 +143,9 @@ export function SummaryTab(props: FinTabProps) {
       { label: "(−) Costo de ventas", cur: -f.cost, old: -o.cost },
       { label: "Utilidad bruta", cur: f.profit, old: o.profit, strong: true },
       { label: "Margen bruto", cur: f.margin, old: o.margin, isPct: true },
-      { label: "(−) Gastos operativos", cur: -f.expenses, old: -o.expenses },
-      { label: "Utilidad neta estimada", cur: f.net, old: o.net, strong: true },
+      { label: "(−) Gastos fijos pagados", cur: -f.fixedPaid, old: -o.fixedPaid },
+      { label: "(−) Gastos variables", cur: -f.variable, old: -o.variable },
+      { label: "Ganancia (utilidad neta estimada)", cur: f.net, old: o.net, strong: true },
       { label: "Margen neto", cur: f.netMargin, old: o.netMargin, isPct: true },
       { label: "Cobrado (dinero que entró)", cur: f.collected, old: o.collected },
       { label: "ISV cobrado (no es ingreso)", cur: f.tax, old: o.tax },
@@ -172,6 +189,7 @@ export function SummaryTab(props: FinTabProps) {
     rows: r.chart.filter((x) => x.revenue || x.profit).map((x) => [x.label, x.revenue, x.profit]),
   };
   const receivableDocs = data.balances.ordersDue.length + data.balances.salesDue.length;
+  const pendingFixed = data.pendingInPeriod.reduce((a, e) => a + e.amount, 0);
   const missing = data.cur.missingLines;
 
   return (
@@ -181,6 +199,8 @@ export function SummaryTab(props: FinTabProps) {
         subtitle={`${props.period.label} · comparado con ${props.prev.label}`}
         actions={<TabActions title="Finanzas - Resumen" periodLabel={props.period.label} fileRange={props.fileRange} tables={[plTable, chartTable]} summary={summary} />}
       />
+
+      <HowMuchWeEarned f={f} periodWord={props.periodKey === "month" || props.periodKey === "prevMonth" ? "del mes" : props.periodKey === "today" ? "de hoy" : "del período"} pendingFixed={pendingFixed} pendingCount={data.pendingInPeriod.length} onClosing={props.openTab ? () => props.openTab!("closing") : undefined} />
 
       {missing > 0 && (
         <Note tone="warn">
@@ -208,12 +228,13 @@ export function SummaryTab(props: FinTabProps) {
         <KpiCard
           label="Gastos operativos"
           value={formatMoney(f.expenses)}
+          sub={`Fijos ${formatMoney(f.fixedPaid)} · Variables ${formatMoney(f.variable)}`}
           tone="text-red-700"
           delta={<Delta current={f.expenses} previous={o.expenses} goodWhenUp={false} />}
-          hint="Gastos válidos registrados con fecha del período (alquiler, salarios, luz…)."
+          hint={pendingFixed > 0 ? `Pagados en el período. Faltan ${formatMoney(pendingFixed)} de gastos fijos por pagar.` : "Gastos pagados con fecha del período (alquiler, salarios, luz…)."}
         />
         <KpiCard
-          label="Utilidad neta estimada"
+          label="Ganancia (utilidad neta)"
           value={formatMoney(f.net)}
           tone={f.net >= 0 ? "text-emerald-700" : "text-red-700"}
           sub={`Margen neto ${fmtPct(f.netMargin)}`}
@@ -266,11 +287,51 @@ export function SummaryTab(props: FinTabProps) {
           <li><b>Ingresos</b>: órdenes entregadas en el período (según la cotización aprobada, sin ISV y con descuentos) más ventas del POS no anuladas.</li>
           <li><b>Costo de ventas</b>: costo registrado en cada línea de la cotización. Si un repuesto no tiene costo, se usa el costo con que salió del inventario y, si tampoco existe, el costo promedio actual del producto. En el POS se usa el costo de la salida de inventario de cada venta.</li>
           <li><b>Mano de obra</b>: si no tiene costo registrado cuenta como costo cero; los salarios se ven en Gastos.</li>
-          <li><b>Utilidad neta estimada</b>: utilidad bruta menos gastos operativos del período. No incluye depreciación ni impuestos sobre la renta.</li>
+          <li><b>Utilidad neta estimada</b>: utilidad bruta menos gastos pagados en el período (fijos y variables). Los gastos fijos pendientes de pagar se indican aparte; en la pestaña "Cierre del mes" sí se restan. No incluye depreciación ni impuestos sobre la renta.</li>
           <li><b>Cobrado</b> es dinero que entró por fecha del pago; puede ser de órdenes de otros períodos. Por eso no coincide con los ingresos.</li>
           <li>La comparación es contra {props.prev.label} (la misma cantidad de días).</li>
         </ul>
       </details>
     </div>
+  );
+}
+
+/** Bloque destacado: cuánto ganamos, en palabras sencillas y en cascada (vendimos → costo → gastos → ganancia). */
+function HowMuchWeEarned({ f, periodWord, pendingFixed, pendingCount, onClosing }: { f: Figures; periodWord: string; pendingFixed: number; pendingCount: number; onClosing?: () => void }) {
+  const netWithPending = f.net - pendingFixed;
+  return (
+    <Card className="report-card overflow-hidden border-emerald-200">
+      <div className="flex flex-col gap-2 border-b border-slate-100 bg-emerald-50/60 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-base font-bold text-slate-900">¿Cuánto ganamos?</h3>
+          <p className="text-xs text-slate-600">De lo que vendimos, primero se resta lo que costó lo vendido y después los gastos del negocio. Lo que queda es la ganancia.</p>
+        </div>
+        {onClosing && (
+          <Button size="sm" variant="secondary" className="shrink-0 print:hidden" icon={<ArrowRight className="h-4 w-4" />} onClick={onClosing}>Ver cierre del mes</Button>
+        )}
+      </div>
+      <div className="grid divide-y divide-slate-100 border-b border-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+        <div className="p-5">
+          <div className="text-sm font-medium text-slate-500">Utilidad bruta</div>
+          <div className={`tabular mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl ${f.profit >= 0 ? "text-emerald-700" : "text-red-700"}`}>{formatMoney(f.profit)}</div>
+          <p className="mt-1 text-sm text-slate-600">Lo que dejan las ventas después de pagar los repuestos y productos vendidos ({fmtPct(f.margin)} de lo vendido).</p>
+        </div>
+        <div className="p-5">
+          <div className="text-sm font-medium text-slate-500">Ganancia {periodWord} (utilidad neta)</div>
+          <div className={`tabular mt-1 text-3xl font-extrabold tracking-tight sm:text-4xl ${f.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>{formatMoney(f.net)}</div>
+          <p className="mt-1 text-sm text-slate-600">Lo que realmente queda después de pagar también los gastos (alquiler, salarios, luz y demás). {fmtPct(f.netMargin)} de lo vendido.</p>
+        </div>
+      </div>
+      <ProfitWaterfall
+        steps={{ revenue: f.revenue, cost: f.cost, fixed: f.fixedPaid, variable: f.variable }}
+        periodWord={periodWord}
+        fixedHint="Alquiler, salarios, luz, internet que ya se pagaron en estas fechas."
+        footer={pendingFixed > 0 ? (
+          <span className="text-amber-900">
+            Todavía faltan {formatMoney(pendingFixed)} de gastos fijos por pagar ({pendingCount}) de estas fechas. Cuando se paguen, la ganancia quedaría en <b className="tabular">{formatMoney(netWithPending)}</b>.
+          </span>
+        ) : undefined}
+      />
+    </Card>
   );
 }

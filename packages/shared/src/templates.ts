@@ -1,6 +1,6 @@
 import type { WorkOrderStatus } from "./workOrderStatus";
 
-export const TEMPLATE_VARIABLES = ["cliente", "vehiculo", "placa", "orden", "total", "link", "taller", "servicio", "ultimo", "fecha"] as const;
+export const TEMPLATE_VARIABLES = ["cliente", "vehiculo", "placa", "orden", "total", "link", "taller", "servicio", "ultimo", "fecha", "sellos", "plan"] as const;
 export type TemplateVars = Partial<Record<(typeof TEMPLATE_VARIABLES)[number], string>>;
 
 /** Reemplaza {{variable}} por su valor. Variables vacías se quitan limpiamente. */
@@ -42,6 +42,8 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   { key: "cita_confirmacion", name: "Cita agendada", body: `¡Hola {{cliente}}! 📅\n\nSu cita en *{{taller}}* quedó agendada para *{{fecha}}*.\nVehículo: *{{vehiculo}}* (placa {{placa}})\n\n¿Nos confirma su asistencia?\n\n${FIRMA}` },
   { key: "cita_recordatorio", name: "Recordatorio de cita", body: `¡Hola {{cliente}}! 📅\n\nLe recordamos su cita en *{{taller}}* *{{fecha}}*.\nVehículo: *{{vehiculo}}* (placa {{placa}})\n\nSi necesita cambiar la hora, respóndanos este mensaje.\n\n${FIRMA}` },
   { key: "mantenimiento", name: "Mantenimiento próximo", body: `¡Hola {{cliente}}! 🔧\n\nSegún nuestros registros, es posible que a su *{{vehiculo}}* (placa {{placa}}) ya le toque *{{servicio}}*.\n{{ultimo}}\n\n¿Le agendamos una cita? Solo responda este mensaje.\n\n${FIRMA}` },
+  { key: "carwashReady", name: "Carwash: vehículo listo", body: `¡Hola {{cliente}}!\n\nSu vehículo placa *{{placa}}* ya está listo en nuestro carwash. Puede pasar a retirarlo cuando guste.\n\n{{sellos}}\n\n${FIRMA}` },
+  { key: "carwashMembershipExpiring", name: "Carwash: membresía por vencer", body: `¡Hola {{cliente}}!\n\nLe recordamos que su membresía *{{plan}}* del carwash (placa {{placa}}) vence el *{{fecha}}*.\n\nRenueve para seguir disfrutando sus lavados. Solo responda este mensaje.\n\n${FIRMA}` },
   { key: "pago_pendiente", name: "Pago pendiente", body: `¡Hola {{cliente}}! 🧾\n\nLe recordamos que la orden *{{orden}}* de su *{{vehiculo}}* tiene un saldo pendiente de *{{total}}*.\n\n${FIRMA}` },
 ];
 
@@ -76,5 +78,7 @@ export const TEMPLATE_VARIABLE_LABELS: Record<(typeof TEMPLATE_VARIABLES)[number
   taller: "Nombre del taller",
   servicio: "Servicio (mantenimiento)",
   ultimo: "Último servicio (mantenimiento)",
-  fecha: "Fecha y hora de la cita",
+  fecha: "Fecha (cita o vencimiento)",
+  sellos: "Sellos de lealtad (carwash)",
+  plan: "Plan de membresía (carwash)",
 };

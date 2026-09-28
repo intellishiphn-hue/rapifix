@@ -12,3 +12,5 @@ export * from "./quote";
 export * from "./catalog";
 export * from "./operations";
 export * from "./finance";
+export * from "./fixedCosts";
+export * from "./carwash";

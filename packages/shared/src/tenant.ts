@@ -59,6 +59,19 @@ export const financeCol = {
   purchases: (tid: string) => `tenants/${tid}/purchases`,
   supplierPayments: (tid: string) => `tenants/${tid}/supplierPayments`,
   expenses: (tid: string) => `tenants/${tid}/expenses`,
+  /** plantillas de gastos fijos (se generan cada mes como gastos pendientes) */
+  fixedCosts: (tid: string) => `tenants/${tid}/fixedCosts`,
+  /** financeMeta/fixedCosts (meses generados) y financeMeta/budget (presupuesto) */
+  financeMeta: (tid: string) => `tenants/${tid}/financeMeta`,
+} as const;
+
+/** Carwash: menú, cola de lavados, lealtad por placa, planes y membresías. Settings en settings/carwash. */
+export const carwashCol = {
+  services: (tid: string) => `tenants/${tid}/carwashServices`,
+  washes: (tid: string) => `tenants/${tid}/carwashWashes`,
+  loyalty: (tid: string) => `tenants/${tid}/carwashLoyalty`,
+  plans: (tid: string) => `tenants/${tid}/carwashPlans`,
+  memberships: (tid: string) => `tenants/${tid}/carwashMemberships`,
 } as const;
 
 export const paymentStoragePath = {

@@ -2,8 +2,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
   carwashCol, carwashSettingsFrom, catalogCol, clampStartStamps, col, membershipWindow, PUBLIC_WASHES,
-  type CarwashMembership, type CarwashSettings, type MembershipStatus, type PublicProof, type PublicWash, type WashItem,
-} from "@rapifix/shared";
+  type CarwashMembership, type CarwashSettings, type MembershipStatus, type PublicProof, type PublicWash, type WashItem, DEFAULT_SETTINGS } from "@rapifix/shared";
 import { db } from "./admin";
 import { toMs } from "./carwash";
 
@@ -29,8 +28,9 @@ export function workshopInfo(s: FirebaseFirestore.DocumentData) {
   };
 }
 
+/** Bancos para el cliente. Si nunca se guardó la lista en Configuración, se usa la lista por defecto. */
 export const bankList = (s: FirebaseFirestore.DocumentData): string[] =>
-  (Array.isArray(s.bankAccounts) ? s.bankAccounts : []).filter((b: unknown): b is string => typeof b === "string" && !!b.trim()).slice(0, 20);
+  (Array.isArray(s.bankAccounts) ? s.bankAccounts : [...DEFAULT_SETTINGS.bankAccounts]).filter((b: unknown): b is string => typeof b === "string" && !!b.trim()).slice(0, 20);
 
 /**
  * Construye la copia pública y mínima del lavado en publicWashes/{payToken}.

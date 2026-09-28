@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { BadgeCheck, Check, CheckCircle2, Clock, CreditCard, Droplets, Gift, Loader2, MapPin, MessageCircle, Phone, ShieldCheck, XCircle } from "lucide-react";
+import { BadgeCheck, Check, CheckCircle2, Clock, CreditCard, Droplets, Gift, Loader2, MapPin, MessageCircle, Phone, ShieldCheck, XCircle, Banknote } from "lucide-react";
 import {
   formatMoney, loyaltyProgressText, normalizePhone, PUBLIC_WASHES, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS, WASH_STATUS_LABELS, whatsappLink,
   type PublicWash,
@@ -242,7 +242,7 @@ function WashPaySection({ wash: w, token }: { wash: PublicWash; token: string })
     }
   };
 
-  const canProof = w.banks.length > 0 || !!w.proof;
+  const banks = w.banks ?? [];
   return (
     <section className={card}>
       <h2 className="flex items-center gap-2 font-bold"><CreditCard className="h-5 w-5 text-brand-600" /> Pago</h2>
@@ -265,8 +265,8 @@ function WashPaySection({ wash: w, token }: { wash: PublicWash; token: string })
               <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400"><ShieldCheck className="h-3.5 w-3.5" /> Pago seguro con tarjeta a través de ROKI</p>
             </>
           )}
-          {canProof && <ProofUpload token={token} kind="wash" banks={w.banks} defaultAmount={w.balance} proof={w.proof} />}
-          {!w.onlinePayment.enabled && !canProof && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">Puede pagar en caja al retirar su vehículo.</p>}
+          <ProofUpload token={token} kind="wash" banks={banks} defaultAmount={w.balance} proof={w.proof} />
+          <p className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><Banknote className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" /> <span><b className="text-slate-800">Efectivo:</b> puede pagar en caja al retirar su vehículo.</span></p>
         </div>
       )}
     </section>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { Check, CheckCircle2, Clock, CreditCard, HelpCircle, Phone, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
+import { Banknote, Check, CheckCircle2, Clock, CreditCard, HelpCircle, Phone, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
 import { formatMoney, normalizePhone, QUOTE_ITEM_LABELS, whatsappLink, type PublicPortal } from "@rapifix/shared";
 
 /** Número de RAPIFIX (9285-4852) si en Configuración no se ha puesto otro */
@@ -48,9 +48,6 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
   if (!op || portal.kind === "quote" || op.total <= 0) return null;
   const paidInFull = op.balance <= 0 && op.paid > 0;
   const banks = portal.banks ?? [];
-  // Transferencia o depósito: se ofrece si el taller tiene bancos en Configuración (o ya hay un comprobante)
-  const canProof = banks.length > 0 || !!portal.proof;
-  if (!op.enabled && !paidInFull && !canProof) return null;
   const quotePending = portal.quote && (portal.quote.status === "sent" || portal.quote.status === "viewed");
 
   const pay = async () => {
@@ -92,12 +89,14 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
               <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-slate-400"><ShieldCheck className="h-3.5 w-3.5" /> Pago seguro con tarjeta a través de ROKI</p>
             </>
           )}
-          {canProof && (
+          {/* Transferencia o depósito: siempre disponible (si no hay lista de bancos, el cliente escribe el banco) */}
+          {(
             <div className="mt-4 space-y-3">
               <ProofStatus proof={portal.proof} paid={paidInFull} />
               <ProofUpload token={token} kind="order" banks={banks} defaultAmount={op.balance} proof={portal.proof} />
             </div>
           )}
+          <div className="mt-4"><p className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><Banknote className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" /> <span><b className="text-slate-800">Efectivo:</b> puede pagar en caja al retirar su vehículo.</span></p></div>
         </>
       )}
     </section>

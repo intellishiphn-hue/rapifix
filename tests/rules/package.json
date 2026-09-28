@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Pruebas autom\u00e1ticas de firestore.rules y storage.rules contra el emulador",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --reporter=default --reporter=github-actions",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

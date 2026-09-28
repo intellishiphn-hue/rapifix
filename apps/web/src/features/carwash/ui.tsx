@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
 import {
   membershipCanUse, membershipWindow, VEHICLE_SIZE_HINTS, VEHICLE_SIZE_LABELS, VEHICLE_SIZES,
   type CarwashMembership, type MembershipStatus, type Permission, type VehicleSize, type WashStatus,
@@ -70,6 +71,21 @@ export const STATUS_STYLE: Record<WashStatus, { dot: string; head: string; tone:
   delivered: { dot: "bg-slate-400", head: "bg-slate-100 text-slate-700", tone: "gray" },
   cancelled: { dot: "bg-red-500", head: "bg-red-50 text-red-700", tone: "red" },
 };
+
+/** Aviso para lavados con placa marcador ("PENDIENTE"...): no suman sellos. */
+export const PLACEHOLDER_PLATE_NOTICE = "Sin placa real: este lavado no suma sellos. Corrija la placa para que cuente.";
+
+export function PlaceholderPlateNotice({ className, children }: { className?: string; children?: ReactNode }) {
+  return (
+    <div className={cn("flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-sm font-medium text-amber-800", className)}>
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <span>{PLACEHOLDER_PLATE_NOTICE}</span>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /** Botones grandes para elegir el tamaño del vehículo. */
 export function SizePicker({ value, onChange }: { value: VehicleSize | null; onChange: (s: VehicleSize) => void }) {

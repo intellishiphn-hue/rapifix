@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, BadgeCheck, Copy, CreditCard, Gift, Link2, Loader2, MessageCircle, Pencil, Printer, StickyNote, Undo2, User } from "lucide-react";
 import {
-  carwashReadyBody, formatMoney, formatPhone, loyaltyText, netOf, renderTemplate, templateMissingLink, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS,
+  carwashReadyBody, formatMoney, formatPhone, isPlaceholderPlate, loyaltyText, washPlate, netOf, renderTemplate, templateMissingLink, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS,
   WASH_STATUS_LABELS, type Customer, type QueueStatus, type Wash,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -12,16 +12,16 @@ import { formatDate, formatPlate } from "@/lib/format";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Field, Select, Textarea } from "@/components/ui/Field";
+import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { useSettings } from "@/features/settings/api";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
 import { CustomerPicker } from "@/features/vehicles/CustomerPicker";
 import { useCustomerVehicles } from "@/features/vehicles/api";
 import { PendingProofsPanel } from "@/features/payments/proofs";
-import { assignWasher, cancelWash, ensureWashPayUrl, linkWashCustomer, setWashStatus, useCarwashSettings, useLoyalty, useLoyaltyView, useWashers } from "./api";
+import { assignWasher, cancelWash, ensureWashPayUrl, fixWashPlate, linkWashCustomer, setWashStatus, useCarwashSettings, useLoyalty, useLoyaltyView, useWashers } from "./api";
 import { AdjustStampsButton } from "./LoyaltyAdjust";
 import { Stamps } from "./RegisterWashDialog";
-import { formatMinutes, msOf, STATUS_STYLE } from "./ui";
+import { formatMinutes, msOf, PlaceholderPlateNotice, STATUS_STYLE } from "./ui";
 
 const NEXT: Partial<Record<Wash["status"], QueueStatus>> = { waiting: "washing", washing: "ready", ready: "delivered" };
 const PREV: Partial<Record<Wash["status"], QueueStatus>> = { washing: "waiting", ready: "washing" };
@@ -219,15 +219,22 @@ export function WashDetailDialog({
   const [busy, setBusy] = useState(false);
   const [linking, setLinking] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const { settings: cw } = useCarwashSettings();
   const loyalty = useLoyalty(wash?.plate);
   const lv = useLoyaltyView(wash?.plate);
-  useEffect(() => setLinking(false), [wash?.id]);
+  useEffect(() => {
+    setLinking(false);
+    setFixing(false);
+  }, [wash?.id]);
   if (!wash) return null;
   const w = wash;
   const money = can("carwash.charge");
   const open = w.status !== "delivered" && w.status !== "cancelled";
   const prev = PREV[w.status];
+  const noPlate = isPlaceholderPlate(w.plate) && w.status !== "cancelled";
+  // Abierto y sin cobrar se corrige con Editar; cobrado o entregado, con "Corregir placa"
+  const canFixPlate = noPlate && money && !(open && !w.paid);
   const minutes = (a: unknown, b: unknown) => {
     const x = msOf(a as Wash["createdAt"]);
     const y = msOf(b as Wash["createdAt"]);
@@ -292,6 +299,15 @@ export function WashDetailDialog({
             <Button variant="secondary" size="sm" icon={<Link2 className="h-4 w-4" />} onClick={() => setLinking(true)}>Vincular a cliente del taller</Button>
           )
         )}
+
+        {noPlate && (
+          <PlaceholderPlateNotice>
+            {canFixPlate && !fixing && (
+              <button type="button" onClick={() => setFixing(true)} className="ml-1 font-semibold underline underline-offset-2">Corregir placa</button>
+            )}
+          </PlaceholderPlateNotice>
+        )}
+        {canFixPlate && fixing && <FixPlatePanel wash={w} onDone={() => setFixing(false)} />}
 
         {w.notes && (
           <p className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-amber-900"><StickyNote className="mt-0.5 h-4 w-4 shrink-0" />{w.notes}</p>
@@ -398,7 +414,9 @@ function LinkCustomerPanel({ wash, onDone }: { wash: Wash; onDone: () => void })
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [saving, setSaving] = useState(false);
   const vehicles = useCustomerVehicles(customer?.id);
-  const own = vehicles.data.find((v) => v.plate === wash.plate);
+  const noPlate = isPlaceholderPlate(wash.plate);
+  // Con placa marcador no se enlaza ni crea vehículo por placa
+  const own = noPlate ? undefined : vehicles.data.find((v) => v.plate === wash.plate);
   const save = async () => {
     if (!customer) return toast.error("Busque y elija el cliente");
     setSaving(true);
@@ -420,7 +438,10 @@ function LinkCustomerPanel({ wash, onDone }: { wash: Wash; onDone: () => void })
     <div className="space-y-3 rounded-xl border border-brand-200 bg-brand-50/40 p-3">
       <div className="text-sm font-semibold text-slate-900">Vincular a cliente del taller</div>
       <CustomerPicker value={customer} onChange={setCustomer} placeholder="Nombre o teléfono del cliente..." emptyText="Sin resultados. Créelo primero en Clientes." />
-      {customer && !vehicles.loading && (
+      {customer && noPlate && (
+        <p className="text-xs text-slate-600">Este lavado no tiene placa real: se vincula solo este lavado al cliente, sin agregar vehículo ni tarjeta de lealtad.</p>
+      )}
+      {customer && !noPlate && !vehicles.loading && (
         <p className="text-xs text-slate-600">
           {own
             ? `La placa ${formatPlate(wash.plate)} ya está en sus vehículos.`
@@ -431,6 +452,54 @@ function LinkCustomerPanel({ wash, onDone }: { wash: Wash; onDone: () => void })
       <div className="flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onDone}>Cancelar</Button>
         <Button size="sm" icon={<Link2 className="h-4 w-4" />} onClick={() => void save()} loading={saving} disabled={!customer}>Vincular</Button>
+      </div>
+    </div>
+  );
+}
+
+/** Corrige la placa de un lavado cobrado o entregado que se registró sin placa real. Solo caja/recepción. */
+function FixPlatePanel({ wash, onDone }: { wash: Wash; onDone: () => void }) {
+  const [plate, setPlate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const normalized = washPlate(plate);
+  const invalid = normalized.length >= 2 && isPlaceholderPlate(normalized);
+  const save = async () => {
+    if (normalized.length < 2) return toast.error("Escriba la placa");
+    if (invalid) return toast.error("Escriba la placa real del carro");
+    setSaving(true);
+    try {
+      const r = await fixWashPlate({ washId: wash.id, plate: normalized });
+      toast.success(
+        `Placa de ${wash.code} corregida a ${formatPlate(r.plate)}` +
+          (r.stampAdded ? `. Se sumó el sello${r.stamps !== null ? ` (${r.stamps} en la tarjeta)` : ""}${r.earnedReward ? " y ganó un lavado gratis" : ""}.` : "."),
+      );
+      onDone();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+      <div className="text-sm font-semibold text-slate-900">Corregir placa</div>
+      <Input
+        value={plate}
+        onChange={(e) => setPlate(e.target.value.toUpperCase())}
+        placeholder="HAB 1234"
+        maxLength={15}
+        autoFocus
+        className="h-12 text-xl font-bold uppercase tracking-widest"
+      />
+      {invalid && <p className="text-xs font-medium text-amber-800">Esa no es una placa real.</p>}
+      <p className="text-xs text-slate-600">
+        {wash.saleId && !wash.loyaltyCounted && !wash.membershipId && !wash.loyaltyRedeemed
+          ? "Como el lavado ya se cobró, se suma su sello a la tarjeta de esa placa."
+          : "Queda registrado con esa placa para su historial y tarjeta de lealtad."}
+      </p>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onDone}>Cancelar</Button>
+        <Button size="sm" onClick={() => void save()} loading={saving} disabled={normalized.length < 2 || invalid}>Guardar placa</Button>
       </div>
     </div>
   );

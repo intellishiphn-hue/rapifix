@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { BadgeCheck, Check, CheckCircle2, Clock, CreditCard, Droplets, Gift, Loader2, MapPin, MessageCircle, Phone, ShieldCheck, XCircle, Banknote } from "lucide-react";
 import {
-  formatMoney, loyaltyProgressText, normalizePhone, PUBLIC_WASHES, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS, WASH_STATUS_LABELS, whatsappLink,
+  formatMoney, isPlaceholderPlate, loyaltyProgressText, normalizePhone, PUBLIC_WASHES, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS, WASH_STATUS_LABELS, whatsappLink,
   type PublicWash,
 } from "@rapifix/shared";
 import { callable, db } from "@/lib/firebase";
@@ -152,7 +152,7 @@ function WashView({ wash: w, token }: { wash: PublicWash; token: string }) {
       {!cancelled && <WashPaySection wash={w} token={token} />}
 
       {/* Lealtad */}
-      {w.loyalty && (() => {
+      {w.loyalty && !isPlaceholderPlate(w.plate) && (() => {
         // Los sellos de regalo de la tarjeta nueva se muestran desde ya (se guardan al pagar el primer lavado)
         const gift = w.loyalty.pendingWelcome;
         const count = Math.min(w.loyalty.every - 1, w.loyalty.count + gift);

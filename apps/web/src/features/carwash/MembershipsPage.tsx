@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { BadgeCheck, Ban, Loader2, MessageCircle, Plus, Printer, RefreshCw, Search } from "lucide-react";
 import {
-  computeWashCharge, formatMoney, formatPhone, MEMBERSHIP_STATUS_LABELS, renderTemplate, templateBody, VEHICLE_SIZE_LABELS, washPlate,
+  computeWashCharge, formatMoney, formatPhone, isPlaceholderPlate, MEMBERSHIP_STATUS_LABELS, renderTemplate, templateBody, VEHICLE_SIZE_LABELS, washPlate,
   type CarwashLookupResult, type CarwashMembership,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -354,6 +354,9 @@ export function SellMembershipDialog({ open, renew, onClose }: { open: boolean; 
                 {looking && <Loader2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-brand-600" />}
               </div>
             </Field>
+            {normalized.length >= 4 && isPlaceholderPlate(normalized) && (
+              <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Sin placa real no se puede vender una membresía. Escriba la placa del carro.</p>
+            )}
             {lookup?.membership && (
               <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
                 Esta placa ya tiene la membresía activa {lookup.membership.code} ({lookup.membership.planName}). Renuévela desde la lista.

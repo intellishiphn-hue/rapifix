@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { BadgeCheck, ChevronRight, Clock, CreditCard, Droplets, FileClock, Gift, MessageCircle, Plus, StickyNote, User } from "lucide-react";
-import { formatMoney, QUEUE_STATUSES, VEHICLE_SIZE_SHORT, WASH_STATUS_LABELS, type QueueStatus, type Wash } from "@rapifix/shared";
+import { formatMoney, isPlaceholderPlate, QUEUE_STATUSES, VEHICLE_SIZE_SHORT, WASH_STATUS_LABELS, type QueueStatus, type Wash } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { cn } from "@/lib/cn";
 import { formatPlate } from "@/lib/format";
@@ -199,7 +199,7 @@ function WashCard({
       <button onClick={onOpen} className="block w-full p-3.5 text-left hover:bg-slate-50/70">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-xl font-extrabold tracking-wider text-slate-900">{formatPlate(w.plate)}</div>
+            <div className={cn("text-xl font-extrabold tracking-wider", isPlaceholderPlate(w.plate) ? "text-amber-600" : "text-slate-900")} title={isPlaceholderPlate(w.plate) ? "Sin placa real: no suma sellos" : undefined}>{formatPlate(w.plate)}</div>
             <div className="truncate text-xs text-slate-500">{w.code} · {VEHICLE_SIZE_SHORT[w.size]}{w.customerName ? ` · ${w.customerName}` : ""}</div>
           </div>
           <div className={cn("flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold", late ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-700")}>

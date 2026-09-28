@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { getDoc } from "firebase/firestore";
 import { AlertTriangle, BadgeCheck, Car, Check, Gift, Info, Loader2, Plus, Search, Wrench } from "lucide-react";
 import {
-  buildWashItems, computeWashCharge, formatMoney, formatPhone, isPendingVehicle, loyaltyText, priceForSize, rewardCap, washPlate,
+  buildWashItems, computeWashCharge, formatMoney, formatPhone, isPendingVehicle, isPlaceholderPlate, loyaltyText, priceForSize, rewardCap, washPlate,
   WASH_STATUS_LABELS, type CarwashLookupResult, type Customer, type Vehicle, type VehicleSize, type Wash,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -21,7 +21,7 @@ import { useCustomerVehicles } from "@/features/vehicles/api";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { useSettings } from "@/features/settings/api";
 import { carwashLookup, saveWash, useCarwashServices, useCarwashSettings, useWashers } from "./api";
-import { SizePicker } from "./ui";
+import { PlaceholderPlateNotice, SizePicker } from "./ui";
 
 interface Sel { serviceId: string; price: number }
 
@@ -96,8 +96,15 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
   // Búsqueda por placa (vehículo del taller, última visita, lealtad, membresía y mantenimientos)
   const normalized = washPlate(plate);
   const debounced = useDebounced(normalized, 450);
+  // "PENDIENTE", "SIN PLACA"...: el aviso sale de inmediato; los marcadores cortos ("SP", "NA") al dejar de escribir
+  const placeholder = normalized.length >= 2 && isPlaceholderPlate(normalized) && (normalized.length >= 4 || debounced === normalized);
   useEffect(() => {
-    if (!open || debounced.length < 3) {
+    if (!placeholder) return;
+    setUseReward(false);
+    setUseMembership(false);
+  }, [placeholder]);
+  useEffect(() => {
+    if (!open || debounced.length < 3 || isPlaceholderPlate(debounced)) {
       setLookup(null);
       return;
     }
@@ -135,11 +142,11 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
     setSel([...(kind === "wash" ? [{ serviceId, price: 0 }] : []), ...base, ...(kind === "extra" ? [{ serviceId, price: 0 }] : [])]);
   };
 
-  const membership = lookup?.membership ?? null;
-  const keptMembership = editing && !!wash?.membershipId;
+  const membership = placeholder ? null : (lookup?.membership ?? null);
+  const keptMembership = editing && !!wash?.membershipId && !placeholder;
   const membershipIds = useMembership ? (membership?.includedServiceIds ?? (keptMembership ? wash?.items.filter((i) => i.covered === "membership").map((i) => i.serviceId) : null) ?? null) : null;
   const rewardsAvailable = lookup?.loyalty.rewardsAvailable ?? 0;
-  const canReward = rewardsAvailable > 0 || (editing && !!wash?.loyaltyRedeemed);
+  const canReward = !placeholder && (rewardsAvailable > 0 || (editing && !!wash?.loyaltyRedeemed));
   const cap = size ? rewardCap(settings, services.data, size) : null;
 
   const preview = useMemo(() => {
@@ -169,7 +176,7 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
     try {
       // El servidor valida que el vehículo sea de esta placa; si el cliente no la tiene, la agrega a sus vehículos
       const current = lookup && lookup.plate === normalized ? lookup : null;
-      const vehicleId = current?.vehicle?.id ?? (wash && wash.plate === normalized ? wash.vehicleId : null) ?? null;
+      const vehicleId = isPlaceholderPlate(normalized) ? null : (current?.vehicle?.id ?? (wash && wash.plate === normalized ? wash.vehicleId : null) ?? null);
       const customerId = picked?.id ?? current?.customer?.id ?? wash?.customerId ?? null;
       const r = await saveWash({
         ...(wash ? { washId: wash.id } : {}),
@@ -186,8 +193,8 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
         }),
         ...(washerId ? { washerId } : {}),
         notes: notes.trim(),
-        useReward,
-        useMembership,
+        useReward: useReward && !isPlaceholderPlate(normalized),
+        useMembership: useMembership && !isPlaceholderPlate(normalized),
         ...(createCustomer ? { createCustomer: true } : {}),
       });
       toast.success(editing ? `Lavado ${r.code} actualizado` : `${r.code} registrado${r.paid ? " (cubierto, sin cobro)" : ` · ${formatMoney(r.total)}`}`);
@@ -242,7 +249,11 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
             />
             {looking && <Loader2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-brand-600" />}
           </div>
-          {lookup && <LookupSummary r={lookup} every={settings.loyaltyEvery} />}
+          {placeholder ? (
+            <PlaceholderPlateNotice className="mt-2" />
+          ) : (
+            lookup && !lookup.placeholder && <LookupSummary r={lookup} every={settings.loyaltyEvery} />
+          )}
         </div>
 
         {/* Cliente del taller: buscar por nombre o teléfono y elegir uno de sus carros */}

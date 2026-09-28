@@ -1,7 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp, type DocumentReference, type DocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import {
-  applyLoyaltyWash, carwashCol, carwashSettingsFrom, catalogCol, col, computeWashCharge, loyaltyWelcomeFor, VEHICLE_SIZE_SHORT,
+  applyLoyaltyWash, carwashCol, isPlaceholderPlate, carwashSettingsFrom, catalogCol, col, computeWashCharge, loyaltyWelcomeFor, VEHICLE_SIZE_SHORT,
   type CarwashService, type CarwashSettings, type PaymentMethod, type Role, type Totals, type VehicleSize, type WashItem,
 } from "@rapifix/shared";
 import { db } from "./admin";
@@ -115,7 +115,8 @@ export async function readWashCharge(tx: Transaction, tid: string, washId: strin
   const ref = db.doc(`${carwashCol.washes(tid)}/${washId}`);
   const wash = await tx.get(ref);
   const plate = wash.exists ? String(wash.get("plate") ?? "") : "";
-  const loyaltyRef = plate ? db.doc(`${carwashCol.loyalty(tid)}/${plate}`) : null;
+  // Sin placa real ("PENDIENTE"...) no hay tarjeta: el lavado no suma sellos
+  const loyaltyRef = plate && !isPlaceholderPlate(plate) ? db.doc(`${carwashCol.loyalty(tid)}/${plate}`) : null;
   const loyalty = loyaltyRef ? await tx.get(loyaltyRef) : null;
   const saleCounter = await readCounter(tx, tid, "sales");
   const payCounter = await readCounter(tx, tid, "payments");
@@ -166,7 +167,7 @@ export function writeWashCharge(
   const size = w.get("size") as VehicleSize;
   const main = items.find((i) => i.kind === "wash");
   const every = cfg.cw.loyaltyEvery;
-  const counts = !!main && !main.covered && every > 0 && fullyPaid && !cancelled;
+  const counts = !!r.loyaltyRef && !!main && !main.covered && every > 0 && fullyPaid && !cancelled;
   const loyalty = r.loyalty;
   const welcome = counts ? loyaltyWelcomeFor({ exists: !!loyalty?.exists, welcomePending: loyalty?.get("welcomePending") }, cfg.cw) : 0;
   const loyaltyAfter = counts
@@ -203,7 +204,7 @@ export function writeWashCharge(
     paid: fullyPaid, paidAt: fullyPaid ? FieldValue.serverTimestamp() : null, saleId: sale.saleId, saleCode: sale.code,
     discount: args.discount, totals: charge.totals, total,
     loyaltyCounted: !!loyaltyAfter,
-    loyaltyStamps: loyaltyAfter ? loyaltyAfter.count : Number(loyalty?.get("count") ?? 0),
+    loyaltyStamps: loyaltyAfter ? loyaltyAfter.count : r.loyaltyRef ? Number(loyalty?.get("count") ?? 0) : null,
     loyaltyEvery: every,
     ...(welcome > 0 && loyaltyAfter ? { loyaltyWelcome: welcome } : {}),
     updatedAt: FieldValue.serverTimestamp(), updatedBy: args.uid,

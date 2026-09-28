@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { Printer } from "lucide-react";
-import { formatMoney, formatPhone, loyaltyText, netOf, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS, WASH_STATUS_LABELS } from "@rapifix/shared";
+import { formatMoney, formatPhone, isPlaceholderPlate, loyaltyText, netOf, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS, WASH_STATUS_LABELS } from "@rapifix/shared";
 import { formatDate, formatPlate } from "@/lib/format";
 import { ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { useSettings } from "@/features/settings/api";
@@ -19,7 +19,8 @@ export function WashTicketPage() {
   const every = w.loyaltyEvery ?? cw.loyaltyEvery;
   const stamps = w.loyaltyCounted && typeof w.loyaltyStamps === "number" ? w.loyaltyStamps : loyalty.data?.count ?? 0;
   const rewards = loyalty.data?.rewardsAvailable ?? 0;
-  const loyaltyLine = every > 0 ? loyaltyText(stamps, every, rewards) : "";
+  // Sin placa real no hay tarjeta de lealtad (el lavado no suma sellos)
+  const loyaltyLine = every > 0 && !isPlaceholderPlate(w.plate) ? loyaltyText(stamps, every, rewards) : "";
 
   return (
     <div className="min-h-screen bg-slate-200 py-6 print:bg-white print:py-0">

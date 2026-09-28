@@ -124,6 +124,8 @@ export interface Wash {
   /** sellos que quedaron después de este lavado (para el ticket) */
   loyaltyStamps?: number | null;
   loyaltyEvery?: number;
+  /** placa marcador ("PENDIENTE"...) con que se registró, si después se corrigió con fixWashPlate */
+  plateFixedFrom?: string;
   /** se entregó sin cobrar (autorizado por gerencia) */
   deliveredUnpaid?: boolean;
   /** token del link público del lavado (/lavado/:token): ver, pagar con tarjeta o subir comprobante */
@@ -284,6 +286,32 @@ export function carwashSettingsFrom(data: Partial<CarwashSettings> | null | unde
 
 /** Normaliza una placa para el carwash: mayúsculas, sin espacios ni guiones. */
 export const washPlate = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/**
+ * Marcadores que escriben en lugar de la placa cuando no la tienen a mano ("PENDIENTE", "S/P", "N/A", "XXX"...).
+ * Ya normalizados con washPlate (sin espacios, guiones ni barras).
+ */
+const PLACEHOLDER_PLATES = new Set([
+  "PENDIENTE", "PENDIENTES", "PEND", "PENDIENT", "PENDI", "PDTE",
+  "SINPLACA", "SINPLACAS", "SP", "NA", "NT", "NOTIENE", "NINGUNA", "NINGUNO", "NOPLACA", "NOHAY",
+  "TEMP", "TEMPORAL", "PROVISIONAL", "PROV",
+  "SN", "SINNUMERO", "SINNUM", "PORCONFIRMAR", "PORASIGNAR", "NUEVO", "NUEVA", "AGENCIA", "PLACA",
+]);
+
+/**
+ * La "placa" es un marcador (el carro se registró sin placa real): no suma sellos, no usa membresía
+ * ni se vincula a vehículos del taller, porque todos los carros sin placa compartirían la misma llave.
+ * También cuenta como marcador: vacío, 1 caracter, solo ceros, solo X (2 o más), y los marcadores
+ * largos con un número al final para distinguirlos ("PENDIENTE 2", "TEMP-01").
+ */
+export function isPlaceholderPlate(plate: string): boolean {
+  const p = washPlate(plate ?? "");
+  if (p.length <= 1) return true;
+  if (/^0+$/.test(p) || /^X{2,}$/.test(p)) return true;
+  if (PLACEHOLDER_PLATES.has(p)) return true;
+  const m = /^([A-Z]{4,})\d{1,3}$/.exec(p);
+  return !!m && PLACEHOLDER_PLATES.has(m[1]!);
+}
 
 export function priceForSize(service: { prices: Partial<CarwashPrices> }, size: VehicleSize): number | null {
   const v = service.prices?.[size];
@@ -668,6 +696,23 @@ export interface WashPayLinkResult {
   token: string;
 }
 
+/**
+ * Corregir la placa de un lavado registrado sin placa real ("PENDIENTE") que ya no se puede editar
+ * (cobrado o entregado). Si ya estaba cobrado y no sumó sello, el sello se suma a la tarjeta de la placa real.
+ */
+export const fixWashPlateSchema = z.object({
+  washId: id,
+  plate: plateInput.refine((p) => !isPlaceholderPlate(p), "Escriba la placa real del carro"),
+});
+export type FixWashPlateInput = z.infer<typeof fixWashPlateSchema>;
+export interface FixWashPlateResult {
+  plate: string;
+  /** se sumó el sello del lavado cobrado a la tarjeta de la placa */
+  stampAdded: boolean;
+  earnedReward: boolean;
+  stamps: number | null;
+}
+
 /** Vincular un lavado (y su placa) a un cliente del taller. Sin vehicleId se reusa o crea el vehículo de esa placa. */
 export const linkWashCustomerSchema = z.object({ washId: id, customerId: id, vehicleId: id.nullish() });
 export type LinkWashCustomerInput = z.infer<typeof linkWashCustomerSchema>;
@@ -685,7 +730,8 @@ export interface SaveWashResult {
 
 export interface LinkWashCustomerResult {
   customerId: string;
-  vehicleId: string;
+  /** null si el lavado no tiene placa real (no se crea vehículo con un marcador) */
+  vehicleId: string | null;
   vehicleCreated: boolean;
   /** lavados de la misma placa que quedaron vinculados (incluye este) */
   linkedWashes: number;
@@ -752,6 +798,8 @@ export function pickVehicleForPlate<T extends { id: string; customerId?: string 
 /** Respuesta de carwashLookup (datos para registrar un carro por placa). */
 export interface CarwashLookupResult {
   plate: string;
+  /** la placa es un marcador ("PENDIENTE"...): sin vehículo, historial, tarjeta ni membresía */
+  placeholder?: boolean;
   vehicle: { id: string; label: string; customerId: string } | null;
   customer: { id: string; name: string; phone: string } | null;
   /** última vez en el carwash (nombre, teléfono y tamaño) */

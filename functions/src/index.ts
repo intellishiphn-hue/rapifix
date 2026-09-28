@@ -38,7 +38,7 @@ export { voidSale } from "./callable/voidSale";
 // Carwash: menú, cola, cobros, lealtad y membresías
 export {
   saveCarwashService, reorderCarwashServices, seedCarwashMenu, saveCarwashPlan, carwashLookup, saveWash, linkWashCustomer, setWashStatus,
-  assignWasher, cancelWash, chargeWash, sellMembership, cancelMembership, getWashPayLink, adjustLoyaltyStamps,
+  assignWasher, cancelWash, chargeWash, sellMembership, cancelMembership, getWashPayLink, adjustLoyaltyStamps, fixWashPlate,
 } from "./callable/carwash";
 export { onCarwashWashWritten } from "./triggers/carwash";
 // Comprobantes de transferencia/depósito que sube el cliente desde su link

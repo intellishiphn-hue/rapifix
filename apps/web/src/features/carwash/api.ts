@@ -6,7 +6,8 @@ import {
   type ChargeWashInput, type LinkWashCustomerInput, type LinkWashCustomerResult, type SaveCarwashPlanInput, type SaveCarwashServiceInput,
   type SaveWashInput, type SaveWashResult, type SellMembershipInput, type SetWashStatusInput, type Wash,
   type AdjustLoyaltyStampsInput, type AdjustLoyaltyStampsResult, type WashPayLinkResult,
-  loyaltyWelcomeFor,
+  type FixWashPlateInput, type FixWashPlateResult,
+  isPlaceholderPlate, loyaltyWelcomeFor,
 } from "@rapifix/shared";
 import { callable, db, TENANT_ID } from "@/lib/firebase";
 import { useDocData, useQueryData } from "@/lib/firestore/hooks";
@@ -28,6 +29,7 @@ export const sellMembership = callable<SellMembershipInput, { membershipId: stri
 export const cancelMembership = callable<{ membershipId: string; reason: string }, { ok: boolean }>("cancelMembership");
 export const getWashPayLink = callable<{ washId: string }, WashPayLinkResult>("getWashPayLink");
 export const adjustLoyaltyStamps = callable<AdjustLoyaltyStampsInput, AdjustLoyaltyStampsResult>("adjustLoyaltyStamps");
+export const fixWashPlate = callable<FixWashPlateInput, FixWashPlateResult>("fixWashPlate");
 
 /** Link público del lavado (ver, pagar con tarjeta o subir comprobante) en el dominio actual. */
 export const washPayUrl = (token: string) => `${window.location.origin}/lavado/${token}`;
@@ -95,8 +97,10 @@ export function useWash(id: string | undefined) {
   return useDocData<Wash>(id ? doc(washesCol(), id) : null, `wash-${id}`);
 }
 
+/** Tarjeta de lealtad de la placa (ninguna si la placa es un marcador como "PENDIENTE"). */
 export function useLoyalty(plate: string | undefined) {
-  return useDocData<CarwashLoyalty>(plate ? doc(db, carwashCol.loyalty(TENANT_ID), plate) : null, `carwash-loyalty-${plate}`);
+  const real = !!plate && !isPlaceholderPlate(plate);
+  return useDocData<CarwashLoyalty>(real ? doc(db, carwashCol.loyalty(TENANT_ID), plate) : null, `carwash-loyalty-${plate}`);
 }
 
 /**
@@ -108,11 +112,16 @@ export function loyaltyView(card: CarwashLoyalty | null | undefined, cw: { loyal
   return { count: Math.min(Math.max(0, cw.loyaltyEvery - 1), (card?.count ?? 0) + gift), gift, rewardsAvailable: card?.rewardsAvailable ?? 0 };
 }
 
+/**
+ * Sellos para mostrar de una placa. placeholder = la placa es un marcador ("PENDIENTE"...):
+ * no hay tarjeta ni sellos de regalo que enseñar.
+ */
 export function useLoyaltyView(plate: string | undefined) {
   const loyalty = useLoyalty(plate);
   const { settings } = useCarwashSettings();
-  const view = loyaltyView(loyalty.data, settings);
-  return { ...view, card: loyalty.data, loading: loyalty.loading, every: settings.loyaltyEvery };
+  const placeholder = !!plate && isPlaceholderPlate(plate);
+  const view = placeholder ? { count: 0, gift: 0, rewardsAvailable: 0 } : loyaltyView(loyalty.data, settings);
+  return { ...view, placeholder, card: placeholder ? null : loyalty.data, loading: loyalty.loading, every: settings.loyaltyEvery };
 }
 
 // ---------------- Membresías ----------------
@@ -148,7 +157,7 @@ export function useCarwashFor(opts: { customerId?: string; vehicleId?: string; p
   const on = opts.enabled !== false;
   const field = opts.customerId ? "customerId" : "vehicleId";
   const value = opts.customerId ?? opts.vehicleId ?? "";
-  const plates = useMemo(() => [...new Set(opts.plates.filter(Boolean))].sort().slice(0, 30), [opts.plates]);
+  const plates = useMemo(() => [...new Set(opts.plates.filter((p) => p && !isPlaceholderPlate(p)))].sort().slice(0, 30), [opts.plates]);
   const pk = plates.join(",");
   const base = on && value ? `${field}:${value}` : "";
   const hasPlates = on && plates.length > 0;
@@ -174,7 +183,8 @@ export function useCarwashFor(opts: { customerId?: string; vehicleId?: string; p
     const filtered = opts.vehicleId && !opts.customerId ? all.filter((w) => w.vehicleId === opts.vehicleId || plates.includes(w.plate)) : all;
     return filtered.sort((a, b) => (tsMs(b.createdAt) - tsMs(a.createdAt)));
   }, [w1.data, w2.data, opts.vehicleId, opts.customerId, plates]);
-  const loyalty = useMemo(() => byId(l1.data, l2.data).sort((a, b) => tsMs(b.lastWashAt) - tsMs(a.lastWashAt)), [l1.data, l2.data]);
+  // Las tarjetas de marcadores ("PENDIENTE"...) de antes no son del cliente: se ocultan
+  const loyalty = useMemo(() => byId(l1.data, l2.data).filter((l) => !isPlaceholderPlate(l.id)).sort((a, b) => tsMs(b.lastWashAt) - tsMs(a.lastWashAt)), [l1.data, l2.data]);
   const memberships = useMemo(() => byId(m1.data, m2.data), [m1.data, m2.data]);
   const loading = w1.loading || w2.loading || l1.loading || l2.loading || m1.loading || m2.loading;
   const error = w1.error ?? w2.error ?? l1.error ?? l2.error ?? m1.error ?? m2.error;

@@ -1,7 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  carwashCol, carwashSettingsFrom, catalogCol, clampStartStamps, col, membershipWindow, PUBLIC_WASHES,
+  carwashCol, carwashSettingsFrom, isPlaceholderPlate, catalogCol, clampStartStamps, col, membershipWindow, PUBLIC_WASHES,
   type CarwashMembership, type CarwashSettings, type MembershipStatus, type PublicProof, type PublicWash, type WashItem, DEFAULT_SETTINGS } from "@rapifix/shared";
 import { db } from "./admin";
 import { toMs } from "./carwash";
@@ -43,12 +43,14 @@ export async function buildPublicWash(tid: string, washId: string): Promise<stri
     const token = w.get("payToken") as string | undefined;
     if (!token) return null;
     const plate = String(w.get("plate") ?? "");
+    // Sin placa real no hay tarjeta de lealtad que mostrar
+    const hasCard = !!plate && !isPlaceholderPlate(plate);
     const membershipId = w.get("membershipId") as string | null;
     const [general, carwash, roki, loyalty, proofs, membership] = await Promise.all([
       tx.get(db.doc(`${col.settings(tid)}/general`)),
       tx.get(db.doc(`${col.settings(tid)}/carwash`)),
       tx.get(db.doc(`${catalogCol.privateConfig(tid)}/roki`)),
-      plate ? tx.get(db.doc(`${carwashCol.loyalty(tid)}/${plate}`)) : Promise.resolve(null),
+      hasCard ? tx.get(db.doc(`${carwashCol.loyalty(tid)}/${plate}`)) : Promise.resolve(null),
       tx.get(db.collection(catalogCol.paymentProofs(tid)).where("washId", "==", washId).limit(30)),
       membershipId ? tx.get(db.doc(`${carwashCol.memberships(tid)}/${membershipId}`)) : Promise.resolve(null),
     ]);
@@ -99,7 +101,7 @@ export async function buildPublicWash(tid: string, washId: string): Promise<stri
       paid,
       balance: paid || status === "cancelled" ? 0 : total,
       createdAt: (w.get("createdAt") as Timestamp | null) ?? null,
-      loyalty: cw.loyaltyEvery > 0
+      loyalty: cw.loyaltyEvery > 0 && hasCard
         ? {
             count: Number(loyalty?.get("count") ?? 0),
             every: cw.loyaltyEvery,

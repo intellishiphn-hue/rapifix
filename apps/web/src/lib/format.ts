@@ -1,4 +1,4 @@
-import type { TimestampLike } from "@rapifix/shared";
+import { isPlaceholderPlate, type TimestampLike } from "@rapifix/shared";
 
 export function toDate(value: TimestampLike | Date | null | undefined): Date | null {
   if (!value) return null;
@@ -33,6 +33,8 @@ export const formatKm = (km: number) => `${new Intl.NumberFormat("es-HN").format
 
 /** ABC123 -> ABC-123 para mostrar */
 export function formatPlate(plate: string): string {
+  // "PENDIENTE", "SIN PLACA", "TEMP2"...: se muestra tal cual (sin guion)
+  if (isPlaceholderPlate(plate)) return plate;
   const m = /^([A-Z]+)(\d+)$/.exec(plate);
   return m ? `${m[1]}-${m[2]}` : plate;
 }

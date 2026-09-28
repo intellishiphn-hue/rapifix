@@ -39,6 +39,7 @@ export function CarwashCustomerHistory({ customerId, vehicleId, plates }: { cust
   const active = memberships.filter((x) => x.v.status === "active");
   const lastInactive = !active.length ? memberships[0] : undefined;
   const every = settings.loyaltyEvery;
+  const startStamps = settings.loyaltyStartStamps;
   const valid = cw.washes.filter((w) => w.status !== "cancelled");
 
   if (!cw.washes.length && !cw.loyalty.length && !memberships.length) {
@@ -75,24 +76,28 @@ export function CarwashCustomerHistory({ customerId, vehicleId, plates }: { cust
         <div className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tarjeta de lealtad</h4>
           <div className="grid gap-2 lg:grid-cols-2">
-            {cw.loyalty.map((l) => (
+            {cw.loyalty.map((l) => {
+              const gift = l.welcomePending === true ? Math.min(every - 1, startStamps) : 0;
+              const shown = Math.min(every - 1, (l.count ?? 0) + gift);
+              return (
               <div key={l.id} className="rounded-xl border border-slate-200 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <PlateTag plate={l.id} />
-                  <span className="tabular text-sm font-semibold text-slate-800">{l.count ?? 0}/{every} sellos</span>
+                  <span className="tabular text-sm font-semibold text-slate-800">{shown}/{every} sellos{gift > 0 ? ` (${gift} de regalo)` : ""}</span>
                   {(l.rewardsAvailable ?? 0) > 0 && (
                     <Badge tone="blue"><Gift className="h-3 w-3" /> {l.rewardsAvailable === 1 ? "1 premio disponible" : `${l.rewardsAvailable} premios disponibles`}</Badge>
                   )}
                   <span className="ml-auto"><AdjustStampsButton loyalty={l} every={every} /></span>
                 </div>
-                <div className="mt-2"><Stamps count={l.count ?? 0} every={every} /></div>
+                <div className="mt-2"><Stamps count={shown} every={every} gift={gift} /></div>
                 <div className="mt-1.5 text-xs text-slate-500">
                   {l.totalWashes ?? 0} visita{l.totalWashes === 1 ? "" : "s"}{l.rewardsUsed ? ` · ${l.rewardsUsed} premio${l.rewardsUsed === 1 ? "" : "s"} usado${l.rewardsUsed === 1 ? "" : "s"}` : ""}
                   {l.lastWashAt ? ` · último ${formatDate(l.lastWashAt)}` : ""}
                   {l.welcomeStamps ? ` · arrancó con ${l.welcomeStamps} de regalo` : ""}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

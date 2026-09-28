@@ -18,7 +18,7 @@ import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
 import { CustomerPicker } from "@/features/vehicles/CustomerPicker";
 import { useCustomerVehicles } from "@/features/vehicles/api";
 import { PendingProofsPanel } from "@/features/payments/proofs";
-import { assignWasher, cancelWash, ensureWashPayUrl, linkWashCustomer, setWashStatus, useCarwashSettings, useLoyalty, useWashers } from "./api";
+import { assignWasher, cancelWash, ensureWashPayUrl, linkWashCustomer, setWashStatus, useCarwashSettings, useLoyalty, useLoyaltyView, useWashers } from "./api";
 import { AdjustStampsButton } from "./LoyaltyAdjust";
 import { Stamps } from "./RegisterWashDialog";
 import { formatMinutes, msOf, STATUS_STYLE } from "./ui";
@@ -84,10 +84,9 @@ export function useWashPayUrl(w: Wash | null) {
 export function useReadyMessage(w: Wash | null, link: string) {
   const { settings: general } = useSettings();
   const { settings } = useCarwashSettings();
-  const loyalty = useLoyalty(w?.plate);
+  const lv = useLoyaltyView(w?.plate);
   if (!w) return "";
-  const l = loyalty.data;
-  const sellos = settings.loyaltyEvery > 0 && l ? loyaltyText(l.count ?? 0, settings.loyaltyEvery, l.rewardsAvailable ?? 0) : "";
+  const sellos = settings.loyaltyEvery > 0 && (lv.card || lv.gift > 0) ? loyaltyText(lv.count, settings.loyaltyEvery, lv.rewardsAvailable) : "";
   return renderTemplate(carwashReadyBody(isSettled(w)), {
     cliente: w.customerName || "",
     placa: formatPlate(w.plate),
@@ -102,16 +101,16 @@ export function WhatsAppReadyDialog({ wash, onClose }: { wash: Wash | null; onCl
   const pay = useWashPayUrl(wash);
   const text = useReadyMessage(wash, pay.url);
   const { settings } = useCarwashSettings();
-  const loyalty = useLoyalty(wash?.plate);
+  const lv = useLoyaltyView(wash?.plate);
   if (!wash) return null;
   const templateKey = isSettled(wash) ? "carwashReadyPaid" : "carwashReady";
   return (
     <Dialog open onClose={onClose} size="md" title="Avisar por WhatsApp" description={`${wash.code} · ${formatPlate(wash.plate)} · ${wash.customerName}`}>
       <div className="space-y-4">
-        {settings.loyaltyEvery > 0 && loyalty.data && (
+        {settings.loyaltyEvery > 0 && (lv.card || lv.gift > 0) && (
           <div className="rounded-xl bg-slate-50 p-3">
-            <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Gift className="h-4 w-4 text-violet-600" /> Tarjeta de lealtad: {loyalty.data.count ?? 0} de {settings.loyaltyEvery}</div>
-            <Stamps count={loyalty.data.count ?? 0} every={settings.loyaltyEvery} />
+            <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-slate-800"><Gift className="h-4 w-4 text-violet-600" /> Tarjeta de lealtad: {lv.count} de {settings.loyaltyEvery}{lv.gift > 0 && <span className="font-normal text-violet-700">(incluye {lv.gift} de regalo)</span>}</div>
+            <Stamps count={lv.count} every={settings.loyaltyEvery} gift={lv.gift} />
           </div>
         )}
         {templateMissingLink(templateKey) && (
@@ -222,6 +221,7 @@ export function WashDetailDialog({
   const [copying, setCopying] = useState(false);
   const { settings: cw } = useCarwashSettings();
   const loyalty = useLoyalty(wash?.plate);
+  const lv = useLoyaltyView(wash?.plate);
   useEffect(() => setLinking(false), [wash?.id]);
   if (!wash) return null;
   const w = wash;
@@ -328,16 +328,17 @@ export function WashDetailDialog({
 
         {needsCharge(w) && <PendingProofsPanel washId={w.id} washTotal={w.total} />}
 
-        {cw.loyaltyEvery > 0 && loyalty.data && (
+        {cw.loyaltyEvery > 0 && (loyalty.data || lv.gift > 0) && (
           <div className="rounded-xl border border-slate-200 p-3">
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 font-semibold text-slate-800">
-                <Gift className="h-4 w-4 text-violet-600" /> Tarjeta de lealtad: {loyalty.data.count ?? 0} de {cw.loyaltyEvery}
-                {(loyalty.data.rewardsAvailable ?? 0) > 0 && <Badge tone="blue">{loyalty.data.rewardsAvailable} gratis</Badge>}
+                <Gift className="h-4 w-4 text-violet-600" /> Tarjeta de lealtad: {lv.count} de {cw.loyaltyEvery}
+                {lv.gift > 0 && <span className="text-sm font-normal text-violet-700">(incluye {lv.gift} de regalo)</span>}
+                {lv.rewardsAvailable > 0 && <Badge tone="blue">{lv.rewardsAvailable} gratis</Badge>}
               </span>
-              <AdjustStampsButton loyalty={loyalty.data} every={cw.loyaltyEvery} />
+              {loyalty.data && <AdjustStampsButton loyalty={loyalty.data} every={cw.loyaltyEvery} />}
             </div>
-            <Stamps count={loyalty.data.count ?? 0} every={cw.loyaltyEvery} />
+            <Stamps count={lv.count} every={cw.loyaltyEvery} gift={lv.gift} />
           </div>
         )}
 

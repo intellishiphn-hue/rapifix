@@ -459,7 +459,7 @@ function LookupSummary({ r, every }: { r: CarwashLookupResult; every: number }) 
           </span>
         )}
       </div>
-      {every > 0 && <Stamps count={r.loyalty.count} every={every} />}
+      {every > 0 && <Stamps count={Math.min(every - 1, r.loyalty.count + (r.loyalty.isNew ? r.loyalty.startStamps : 0))} every={every} gift={r.loyalty.isNew ? r.loyalty.startStamps : 0} />}
       {every > 0 && r.loyalty.isNew && r.loyalty.startStamps > 0 && (
         <p className="flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1.5 text-sm font-medium text-violet-800">
           <Gift className="h-4 w-4 shrink-0" /> Tarjeta nueva: arranca con {r.loyalty.startStamps} sello{r.loyalty.startStamps === 1 ? "" : "s"} de regalo
@@ -486,12 +486,13 @@ function LookupSummary({ r, every }: { r: CarwashLookupResult; every: number }) 
 }
 
 /** Sellos de la tarjeta de lealtad (círculos). */
-export function Stamps({ count, every }: { count: number; every: number }) {
+export function Stamps({ count, every, gift = 0 }: { count: number; every: number; gift?: number }) {
   if (!(every > 0) || every > 20) return null;
   return (
     <div className="flex flex-wrap gap-1" aria-label={`${count} de ${every} sellos`}>
       {Array.from({ length: every }, (_, i) => (
-        <span key={i} className={cn("flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold", i < count ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 text-slate-300")}>
+        <span key={i} className={cn("flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold", i < gift ? "border-violet-500 bg-violet-500 text-white" : i < count ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 text-slate-300")}
+          title={i < gift ? "Sello de regalo" : undefined}>
           {i === every - 1 ? <Gift className="h-3 w-3" /> : i < count ? <Check className="h-3 w-3" /> : null}
         </span>
       ))}

@@ -6,6 +6,7 @@ import {
   type ChargeWashInput, type LinkWashCustomerInput, type LinkWashCustomerResult, type SaveCarwashPlanInput, type SaveCarwashServiceInput,
   type SaveWashInput, type SaveWashResult, type SellMembershipInput, type SetWashStatusInput, type Wash,
   type AdjustLoyaltyStampsInput, type AdjustLoyaltyStampsResult, type WashPayLinkResult,
+  loyaltyWelcomeFor,
 } from "@rapifix/shared";
 import { callable, db, TENANT_ID } from "@/lib/firebase";
 import { useDocData, useQueryData } from "@/lib/firestore/hooks";
@@ -96,6 +97,22 @@ export function useWash(id: string | undefined) {
 
 export function useLoyalty(plate: string | undefined) {
   return useDocData<CarwashLoyalty>(plate ? doc(db, carwashCol.loyalty(TENANT_ID), plate) : null, `carwash-loyalty-${plate}`);
+}
+
+/**
+ * Sellos que se muestran: los de la tarjeta más los de regalo que recibe la tarjeta nueva.
+ * Los de regalo se guardan al cobrar el primer lavado, pero se enseñan desde que se registra el carro.
+ */
+export function loyaltyView(card: CarwashLoyalty | null | undefined, cw: { loyaltyEvery: number; loyaltyStartStamps: number }) {
+  const gift = loyaltyWelcomeFor({ exists: !!card, welcomePending: card?.welcomePending }, cw);
+  return { count: Math.min(Math.max(0, cw.loyaltyEvery - 1), (card?.count ?? 0) + gift), gift, rewardsAvailable: card?.rewardsAvailable ?? 0 };
+}
+
+export function useLoyaltyView(plate: string | undefined) {
+  const loyalty = useLoyalty(plate);
+  const { settings } = useCarwashSettings();
+  const view = loyaltyView(loyalty.data, settings);
+  return { ...view, card: loyalty.data, loading: loyalty.loading, every: settings.loyaltyEvery };
 }
 
 // ---------------- Membresías ----------------

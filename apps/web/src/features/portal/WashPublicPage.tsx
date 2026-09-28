@@ -152,22 +152,27 @@ function WashView({ wash: w, token }: { wash: PublicWash; token: string }) {
       {!cancelled && <WashPaySection wash={w} token={token} />}
 
       {/* Lealtad */}
-      {w.loyalty && (
+      {w.loyalty && (() => {
+        // Los sellos de regalo de la tarjeta nueva se muestran desde ya (se guardan al pagar el primer lavado)
+        const gift = w.loyalty.pendingWelcome;
+        const count = Math.min(w.loyalty.every - 1, w.loyalty.count + gift);
+        return (
         <section className={card}>
           <h2 className="flex items-center gap-2 font-bold"><Gift className="h-5 w-5 text-violet-600" /> Tarjeta de lealtad</h2>
-          <div className="mt-3 flex flex-wrap gap-1.5" aria-label={`${w.loyalty.count} de ${w.loyalty.every} sellos`}>
+          <div className="mt-3 flex flex-wrap gap-1.5" aria-label={`${count} de ${w.loyalty.every} sellos`}>
             {w.loyalty.every <= 20 && Array.from({ length: w.loyalty.every }, (_, i) => (
-              <span key={i} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2", i < w.loyalty!.count ? "border-violet-600 bg-violet-600 text-white" : "border-slate-200 text-slate-300")}>
-                {i === w.loyalty!.every - 1 ? <Gift className="h-3.5 w-3.5" /> : i < w.loyalty!.count ? <Check className="h-3.5 w-3.5" /> : null}
+              <span key={i} className={cn("flex h-7 w-7 items-center justify-center rounded-full border-2", i < count ? "border-violet-600 bg-violet-600 text-white" : "border-slate-200 text-slate-300")}>
+                {i === w.loyalty!.every - 1 ? <Gift className="h-3.5 w-3.5" /> : i < count ? <Check className="h-3.5 w-3.5" /> : null}
               </span>
             ))}
           </div>
-          <p className="mt-3 text-sm font-medium text-slate-800">{loyaltyProgressText(w.loyalty.count, w.loyalty.every, w.loyalty.rewardsAvailable)}</p>
-          {w.loyalty.pendingWelcome > 0 && (
-            <p className="mt-2 rounded-xl bg-violet-50 p-3 text-sm text-violet-800">Su tarjeta es nueva: arranca con {w.loyalty.pendingWelcome} sello{w.loyalty.pendingWelcome === 1 ? "" : "s"} de regalo con su primer lavado pagado.</p>
+          <p className="mt-3 text-sm font-medium text-slate-800">{loyaltyProgressText(count, w.loyalty.every, w.loyalty.rewardsAvailable)}</p>
+          {gift > 0 && (
+            <p className="mt-2 rounded-xl bg-violet-50 p-3 text-sm text-violet-800">¡Bienvenido! Le regalamos {gift} sello{gift === 1 ? "" : "s"} para empezar. Con cada lavado pagado suma uno más.</p>
           )}
         </section>
-      )}
+        );
+      })()}
 
       {/* Membresía */}
       {w.membership && (

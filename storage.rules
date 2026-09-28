@@ -10,11 +10,12 @@ service firebase.storage {
     function hasRole(tid, roles) { return inTenant(tid) && request.auth.token.role in roles; }
     function isImage() { return request.resource.contentType.matches('image/(jpeg|png|webp)'); }
     function maxMB(mb) { return request.resource.size < mb * 1024 * 1024; }
+    // Un archivo ya subido no se reemplaza: "create" solo cuando todavía no existe
 
     // Fotos de vehículos
     match /tenants/{tid}/vehicles/{vehicleId}/photos/{fileName} {
       allow read: if inTenant(tid);
-      allow create: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']) && isImage() && maxMB(10);
+      allow create: if resource == null && hasRole(tid, ['admin', 'manager', 'reception', 'seller']) && isImage() && maxMB(10);
       allow update: if false;
       allow delete: if hasRole(tid, ['admin', 'manager']);
     }
@@ -25,7 +26,7 @@ service firebase.storage {
         return firestore.get(/databases/(default)/documents/tenants/$(tid)/workOrders/$(orderId)).data;
       }
       allow read: if inTenant(tid);
-      allow create: if isImage() && maxMB(10) && (
+      allow create: if resource == null && isImage() && maxMB(10) && (
         hasRole(tid, ['admin', 'manager', 'reception'])
         || (hasRole(tid, ['technician']) && request.auth.uid in order().technicianIds)
       );
@@ -42,7 +43,7 @@ service firebase.storage {
     // Comprobantes de gastos (foto o PDF): solo administración y gerencia
     match /tenants/{tid}/expenses/{fileName} {
       allow read: if hasRole(tid, ['admin', 'manager']);
-      allow create: if hasRole(tid, ['admin', 'manager']) && maxMB(10)
+      allow create: if resource == null && hasRole(tid, ['admin', 'manager']) && maxMB(10)
         && (isImage() || request.resource.contentType == 'application/pdf');
       allow update, delete: if false;
     }
@@ -50,7 +51,7 @@ service firebase.storage {
     // Comprobantes de pago (transferencias, depósitos, vouchers de tarjeta): caja
     match /tenants/{tid}/paymentReceipts/{fileName} {
       allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
-      allow create: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']) && maxMB(10)
+      allow create: if resource == null && hasRole(tid, ['admin', 'manager', 'reception', 'seller']) && maxMB(10)
         && (isImage() || request.resource.contentType == 'application/pdf');
       allow update, delete: if false;
     }

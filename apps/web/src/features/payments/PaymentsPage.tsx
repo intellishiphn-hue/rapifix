@@ -29,8 +29,8 @@ export function PaymentsPage() {
           {RANGES.map(([r, l]) => <button key={r} onClick={() => setRange(r)} className={cn("rounded-lg px-3 py-1.5 text-sm font-medium", range === r ? "bg-white shadow-sm" : "text-slate-600")}>{l}</button>)}
         </div>
       } />
-      <div className="mb-5 grid gap-3 sm:grid-cols-5">
-        <Card className="p-4 sm:col-span-1"><div className="text-xs text-slate-500">Total cobrado</div><div className="tabular text-2xl font-bold">{formatMoney(total)}</div></Card>
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+        <Card className="col-span-2 p-4 sm:col-span-1"><div className="text-xs text-slate-500">Total cobrado</div><div className="tabular text-2xl font-bold">{formatMoney(total)}</div></Card>
         {byMethod.map(({ m, total: t }) => <Card key={m} className="p-4"><div className="text-xs text-slate-500">{PAYMENT_METHOD_LABELS[m]}</div><div className="tabular text-lg font-semibold">{formatMoney(t)}</div></Card>)}
       </div>
       <Card>

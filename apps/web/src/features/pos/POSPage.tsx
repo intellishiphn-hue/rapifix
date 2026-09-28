@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Minus, Package, Plus, Printer, Search, ShoppingCart, Trash2, Wrench, X } from "lucide-react";
 import {
-  computeQuote, formatMoney, PAYMENT_METHOD_LABELS, MANUAL_PAYMENT_METHODS,
+  computeQuote, formatMoney, PAYMENT_METHOD_LABELS, MANUAL_PAYMENT_METHODS, methodNeedsBank,
   type Customer, type ManualPaymentMethod, type Product, type SaleItemKind, type Service,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
@@ -19,10 +19,11 @@ import { useSettings } from "@/features/settings/api";
 import { CustomerPicker } from "@/features/vehicles/CustomerPicker";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { searchCatalog } from "@/features/catalog/api";
+import { ReceiptUpload } from "@/features/payments/PaymentDetailFields";
 import { createSale } from "@/features/payments/api";
 
 interface CartLine { id: string; kind: SaleItemKind; refId: string | null; description: string; qty: number; unitPrice: number; discount: number; taxable: boolean; stock?: number }
-interface PayLine { id: string; method: ManualPaymentMethod; amount: number; reference: string }
+interface PayLine { id: string; method: ManualPaymentMethod; amount: number; reference: string; bank: string; receiptPath: string | null }
 
 export function POSPage() {
   const { settings } = useSettings();
@@ -31,7 +32,7 @@ export function POSPage() {
   const [results, setResults] = useState<{ products: Product[]; services: Service[] }>({ products: [], services: [] });
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [payments, setPayments] = useState<PayLine[]>([{ id: newId(), method: "cash", amount: 0, reference: "" }]);
+  const [payments, setPayments] = useState<PayLine[]>([{ id: newId(), method: "cash", amount: 0, reference: "", bank: "", receiptPath: null }]);
   const [received, setReceived] = useState(0);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState<{ saleId: string; code: string; balance: number } | null>(null);
@@ -78,7 +79,7 @@ export function POSPage() {
   const reset = () => {
     setCart([]);
     setCustomer(null);
-    setPayments([{ id: newId(), method: "cash", amount: 0, reference: "" }]);
+    setPayments([{ id: newId(), method: "cash", amount: 0, reference: "", bank: "", receiptPath: null }]);
     setReceived(0);
     setPayTouched(false);
     setDone(null);
@@ -91,12 +92,21 @@ export function POSPage() {
     if (over) return toast.error(`No hay suficiente existencia de ${over.description} (hay ${over.stock})`);
     if (paid > total) return toast.error("Los pagos superan el total");
     if (paid < total && !customer) return toast.error("Para dejar saldo pendiente, seleccione el cliente");
+    const missingBank = payments.find((p) => p.amount > 0 && methodNeedsBank(p.method) && !p.bank.trim());
+    if (missingBank) return toast.error(`Indique el banco del pago por ${PAYMENT_METHOD_LABELS[missingBank.method].toLowerCase()}`);
     setSaving(true);
     try {
       const r = await createSale({
         customerId: customer?.id ?? null,
         items: cart.map(({ stock: _s, ...l }) => ({ ...l, description: l.description.trim() })),
-        payments: payments.filter((p) => p.amount > 0).map((p) => ({ amount: p.amount, method: p.method, reference: p.reference.trim() })),
+        payments: payments.filter((p) => p.amount > 0).map((p) => {
+          const cash = p.method === "cash";
+          return {
+            amount: p.amount, method: p.method, reference: cash ? "" : p.reference.trim(),
+            ...(!cash && p.bank.trim() ? { bank: p.bank.trim() } : {}),
+            ...(!cash && p.receiptPath ? { receiptPath: p.receiptPath } : {}),
+          };
+        }),
       });
       setDone(r);
       toast.success(`Venta ${r.code} registrada`);
@@ -179,18 +189,37 @@ export function POSPage() {
             <div className="space-y-2">
               <div className="text-[13px] font-medium text-slate-700">Pago</div>
               {payments.map((p) => (
-                <div key={p.id} className="flex gap-2">
+                <div key={p.id} className="space-y-1.5">
+                <div className="flex gap-2">
                   <div className="w-36 shrink-0">
                     <Select value={p.method} onChange={(e) => setPayments(payments.map((x) => (x.id === p.id ? { ...x, method: e.target.value as ManualPaymentMethod } : x)))}>
                       {MANUAL_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>)}
                     </Select>
                   </div>
                   <MoneyInput value={p.amount} onChange={(v) => { setPayTouched(true); setPayments(payments.map((x) => (x.id === p.id ? { ...x, amount: v } : x))); }} className="min-w-0 flex-1" placeholder="0.00" />
-                  {p.method !== "cash" && <Input value={p.reference} onChange={(e) => setPayments(payments.map((x) => (x.id === p.id ? { ...x, reference: e.target.value } : x)))} placeholder="Ref." className="w-24" />}
                   {payments.length > 1 && <button onClick={() => setPayments(payments.filter((x) => x.id !== p.id))} className="p-2 text-slate-400 hover:text-red-600" aria-label="Quitar pago"><Trash2 className="h-4 w-4" /></button>}
                 </div>
+                {p.method !== "cash" && (() => {
+                  const upd = (patch: Partial<PayLine>) => setPayments(payments.map((x) => (x.id === p.id ? { ...x, ...patch } : x)));
+                  const opts = methodNeedsBank(p.method) ? settings.bankAccounts ?? [] : p.method === "card" ? settings.cardTerminals ?? [] : [];
+                  return (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 p-2">
+                      {(methodNeedsBank(p.method) || p.method === "card") && (
+                        <div className="w-36 shrink-0">
+                          <Select value={p.bank} onChange={(e) => upd({ bank: e.target.value })} aria-label={p.method === "card" ? "Terminal" : "Banco"}>
+                            <option value="">{p.method === "card" ? "Terminal…" : "Banco…"}</option>
+                            {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+                          </Select>
+                        </div>
+                      )}
+                      <Input value={p.reference} onChange={(e) => upd({ reference: e.target.value })} placeholder={p.method === "card" ? "No. autorización" : "No. referencia"} className="min-w-0 flex-1" maxLength={80} />
+                      <ReceiptUpload compact value={p.receiptPath} onChange={(receiptPath) => upd({ receiptPath })} />
+                    </div>
+                  );
+                })()}
+                </div>
               ))}
-              {payments.length < 3 && <button onClick={() => { setPayTouched(true); setPayments([...payments, { id: newId(), method: "card", amount: Math.max(0, total - paid), reference: "" }]); }} className="text-xs font-semibold text-brand-700">+ Dividir pago</button>}
+              {payments.length < 3 && <button onClick={() => { setPayTouched(true); setPayments([...payments, { id: newId(), method: "card", amount: Math.max(0, total - paid), reference: "", bank: "", receiptPath: null }]); }} className="text-xs font-semibold text-brand-700">+ Dividir pago</button>}
               {cashPaid > 0 && (
                 <div className="flex items-center gap-2 text-sm"><span className="text-slate-600">Recibido en efectivo</span><MoneyInput value={received} onChange={setReceived} className="w-32" />{change > 0 && <b className="text-emerald-700">Cambio {formatMoney(change)}</b>}</div>
               )}

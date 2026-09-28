@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3, Boxes, CalendarDays, Car, ClipboardList, CreditCard, FileText, Globe, LayoutDashboard,
-  MessageCircle, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck, Users, Wrench, HardHat, CalendarClock, ClipboardPlus, HandCoins,
+  MessageCircle, Package, Receipt, Settings, ShieldCheck, ShoppingCart, Truck, Users, Wrench, HardHat, CalendarClock, ClipboardPlus, HandCoins, Landmark,
 } from "lucide-react";
 import type { Permission } from "@rapifix/shared";
 
@@ -39,6 +39,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { label: "Punto de venta", to: "/pos", icon: ShoppingCart, permission: "sales.create" },
       { label: "Pagos", to: "/pagos", icon: CreditCard, permission: "payments.read" },
+      { label: "Finanzas", to: "/finanzas", icon: Landmark, permission: "reports.financial" },
       { label: "Cuentas por cobrar", to: "/cuentas-por-cobrar", icon: HandCoins, permission: "payments.read" },
       { label: "Gastos", to: "/gastos", icon: Receipt, permission: "expenses.manage" },
       { label: "Reportes", to: "/reportes", icon: BarChart3, permission: "reports.view" },

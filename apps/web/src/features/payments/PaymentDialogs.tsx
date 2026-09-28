@@ -4,14 +4,15 @@ import { formatMoney, PAYMENT_METHOD_LABELS, MANUAL_PAYMENT_METHODS, type Paymen
 import { errorMessage } from "@/lib/errors";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Textarea } from "@/components/ui/Field";
+import { Field, Textarea } from "@/components/ui/Field";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { registerPayment, voidPayment } from "./api";
+import { detailError, EMPTY_DETAIL, PaymentDetailFields, type PaymentDetail } from "./PaymentDetailFields";
 
 export function PaymentDialog({ open, onClose, target, balance, title }: { open: boolean; onClose: (receiptId?: string) => void; target: { orderId?: string; saleId?: string }; balance: number; title: string }) {
   const [amount, setAmount] = useState(balance);
   const [method, setMethod] = useState<ManualPaymentMethod>("cash");
-  const [reference, setReference] = useState("");
+  const [detail, setDetail] = useState<PaymentDetail>(EMPTY_DETAIL);
   const [received, setReceived] = useState(0);
   const [saving, setSaving] = useState(false);
 
@@ -19,7 +20,7 @@ export function PaymentDialog({ open, onClose, target, balance, title }: { open:
     if (open) {
       setAmount(balance);
       setMethod("cash");
-      setReference("");
+      setDetail(EMPTY_DETAIL);
       setReceived(0);
     }
   }, [open, balance]);
@@ -29,9 +30,19 @@ export function PaymentDialog({ open, onClose, target, balance, title }: { open:
       toast.error(`El monto debe ser entre L 0.01 y ${formatMoney(balance)}`);
       return;
     }
+    const bad = detailError(method, detail);
+    if (bad) {
+      toast.error(bad);
+      return;
+    }
     setSaving(true);
     try {
-      const r = await registerPayment({ ...target, amount, method, reference: reference.trim() });
+      const cash = method === "cash";
+      const r = await registerPayment({
+        ...target, amount, method, reference: cash ? "" : detail.reference.trim(),
+        ...(!cash && detail.bank.trim() ? { bank: detail.bank.trim() } : {}),
+        ...(!cash && detail.receiptPath ? { receiptPath: detail.receiptPath } : {}),
+      });
       toast.success(`Pago ${r.code} registrado${r.balance > 0 ? `. Saldo: ${formatMoney(r.balance)}` : ". Cuenta saldada"}`);
       onClose(r.paymentId);
     } catch (err) {
@@ -48,7 +59,7 @@ export function PaymentDialog({ open, onClose, target, balance, title }: { open:
       <div className="space-y-4">
         <Field label="Monto" hint={amount < balance ? `Abono. Quedará un saldo de ${formatMoney(balance - amount)}` : "Pago total"}><MoneyInput value={amount} onChange={setAmount} /></Field>
         <Field label="Método">
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-3 gap-1.5">
             {MANUAL_PAYMENT_METHODS.map((m) => (
               <button key={m} type="button" onClick={() => setMethod(m)} className={`rounded-lg border px-2 py-2 text-xs font-semibold ${method === m ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"}`}>{PAYMENT_METHOD_LABELS[m]}</button>
             ))}
@@ -57,7 +68,7 @@ export function PaymentDialog({ open, onClose, target, balance, title }: { open:
         {method === "cash" ? (
           <Field label="Efectivo recibido" hint={change ? `Cambio: ${formatMoney(change)}` : "Opcional, para calcular el cambio"}><MoneyInput value={received} onChange={setReceived} /></Field>
         ) : (
-          <Field label="Referencia" hint="Número de transferencia, voucher, etc."><Input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={80} /></Field>
+          <PaymentDetailFields method={method} value={detail} onChange={setDetail} />
         )}
       </div>
     </Dialog>

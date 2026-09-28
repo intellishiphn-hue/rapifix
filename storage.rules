@@ -47,6 +47,14 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // Comprobantes de pago (transferencias, depósitos, vouchers de tarjeta): caja
+    match /tenants/{tid}/paymentReceipts/{fileName} {
+      allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+      allow create: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']) && maxMB(10)
+        && (isImage() || request.resource.contentType == 'application/pdf');
+      allow update, delete: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

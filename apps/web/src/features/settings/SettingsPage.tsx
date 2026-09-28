@@ -18,6 +18,7 @@ import { seedDemoOrders } from "@/features/work-orders/api";
 import { seedDemoCatalog } from "@/features/catalog/api";
 import { saveSettings, uploadLogo, useSettings } from "./api";
 import { OnlinePayCard } from "./OnlinePayCard";
+import { BanksCard } from "./BanksCard";
 
 export function SettingsPage() {
   const { user, can, role } = useAuth();
@@ -187,6 +188,8 @@ export function SettingsPage() {
               )}
             </div>
           </Card>
+
+          {(role === "admin" || role === "manager") && <BanksCard />}
 
           {(role === "admin" || role === "manager") && <OnlinePayCard isAdmin={role === "admin"} />}
 

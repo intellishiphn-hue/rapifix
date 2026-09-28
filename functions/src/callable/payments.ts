@@ -1,11 +1,12 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
-import { catalogCol, formatMoney, orderCol, PAYMENT_METHOD_LABELS, registerPaymentSchema, voidPaymentSchema, type Role } from "@rapifix/shared";
+import { catalogCol, formatMoney, orderCol, PAYMENT_METHOD_LABELS, registerPaymentSchema, voidPaymentSchema, attachPaymentReceiptSchema, type Role } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput, requireRole } from "../lib/guards";
 import { actorName } from "../lib/actors";
 import { pad, readCounter } from "../lib/counters";
+import { paymentExtras } from "../lib/paymentExtras";
 
 const CASHIERS: Role[] = ["admin", "manager", "reception", "seller"];
 
@@ -34,7 +35,7 @@ export const registerPayment = onCall({ region: REGION }, async (request) => {
     if (input.saleId) upd.status = total - newPaid <= 0 ? "paid" : "partial";
     tx.update(targetRef, upd);
     tx.set(payRef, {
-      number: counter.next, code, amount: input.amount, method: input.method, reference: input.reference, status: "valid", voidReason: "",
+      number: counter.next, code, amount: input.amount, method: input.method, reference: input.reference, ...paymentExtras(tid, input), status: "valid", voidReason: "",
       customerId: (t.get("customerId") as string | null) ?? null,
       customerName: (t.get("customer.fullName") as string) ?? (t.get("customerName") as string) ?? "Consumidor final",
       orderId: input.orderId ?? null, orderCode: input.orderId ? t.get("code") : null,
@@ -84,4 +85,21 @@ export const voidPayment = onCall({ region: REGION }, async (request) => {
     }
     return { ok: true };
   });
+});
+
+/** Agrega o reemplaza el banco/terminal y el comprobante de un pago válido. */
+export const attachPaymentReceipt = onCall({ region: REGION }, async (request) => {
+  const caller = requireRole(request, CASHIERS);
+  const input = parseInput(attachPaymentReceiptSchema, request.data);
+  const tid = caller.tid;
+  const payRef = db.doc(`${catalogCol.payments(tid)}/${input.paymentId}`);
+  const p = await payRef.get();
+  if (!p.exists) throw new HttpsError("not-found", "El pago no existe.");
+  if (p.get("status") === "voided") throw new HttpsError("failed-precondition", "El pago está anulado.");
+  const method = String(p.get("method"));
+  if (method === "cash" || method === "online") throw new HttpsError("failed-precondition", "Este tipo de pago no lleva comprobante bancario.");
+  const extras = paymentExtras(tid, { method, bank: input.bank ?? p.get("bank"), receiptPath: input.receiptPath ?? p.get("receiptPath") });
+  if ((method === "transfer" || method === "deposit") && !extras.bank) throw new HttpsError("invalid-argument", "Indique el banco o la cuenta.");
+  await payRef.update({ ...extras, receiptBy: caller.uid, receiptAt: FieldValue.serverTimestamp() });
+  return { ok: true };
 });

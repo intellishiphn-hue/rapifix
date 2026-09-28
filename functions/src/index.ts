@@ -18,7 +18,7 @@ export { saveQuote, sendQuote, newQuoteVersion, ensurePortal, recordQuoteDecisio
 export { respondToQuote, markQuoteViewed } from "./public/portal";
 // Fase 4: inventario, pagos y punto de venta
 export { registerInventoryMovement, consumeOrderPart } from "./callable/inventory";
-export { registerPayment, voidPayment } from "./callable/payments";
+export { registerPayment, voidPayment, attachPaymentReceipt } from "./callable/payments";
 export { createSale } from "./callable/sales";
 export { seedDemoCatalog } from "./callable/seedCatalog";
 // Pagos en línea con ROKI

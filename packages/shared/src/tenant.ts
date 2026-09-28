@@ -61,6 +61,10 @@ export const financeCol = {
   expenses: (tid: string) => `tenants/${tid}/expenses`,
 } as const;
 
+export const paymentStoragePath = {
+  receipt: (tid: string, fileId: string, ext: "jpg" | "png" | "webp" | "pdf") => `tenants/${tid}/paymentReceipts/${fileId}.${ext}`,
+} as const;
+
 export const financeStoragePath = {
   expenseReceipt: (tid: string, fileId: string, ext: "jpg" | "png" | "webp" | "pdf") => `tenants/${tid}/expenses/${fileId}.${ext}`,
 } as const;

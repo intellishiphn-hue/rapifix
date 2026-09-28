@@ -6,6 +6,7 @@ import { REGION } from "../lib/params";
 import { parseInput, requireRole } from "../lib/guards";
 import { actorName } from "../lib/actors";
 import { pad, readCounter } from "../lib/counters";
+import { paymentExtras } from "../lib/paymentExtras";
 
 /** Venta de mostrador: descuenta inventario y registra los pagos en una sola transacción. */
 export const createSale = onCall({ region: REGION }, async (request) => {
@@ -89,7 +90,7 @@ export const createSale = onCall({ region: REGION }, async (request) => {
         const ref = db.collection(catalogCol.payments(tid)).doc();
         paymentIds.push(ref.id);
         tx.set(ref, {
-          number: payCounter.next + i, code: `REC-${pad(payCounter.next + i)}`, amount: p.amount, method: p.method, reference: p.reference,
+          number: payCounter.next + i, code: `REC-${pad(payCounter.next + i)}`, amount: p.amount, method: p.method, reference: p.reference, ...paymentExtras(tid, p),
           status: "valid", voidReason: "", customerId: input.customerId ?? null, customerName,
           orderId: null, orderCode: null, saleId: saleRef.id, saleCode: code,
           receivedBy: caller.uid, receivedByName: name, at: FieldValue.serverTimestamp(),

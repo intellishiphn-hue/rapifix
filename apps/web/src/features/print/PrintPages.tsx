@@ -158,7 +158,7 @@ export function PrintReceiptPage() {
   return (
     <PrintShell settings={settings} title="Comprobante de pago" code={p.code} date={formatDate(p.at, true)}>
       {p.status === "voided" && <div className="rounded border-2 border-red-600 p-2 text-center text-lg font-extrabold text-red-600">ANULADO · {p.voidReason}</div>}
-      <KV rows={[["Recibido de", p.customerName], ["Concepto", p.orderCode ? `Orden de trabajo ${p.orderCode}` : p.saleCode ? `Venta ${p.saleCode}` : ""], ["Método", PAYMENT_METHOD_LABELS[p.method]], ["Referencia", p.reference], ["Recibido por", p.receivedByName]]} />
+      <KV rows={[["Recibido de", p.customerName], ["Concepto", p.orderCode ? `Orden de trabajo ${p.orderCode}` : p.saleCode ? `Venta ${p.saleCode}` : ""], ["Método", PAYMENT_METHOD_LABELS[p.method]], ...(p.bank ? [[p.method === "card" ? "Terminal" : "Banco", p.bank] as [string, string]] : []), [p.method === "card" ? "Autorización" : "Referencia", p.reference], ["Recibido por", p.receivedByName]]} />
       <div className="rounded-lg bg-slate-100 p-4 text-center">
         <div className="text-[11px] uppercase tracking-wide text-slate-500">Monto recibido</div>
         <div className="text-3xl font-extrabold">{formatMoney(p.amount)}</div>

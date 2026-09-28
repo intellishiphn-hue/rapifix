@@ -40,6 +40,7 @@ const ReceivablesPage = page(() => import("@/features/finance/ReceivablesPage"),
 const EmployeesPage = page(() => import("@/features/employees/EmployeesPage"), "EmployeesPage");
 const WhatsAppPage = page(() => import("@/features/whatsapp/WhatsAppPage"), "WhatsAppPage");
 const ReportsPage = page(() => import("@/features/reports/ReportsPage"), "ReportsPage");
+const FinancePage = page(() => import("@/features/finance-analytics/FinancePage"), "FinancePage");
 function page<K extends string>(loader: () => Promise<Record<K, ComponentType>>, key: K) {
   return lazy(() => loader().then((m) => ({ default: m[key] })));
 }
@@ -101,6 +102,7 @@ export const router = createBrowserRouter([
       { path: "cuentas-por-cobrar", element: <RequirePermission permission="payments.read"><S><ReceivablesPage /></S></RequirePermission> },
       { path: "empleados", element: <RequirePermission permission="employees.read"><S><EmployeesPage /></S></RequirePermission> },
       { path: "whatsapp", element: <RequirePermission permission="messages.read"><S><WhatsAppPage /></S></RequirePermission> },
+      { path: "finanzas", element: <RequirePermission permission="reports.financial"><S><FinancePage /></S></RequirePermission> },
       { path: "reportes", element: <RequirePermission permission="reports.view"><S><ReportsPage /></S></RequirePermission> },
       ...COMING_SOON.map((i) => ({ path: i.to.slice(1), element: <ComingSoonPage /> })),
       { path: "*", element: <Navigate to="/" replace /> },

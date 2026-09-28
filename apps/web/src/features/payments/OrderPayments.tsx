@@ -8,8 +8,37 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
-import { useOrderPayments } from "./api";
+import { attachPaymentReceipt, openPaymentReceipt, useOrderPayments } from "./api";
+import { ReceiptUpload } from "./PaymentDetailFields";
+import { toast } from "sonner";
+import { errorMessage } from "@/lib/errors";
+import { methodNeedsBank } from "@rapifix/shared";
 import { PaymentDialog, VoidPaymentDialog } from "./PaymentDialogs";
+
+/** Ver comprobante, o adjuntarlo después (el depósito a veces se confirma más tarde). */
+function ReceiptActions({ payment: p }: { payment: Payment }) {
+  const { role } = useAuth();
+  const cashier = !!role && ["admin", "manager", "reception", "seller"].includes(role);
+  if (p.method === "cash" || p.method === "online") return null;
+  if (p.receiptPath) {
+    return <Button size="sm" variant="ghost" onClick={() => void openPaymentReceipt(p.receiptPath!).catch((e) => toast.error(errorMessage(e)))}>Ver comprobante</Button>;
+  }
+  const attach = async (path: string | null) => {
+    if (!path) return;
+    try {
+      await attachPaymentReceipt({ paymentId: p.id, receiptPath: path });
+      toast.success("Comprobante adjuntado");
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  return (
+    <span className="flex items-center gap-2">
+      {methodNeedsBank(p.method) && <Badge tone="amber">Sin comprobante</Badge>}
+      {cashier && <ReceiptUpload compact value={null} onChange={(v) => void attach(v)} />}
+    </span>
+  );
+}
 
 export function PaymentList({ payments, canVoid, onVoid }: { payments: Payment[]; canVoid: boolean; onVoid: (p: Payment) => void }) {
   return (
@@ -18,8 +47,9 @@ export function PaymentList({ payments, canVoid, onVoid }: { payments: Payment[]
         <li key={p.id} className={cn("flex flex-wrap items-center gap-3 px-5 py-3", p.status === "voided" && "opacity-60")}>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 font-semibold">{p.code} {p.status === "voided" && <Badge tone="red">Anulado</Badge>}</div>
-            <div className="text-xs text-slate-500">{[p.orderCode ?? p.saleCode, p.customerName].filter(Boolean).join(" · ")} · {PAYMENT_METHOD_LABELS[p.method]}{p.reference ? ` · ${p.reference}` : ""} · {p.receivedByName} · {formatDate(p.at, true)}{p.voidReason ? ` · Motivo: ${p.voidReason}` : ""}</div>
+            <div className="text-xs text-slate-500">{[p.orderCode ?? p.saleCode, p.customerName].filter(Boolean).join(" · ")} · {PAYMENT_METHOD_LABELS[p.method]}{p.bank ? ` · ${p.bank}` : ""}{p.reference ? ` · ${p.reference}` : ""} · {p.receivedByName} · {formatDate(p.at, true)}{p.voidReason ? ` · Motivo: ${p.voidReason}` : ""}</div>
           </div>
+          {p.status === "valid" && <ReceiptActions payment={p} />}
           <span className={cn("tabular font-bold", p.status === "voided" && "line-through")}>{formatMoney(p.amount)}</span>
           <Link to={`/imprimir/recibo/${p.id}`} target="_blank"><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />} aria-label="Imprimir recibo" /></Link>
           {canVoid && p.status === "valid" && <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50" icon={<Ban className="h-4 w-4" />} onClick={() => onVoid(p)} aria-label="Anular" />}

@@ -135,6 +135,10 @@ export interface WorkshopSettings {
   oilChangeKm: number;
   /** Dominio propio (ej. rapifix.hn) cuando se conecte en Firebase Hosting */
   customDomain: string;
+  /** Cuentas/bancos donde reciben transferencias y depósitos (ej. "BAC · 7301") */
+  bankAccounts: string[];
+  /** Terminales POS para pagos con tarjeta (ej. "ROKI", "BAC") */
+  cardTerminals: string[];
   updatedAt?: TimestampLike;
   updatedBy?: string;
 }
@@ -159,6 +163,8 @@ export const DEFAULT_SETTINGS: WorkshopSettings = {
   avgKmPerMonth: 1500,
   oilChangeKm: 5000,
   customDomain: "",
+  bankAccounts: ["BAC Credomatic", "Banco Atlántida", "Ficohsa", "Banpaís", "Banco de Occidente", "Davivienda"],
+  cardTerminals: ["ROKI"],
 };
 
 export interface AuditLog {

@@ -121,15 +121,19 @@ export const consumePartSchema = z.object({
 });
 
 // ---------------- Pagos ----------------
-export const PAYMENT_METHODS = ["cash", "transfer", "card", "other", "online"] as const;
+export const PAYMENT_METHODS = ["cash", "card", "transfer", "deposit", "other", "online"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 /** Métodos que el personal registra a mano ("online" solo lo registra la pasarela). */
-export const MANUAL_PAYMENT_METHODS = ["cash", "transfer", "card", "other"] as const;
+export const MANUAL_PAYMENT_METHODS = ["cash", "card", "transfer", "deposit", "other"] as const;
+/** Métodos donde se indica el banco y se puede subir comprobante */
+export const BANK_METHODS: readonly PaymentMethod[] = ["transfer", "deposit"];
+export const methodNeedsBank = (m: string) => m === "transfer" || m === "deposit";
 export type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number];
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "Efectivo",
   transfer: "Transferencia",
-  card: "Tarjeta",
+  deposit: "Depósito bancario",
+  card: "Tarjeta (POS)",
   other: "Otro",
   online: "En línea (ROKI)",
 };
@@ -152,22 +156,38 @@ export interface Payment {
   receivedBy: string;
   receivedByName: string;
   at: TimestampLike;
+  /** Transferencia/depósito: cuenta o banco donde entró el dinero. Tarjeta: terminal POS usado */
+  bank?: string;
+  /** Comprobante (foto o PDF) en Storage */
+  receiptPath?: string | null;
+  receiptType?: "image" | "pdf" | null;
   voidedAt?: TimestampLike | null;
   voidedBy?: string | null;
 }
 
+export const paymentReceiptPathRe = /^tenants\/[a-z0-9-]+\/paymentReceipts\/[A-Za-z0-9_-]+\.(jpg|png|webp|pdf)$/;
 const paymentLine = z.object({
   amount: cents.refine((v) => v > 0, "El monto debe ser mayor a 0"),
   method: z.enum(MANUAL_PAYMENT_METHODS),
   reference: text(80),
-});
+  /** banco/cuenta (transferencia, depósito) o terminal (tarjeta) */
+  bank: text(60).nullish(),
+  receiptPath: z.string().max(300).regex(paymentReceiptPathRe, "Comprobante no válido").nullish(),
+}).refine((p) => !methodNeedsBank(p.method) || !!p.bank?.trim(), { message: "Indique el banco o la cuenta donde entró el dinero", path: ["bank"] });
 
-export const registerPaymentSchema = paymentLine.extend({
+export const registerPaymentSchema = z.intersection(paymentLine, z.object({
   orderId: z.string().nullish(),
   saleId: z.string().nullish(),
-});
+}));
 export type RegisterPaymentInput = z.infer<typeof registerPaymentSchema>;
 
+/** Agregar o cambiar banco/comprobante de un pago ya registrado (p. ej. el depósito se confirma después). */
+export const attachPaymentReceiptSchema = z.object({
+  paymentId: z.string().min(1),
+  bank: text(60).nullish(),
+  receiptPath: z.string().max(300).regex(paymentReceiptPathRe, "Comprobante no válido").nullish(),
+});
+export type AttachPaymentReceiptInput = z.infer<typeof attachPaymentReceiptSchema>;
 export const voidPaymentSchema = z.object({ paymentId: z.string().min(1), reason: text(300).min(3, "Indique el motivo") });
 
 // ---------------- Punto de venta ----------------

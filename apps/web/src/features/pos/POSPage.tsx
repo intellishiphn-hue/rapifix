@@ -204,7 +204,7 @@ export function POSPage() {
                   const opts = methodNeedsBank(p.method) ? settings.bankAccounts ?? [] : p.method === "card" ? settings.cardTerminals ?? [] : [];
                   return (
                     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 p-2">
-                      {(methodNeedsBank(p.method) || p.method === "card") && (
+                      {(methodNeedsBank(p.method) || (p.method === "card" && opts.length > 1)) && (
                         <div className="w-36 shrink-0">
                           <Select value={p.bank} onChange={(e) => upd({ bank: e.target.value })} aria-label={p.method === "card" ? "Terminal" : "Banco"}>
                             <option value="">{p.method === "card" ? "Terminal…" : "Banco…"}</option>

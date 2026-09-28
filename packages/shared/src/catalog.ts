@@ -133,9 +133,9 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "Efectivo",
   transfer: "Transferencia",
   deposit: "Depósito bancario",
-  card: "Tarjeta (POS)",
+  card: "Tarjeta (ROKI)",
   other: "Otro",
-  online: "En línea (ROKI)",
+  online: "Link de pago (ROKI)",
 };
 
 export interface Payment {

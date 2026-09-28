@@ -60,7 +60,7 @@ export function PaymentDetailFields({ method, value, onChange }: { method: strin
   const set = (p: Partial<PaymentDetail>) => onChange({ ...value, ...p });
   return (
     <div className="space-y-4">
-      {(isBank || isCard) && (
+      {(isBank || (isCard && options.length > 1)) && (
         <Field label={isBank ? "Banco / cuenta" : "Terminal"} required={isBank} hint={isBank ? "Dónde entró el dinero, para cuadrar con el estado de cuenta." : "Con qué terminal se pasó la tarjeta."}>
           {options.length ? (
             <Select value={value.bank} onChange={(e) => set({ bank: e.target.value })}>

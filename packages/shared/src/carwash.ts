@@ -132,6 +132,9 @@ export interface Wash {
   payToken?: string | null;
   notes: string;
   cancelReason: string;
+  /** fotos del lavado (las mantiene el servidor al subir o borrar fotos) */
+  photoCount?: number;
+  photoCounts?: WashPhotoCounts;
   createdAt: TimestampLike;
   startedAt: TimestampLike | null;
   readyAt: TimestampLike | null;
@@ -142,6 +145,46 @@ export interface Wash {
   createdByName: string;
   updatedAt?: TimestampLike;
   updatedBy?: string;
+}
+
+// ---------------- Fotos del lavado (opcionales) ----------------
+export const WASH_PHOTO_STAGES = ["entry", "exit"] as const;
+export type WashPhotoStage = (typeof WASH_PHOTO_STAGES)[number];
+export const WASH_PHOTO_STAGE_LABELS: Record<WashPhotoStage, string> = { entry: "Ingreso", exit: "Salida" };
+/** máximo de fotos por etapa (ingreso / salida) */
+export const WASH_PHOTOS_PER_STAGE = 6;
+export type WashPhotoCounts = Record<WashPhotoStage, number>;
+
+/** tenants/{tid}/carwashWashes/{washId}/photos/{id} */
+export interface WashPhoto {
+  id: string;
+  url: string;
+  storagePath: string;
+  stage: WashPhotoStage;
+  by: string;
+  byName: string;
+  at: TimestampLike;
+}
+
+/** Cuántas fotos hay de cada etapa (etapas desconocidas se ignoran). */
+export function countWashPhotos(photos: Array<{ stage: string }>): WashPhotoCounts {
+  const out: WashPhotoCounts = { entry: 0, exit: 0 };
+  for (const p of photos) if (p.stage === "entry" || p.stage === "exit") out[p.stage]++;
+  return out;
+}
+
+/** Cuántas fotos más se pueden agregar a la etapa (ya guardadas + por subir). */
+export function washPhotoSlots(existing: number, pending = 0, max = WASH_PHOTOS_PER_STAGE): number {
+  return Math.max(0, max - Math.max(0, existing) - Math.max(0, pending));
+}
+
+/** Agrupa por etapa, del más antiguo al más reciente, respetando el máximo por etapa. */
+export function groupWashPhotos<T extends { stage: string; at: number }>(photos: T[], max = WASH_PHOTOS_PER_STAGE): Record<WashPhotoStage, T[]> {
+  const sorted = [...photos].sort((a, b) => a.at - b.at);
+  return {
+    entry: sorted.filter((p) => p.stage === "entry").slice(0, max),
+    exit: sorted.filter((p) => p.stage === "exit").slice(0, max),
+  };
 }
 
 // ---------------- Lealtad ----------------
@@ -853,6 +896,8 @@ export interface PublicWash {
   banks: string[];
   /** último comprobante enviado por el cliente */
   proof: PublicProof | null;
+  /** fotos de ingreso y salida (antes/después); ausente en páginas armadas antes de esta función */
+  photos?: Record<WashPhotoStage, Array<{ url: string }>>;
   active: boolean;
   updatedAt: TimestampLike;
 }

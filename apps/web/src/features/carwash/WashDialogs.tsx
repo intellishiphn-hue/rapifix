@@ -22,6 +22,7 @@ import { assignWasher, cancelWash, ensureWashPayUrl, fixWashPlate, linkWashCusto
 import { AdjustStampsButton } from "./LoyaltyAdjust";
 import { Stamps } from "./RegisterWashDialog";
 import { formatMinutes, msOf, PlaceholderPlateNotice, STATUS_STYLE } from "./ui";
+import { useWashPhotoPicker, WashPhotosSection } from "./photos";
 
 const NEXT: Partial<Record<Wash["status"], QueueStatus>> = { waiting: "washing", washing: "ready", ready: "delivered" };
 const PREV: Partial<Record<Wash["status"], QueueStatus>> = { washing: "waiting", ready: "washing" };
@@ -223,6 +224,7 @@ export function WashDetailDialog({
   const { settings: cw } = useCarwashSettings();
   const loyalty = useLoyalty(wash?.plate);
   const lv = useLoyaltyView(wash?.plate);
+  const camera = useWashPhotoPicker();
   useEffect(() => {
     setLinking(false);
     setFixing(false);
@@ -343,6 +345,9 @@ export function WashDetailDialog({
         </div>
 
         {needsCharge(w) && <PendingProofsPanel washId={w.id} washTotal={w.total} />}
+
+        {camera.element}
+        <WashPhotosSection wash={w} onPick={(stage, existing) => camera.pick(w, stage, existing)} />
 
         {cw.loyaltyEvery > 0 && (loyalty.data || lv.gift > 0) && (
           <div className="rounded-xl border border-slate-200 p-3">

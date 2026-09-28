@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { BadgeCheck, Check, CheckCircle2, Clock, CreditCard, Droplets, Gift, Loader2, MapPin, MessageCircle, Phone, ShieldCheck, XCircle, Banknote } from "lucide-react";
+import { BadgeCheck, Camera, Check, CheckCircle2, Clock, CreditCard, Droplets, Gift, Loader2, MapPin, MessageCircle, Phone, ShieldCheck, XCircle, Banknote } from "lucide-react";
 import {
   formatMoney, isPlaceholderPlate, loyaltyProgressText, normalizePhone, PUBLIC_WASHES, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS, WASH_STATUS_LABELS, whatsappLink,
   type PublicWash,
@@ -150,6 +150,27 @@ function WashView({ wash: w, token }: { wash: PublicWash; token: string }) {
       </section>
 
       {!cancelled && <WashPaySection wash={w} token={token} />}
+
+      {/* Fotos de ingreso y salida (antes / después) */}
+      {w.photos && (w.photos.entry.length > 0 || w.photos.exit.length > 0) && (
+        <section className={card}>
+          <h2 className="flex items-center gap-2 font-bold"><Camera className="h-5 w-5 text-brand-600" /> Fotos de su vehículo</h2>
+          {([["entry", "Fotos de ingreso"], ["exit", "Fotos de salida"]] as const).map(([stage, label]) =>
+            w.photos![stage].length > 0 ? (
+              <div key={stage} className="mt-3">
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {w.photos![stage].map((ph, i) => (
+                    <a key={i} href={ph.url} target="_blank" rel="noreferrer" className="relative aspect-square overflow-hidden rounded-lg bg-slate-100">
+                      <img src={ph.url} alt={`${label} ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ) : null,
+          )}
+        </section>
+      )}
 
       {/* Lealtad */}
       {w.loyalty && !isPlaceholderPlate(w.plate) && (() => {

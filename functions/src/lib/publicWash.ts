@@ -1,7 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  carwashCol, carwashSettingsFrom, isPlaceholderPlate, catalogCol, clampStartStamps, col, membershipWindow, PUBLIC_WASHES,
+  carwashCol, carwashSettingsFrom, groupWashPhotos, isPlaceholderPlate, catalogCol, clampStartStamps, col, membershipWindow, PUBLIC_WASHES,
   type CarwashMembership, type CarwashSettings, type MembershipStatus, type PublicProof, type PublicWash, type WashItem, DEFAULT_SETTINGS } from "@rapifix/shared";
 import { db } from "./admin";
 import { toMs } from "./carwash";
@@ -46,14 +46,23 @@ export async function buildPublicWash(tid: string, washId: string): Promise<stri
     // Sin placa real no hay tarjeta de lealtad que mostrar
     const hasCard = !!plate && !isPlaceholderPlate(plate);
     const membershipId = w.get("membershipId") as string | null;
-    const [general, carwash, roki, loyalty, proofs, membership] = await Promise.all([
+    const hasPhotos = Number(w.get("photoCount") ?? 0) > 0;
+    const [general, carwash, roki, loyalty, proofs, membership, photoSnap] = await Promise.all([
       tx.get(db.doc(`${col.settings(tid)}/general`)),
       tx.get(db.doc(`${col.settings(tid)}/carwash`)),
       tx.get(db.doc(`${catalogCol.privateConfig(tid)}/roki`)),
       hasCard ? tx.get(db.doc(`${carwashCol.loyalty(tid)}/${plate}`)) : Promise.resolve(null),
       tx.get(db.collection(catalogCol.paymentProofs(tid)).where("washId", "==", washId).limit(30)),
       membershipId ? tx.get(db.doc(`${carwashCol.memberships(tid)}/${membershipId}`)) : Promise.resolve(null),
+      hasPhotos ? tx.get(db.collection(carwashCol.washPhotos(tid, washId)).limit(40)) : Promise.resolve(null),
     ]);
+    // Fotos de ingreso y salida (antes/después): mismas URLs con token que usa el portal del taller
+    const grouped = groupWashPhotos(
+      (photoSnap?.docs ?? [])
+        .map((d) => ({ url: String(d.get("url") ?? ""), stage: String(d.get("stage") ?? ""), at: toMs(d.get("at")) }))
+        .filter((p) => p.url.startsWith("https://")),
+    );
+    const photos = { entry: grouped.entry.map((p) => ({ url: p.url })), exit: grouped.exit.map((p) => ({ url: p.url })) };
     const s = general.data() ?? {};
     const cw = carwashSettingsFrom(carwash.data() as Partial<CarwashSettings> | undefined);
     const status = w.get("status") as PublicWash["status"];
@@ -113,6 +122,7 @@ export async function buildPublicWash(tid: string, washId: string): Promise<stri
       onlinePayment: { enabled: !!roki.get("enabled") && !!roki.get("secretKey") },
       banks: bankList(s),
       proof: latestProof(proofs.docs),
+      photos,
       active: !expired,
       updatedAt: FieldValue.serverTimestamp(),
     };

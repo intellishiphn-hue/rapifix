@@ -71,9 +71,15 @@ export const financeCol = {
 export const carwashCol = {
   services: (tid: string) => `tenants/${tid}/carwashServices`,
   washes: (tid: string) => `tenants/${tid}/carwashWashes`,
+  /** fotos opcionales de ingreso y salida del lavado (las escribe el personal; reglas estrictas) */
+  washPhotos: (tid: string, washId: string) => `tenants/${tid}/carwashWashes/${washId}/photos`,
   loyalty: (tid: string) => `tenants/${tid}/carwashLoyalty`,
   plans: (tid: string) => `tenants/${tid}/carwashPlans`,
   memberships: (tid: string) => `tenants/${tid}/carwashMemberships`,
+} as const;
+
+export const carwashStoragePath = {
+  photo: (tid: string, washId: string, fileId: string) => `tenants/${tid}/carwashWashes/${washId}/photos/${fileId}.jpg`,
 } as const;
 
 export const paymentStoragePath = {

@@ -6,7 +6,7 @@ import {
   buildWashItems, computeWashCharge, formatMoney, formatPhone, isPendingVehicle, isPlaceholderPlate, loyaltyText, priceForSize, rewardCap, washPlate,
   WASH_STATUS_LABELS, type CarwashLookupResult, type Customer, type Vehicle, type VehicleSize, type Wash,
 } from "@rapifix/shared";
-import { useAuth } from "@/lib/auth/useAuth";
+import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
 import { useDebounced } from "@/lib/firestore/hooks";
 import { cn } from "@/lib/cn";
@@ -22,16 +22,20 @@ import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { useSettings } from "@/features/settings/api";
 import { carwashLookup, saveWash, useCarwashServices, useCarwashSettings, useWashers } from "./api";
 import { PlaceholderPlateNotice, SizePicker } from "./ui";
+import { PendingPhotosField, uploadWashPhotos, usePendingPhotos } from "./photos";
 
 interface Sel { serviceId: string; price: number }
 
 export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onClose: (washId?: string) => void; wash?: Wash | null }) {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const byName = useDisplayName();
   const { settings: general } = useSettings();
   const { settings } = useCarwashSettings();
   const services = useCarwashServices();
   const washers = useWashers();
   const editing = !!wash;
+  /** fotos de ingreso opcionales (solo al registrar; al editar se agregan desde el detalle) */
+  const entryPhotos = usePendingPhotos(open);
 
   const [plate, setPlate] = useState("");
   const [lookup, setLookup] = useState<CarwashLookupResult | null>(null);
@@ -199,6 +203,9 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
       });
       toast.success(editing ? `Lavado ${r.code} actualizado` : `${r.code} registrado${r.paid ? " (cubierto, sin cobro)" : ` · ${formatMoney(r.total)}`}`);
       if (r.vehicleCreated) toast.info(`Placa ${formatPlate(normalized)} agregada a los vehículos del cliente en el taller`);
+      // Las fotos se suben en segundo plano: el registro no espera ni falla por ellas
+      const files = editing ? [] : entryPhotos.take();
+      if (files.length && user) void uploadWashPhotos({ id: r.washId, code: r.code }, "entry", files, { uid: user.uid, name: byName });
       onClose(r.washId);
     } catch (err) {
       toast.error(errorMessage(err));
@@ -426,6 +433,8 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={500} />
           </Field>
         </div>
+
+        {!editing && <PendingPhotosField photos={entryPhotos.photos} onAdd={entryPhotos.add} onRemove={entryPhotos.remove} />}
 
         {/* Resumen */}
         {preview.error && sel.length > 0 && <p className="rounded-lg bg-red-50 p-2.5 text-sm text-red-700">{preview.error}</p>}

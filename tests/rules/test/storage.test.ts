@@ -34,11 +34,14 @@ beforeEach(async () => {
     const db = ctx.firestore();
     await db.doc(`${T}/workOrders/wo-asignada`).set({ technicianIds: ["tech1"] });
     await db.doc(`${T}/workOrders/wo-otra`).set({ technicianIds: ["tech2"] });
+    // La regla de fotos del carwash exige que el lavado exista
+    await db.doc(`${T}/carwashWashes/w1`).set({ status: "waiting" });
 
     const s = ctx.storage();
     await s.ref(`${T}/branding/logo.png`).put(bytes(1024), PNG);
     await s.ref(`${T}/vehicles/v1/photos/existente.jpg`).put(bytes(1024), JPG);
     await s.ref(`${T}/expenses/recibo.pdf`).put(bytes(1024), PDF);
+    await s.ref(`${T}/carwashWashes/w1/photos/existente.jpg`).put(bytes(1024), JPG);
   });
 });
 
@@ -96,6 +99,55 @@ describe("fotos de órdenes de trabajo", () => {
   it("recepción sube a cualquier orden; vendedor no", async () => {
     await assertSucceeds(upload(st("reception"), `${T}/workOrders/wo-otra/photos/a.jpg`, bytes(1024), JPG));
     await assertFails(upload(st("seller"), `${T}/workOrders/wo-otra/photos/b.jpg`, bytes(1024), JPG));
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("fotos de ingreso y salida del carwash", () => {
+  const dir = `${T}/carwashWashes/w1/photos`;
+
+  it("el lavador sube una foto desde el celular; caja y gerencia también", async () => {
+    await assertSucceeds(upload(st("washer"), `${dir}/a.jpg`, bytes(300 * 1024), JPG));
+    await assertSucceeds(upload(st("reception"), `${dir}/b.jpg`, bytes(1024), JPG));
+    await assertSucceeds(upload(st("seller"), `${dir}/c.png`, bytes(1024), PNG));
+    await assertSucceeds(upload(st("manager"), `${dir}/d.jpg`, bytes(1024), JPG));
+  });
+
+  it("técnico, bodega, sin sesión y otro taller no suben", async () => {
+    const otro = env.authenticatedContext("intruso", { tid: "otro", role: "admin" }).storage();
+    await assertFails(upload(st("technician"), `${dir}/a.jpg`, bytes(1024), JPG));
+    await assertFails(upload(st("warehouse"), `${dir}/a.jpg`, bytes(1024), JPG));
+    await assertFails(upload(anon(), `${dir}/a.jpg`, bytes(1024), JPG));
+    await assertFails(upload(otro, `${dir}/a.jpg`, bytes(1024), JPG));
+  });
+
+  it("solo imágenes de menos de 10 MB", async () => {
+    await assertFails(upload(st("washer"), `${dir}/grande.jpg`, bytes(10 * MB + 1), JPG));
+    await assertFails(upload(st("washer"), `${dir}/doc.pdf`, bytes(1024), PDF));
+    await assertFails(upload(st("washer"), `${dir}/nota.txt`, bytes(1024), TXT));
+  });
+
+  it("el lavado debe existir", async () => {
+    await assertFails(upload(st("admin"), `${T}/carwashWashes/no-existe/photos/a.jpg`, bytes(1024), JPG));
+  });
+
+  it("no se reemplaza una foto existente (ni el admin)", async () => {
+    await assertFails(upload(st("washer"), `${dir}/existente.jpg`, bytes(1024), JPG));
+    await assertFails(upload(st("admin"), `${dir}/existente.jpg`, bytes(1024), JPG));
+  });
+
+  it("solo admin y gerente borran", async () => {
+    await assertFails(st("washer").ref(`${dir}/existente.jpg`).delete());
+    await assertFails(st("reception").ref(`${dir}/existente.jpg`).delete());
+    await assertSucceeds(st("admin").ref(`${dir}/existente.jpg`).delete());
+  });
+
+  it("lectura: personal del carwash sí; técnico, bodega y sin sesión no", async () => {
+    await assertSucceeds(st("washer").ref(`${dir}/existente.jpg`).getMetadata());
+    await assertSucceeds(st("seller").ref(`${dir}/existente.jpg`).getMetadata());
+    await assertFails(st("technician").ref(`${dir}/existente.jpg`).getMetadata());
+    await assertFails(st("warehouse").ref(`${dir}/existente.jpg`).getMetadata());
+    await assertFails(anon().ref(`${dir}/existente.jpg`).getMetadata());
   });
 });
 

@@ -366,6 +366,31 @@ service cloud.firestore {
       match /carwashWashes/{id} {
         allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'washer']);
         allow write: if false;
+
+        function parentWash() {
+          return get(/databases/$(database)/documents/tenants/$(tid)/carwashWashes/$(id)).data;
+        }
+
+        // Fotos opcionales de ingreso y salida (el lavador las toma desde el celular).
+        // Se crean desde el cliente con validación estricta; no se editan; solo gerencia borra.
+        // Máximo 6 por etapa: el contador photoCounts lo mantiene el servidor (onCarwashPhotoWritten).
+        match /photos/{photoId} {
+          allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'washer']);
+          allow create: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'washer'])
+            && incoming().keys().hasOnly(['url', 'storagePath', 'stage', 'by', 'byName', 'at'])
+            && isStr(incoming().url, 1, 2000)
+            && incoming().url.matches('https://.*')
+            && isStr(incoming().storagePath, 1, 300)
+            && incoming().storagePath.matches('tenants/' + tid + '/carwashWashes/' + id + '/photos/[^/]+')
+            && incoming().stage in ['entry', 'exit']
+            && isStr(incoming().byName, 0, 120)
+            && incoming().by == request.auth.uid
+            && incoming().at == request.time
+            && parentWash().status != 'cancelled'
+            && parentWash().get('photoCounts', {}).get(incoming().stage, 0) < 6;
+          allow update: if false;
+          allow delete: if hasRole(tid, managers());
+        }
       }
       match /carwashLoyalty/{plate} {
         allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'washer']);

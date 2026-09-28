@@ -34,6 +34,16 @@ service firebase.storage {
       allow delete: if hasRole(tid, ['admin', 'manager']);
     }
 
+    // Fotos opcionales del carwash: ingreso y salida de cada lavado (el lavador también sube)
+    match /tenants/{tid}/carwashWashes/{washId}/photos/{fileName} {
+      allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'washer']);
+      allow create: if resource == null && isImage() && maxMB(10)
+        && hasRole(tid, ['admin', 'manager', 'reception', 'seller', 'washer'])
+        && firestore.exists(/databases/(default)/documents/tenants/$(tid)/carwashWashes/$(washId));
+      allow update: if false;
+      allow delete: if hasRole(tid, ['admin', 'manager']);
+    }
+
     // Logo del taller (lectura pública: se muestra en el portal del cliente y en PDFs)
     match /tenants/{tid}/branding/{fileName} {
       allow read: if true;

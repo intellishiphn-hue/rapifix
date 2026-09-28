@@ -17,6 +17,7 @@ import { useWash, useWashQueue } from "./api";
 import { ChargeDialog } from "./ChargeDialog";
 import { RegisterWashDialog } from "./RegisterWashDialog";
 import { CarwashTabs, formatMinutes, formatTime, msOf, STATUS_STYLE, useNow } from "./ui";
+import { PhotoCountChip, useWashPhotoPicker } from "./photos";
 import { CancelWashDialog, moveWash, needsCharge, NEXT_LABEL, nextStatus, stageMinutes, WashDetailDialog, WhatsAppReadyDialog } from "./WashDialogs";
 
 const COLUMN_TITLE: Record<QueueStatus, string> = { waiting: "En espera", washing: "Lavando", ready: "Listo", delivered: "Entregados hoy" };
@@ -35,6 +36,7 @@ export function CarwashQueuePage() {
   const [cancel, setCancel] = useState<Wash | null>(null);
   const [unpaid, setUnpaid] = useState<Wash | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const camera = useWashPhotoPicker();
   const proofs = usePendingProofs(can("payments.read"));
   const proofWashIds = useMemo(() => new Set(proofs.data.map((p) => p.washId).filter(Boolean)), [proofs.data]);
 
@@ -80,7 +82,20 @@ export function CarwashQueuePage() {
     setBusy(w.id);
     const ok = await moveWash(w, to);
     setBusy(null);
+    if (ok && (to === "ready" || to === "delivered")) offerExitPhotos(w);
     if (ok && to === "ready" && w.phone) setWhatsapp({ ...w, status: "ready" });
+  };
+
+  /** Aviso suave (no obligatorio) para tomar fotos de salida, solo si aún no tiene. */
+  const offerExitPhotos = (w: Wash) => {
+    const exit = w.photoCounts?.exit ?? 0;
+    if (!can("carwash.create") || exit > 0) return;
+    toast("¿Tomar fotos de salida?", {
+      id: `exit-photos-${w.id}`,
+      description: `${w.code} · opcional`,
+      duration: 9000,
+      action: { label: "Tomar fotos", onClick: () => camera.pick(w, "exit", exit) },
+    });
   };
 
   if (queue.loading && !queue.data.length) return <PageLoader />;
@@ -153,6 +168,7 @@ export function CarwashQueuePage() {
         </Card>
       )}
 
+      {camera.element}
       <RegisterWashDialog open={register.open} wash={register.wash} onClose={() => setRegister({ open: false, wash: null })} />
       {charge && <ChargeDialog wash={queue.data.find((w) => w.id === charge.id) ?? charge} onClose={() => setCharge(null)} />}
       <WhatsAppReadyDialog wash={whatsapp} onClose={() => setWhatsapp(null)} />
@@ -216,6 +232,7 @@ function WashCard({
           {w.membershipId && <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700"><BadgeCheck className="h-3 w-3" />Membresía</span>}
           {w.loyaltyRedeemed && <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-700"><Gift className="h-3 w-3" />Premio</span>}
           {w.notes && <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-800"><StickyNote className="h-3 w-3" />Notas</span>}
+          <PhotoCountChip wash={w} />
           {proofPending && needsCharge(w) && <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800"><FileClock className="h-3 w-3" />Comprobante por revisar</span>}
           {money && (
             <span className={cn("ml-auto tabular font-bold", w.paid ? "text-emerald-700" : "text-slate-900")}>

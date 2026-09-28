@@ -97,6 +97,14 @@ beforeEach(async () => {
       await s.doc(`${T}/${c}/x1`).set({ technicianIds: ["tech1"], seeded: true });
     }
 
+    // Lavados para las fotos de ingreso/salida
+    await s.doc(`${T}/carwashWashes/w-cola`).set({ code: "LAV-0001", status: "washing", photoCounts: { entry: 1, exit: 0 } });
+    await s.doc(`${T}/carwashWashes/w-lleno`).set({ code: "LAV-0002", status: "ready", photoCounts: { entry: 6, exit: 2 } });
+    await s.doc(`${T}/carwashWashes/w-cancelado`).set({ code: "LAV-0003", status: "cancelled" });
+    await s.doc(`${T}/carwashWashes/w-cola/photos/p1`).set({
+      url: "https://x/p1.jpg", storagePath: `${T}/carwashWashes/w-cola/photos/p1.jpg`, stage: "entry", by: "washer1", byName: "Lavador", at: fixedTs(),
+    });
+
     await s.doc("publicPortal/tok-abc123").set({ orderNumber: 1, status: "in_progress" });
     await s.doc("publicWashes/LAVTOKEN23").set({ tid: "rapifix", washId: "w1", code: "LAV-0001", status: "ready", paid: false });
   });
@@ -517,6 +525,77 @@ describe("carwash", () => {
       context: "carwash", mode: "manual", createdBy: "washer1", createdByName: "Lavador", at: serverTs(),
     }));
     await assertFails(db("washer").doc(`${T}/messages/x1`).get());
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("fotos de ingreso y salida del lavado", () => {
+  const CARWASH_STAFF: Role[] = ["admin", "manager", "reception", "seller", "washer"];
+  const washPhoto = (washId: string, uid: string, extra: Record<string, unknown> = {}) => ({
+    url: "https://firebasestorage.googleapis.com/v0/b/x/o/p.jpg?alt=media&token=t",
+    storagePath: `${T}/carwashWashes/${washId}/photos/abc.jpg`,
+    stage: "entry",
+    by: uid,
+    byName: "Personal",
+    at: serverTs(),
+    ...extra,
+  });
+  const add = (role: Role, washId: string, extra: Record<string, unknown> = {}, uid = uidOf(role)) =>
+    db(role, uid).collection(`${T}/carwashWashes/${washId}/photos`).add(washPhoto(washId, uid, extra));
+
+  it("caja, gerencia y el lavador suben fotos de ingreso y de salida", async () => {
+    for (const r of CARWASH_STAFF) {
+      await assertSucceeds(add(r, "w-cola"));
+      await assertSucceeds(add(r, "w-cola", { stage: "exit" }));
+    }
+  });
+
+  it("técnico, bodega, sin sesión y otro taller no suben fotos", async () => {
+    await assertFails(add("technician", "w-cola"));
+    await assertFails(add("warehouse", "w-cola"));
+    await assertFails(anon().collection(`${T}/carwashWashes/w-cola/photos`).add(washPhoto("w-cola", "anon")));
+    await assertFails(otherTenantAdmin().collection(`${T}/carwashWashes/w-cola/photos`).add(washPhoto("w-cola", "intruso")));
+  });
+
+  it("la ficha se valida: etapa, ruta del mismo lavado, autor, hora del servidor y campos", async () => {
+    await assertFails(add("washer", "w-cola", { stage: "during" }));
+    await assertFails(add("washer", "w-cola", { storagePath: `${T}/carwashWashes/w-lleno/photos/abc.jpg` }));
+    await assertFails(add("washer", "w-cola", { storagePath: `${T}/workOrders/wo-asignada/photos/abc.jpg` }));
+    await assertFails(add("washer", "w-cola", { by: "otro" }));
+    await assertFails(add("washer", "w-cola", { at: fixedTs() }));
+    await assertFails(add("washer", "w-cola", { url: "http://inseguro/p.jpg" }));
+    await assertFails(add("washer", "w-cola", { visibleToCustomer: true }));
+  });
+
+  it("no se agregan fotos a un lavado cancelado ni a uno que no existe", async () => {
+    await assertFails(add("manager", "w-cancelado"));
+    await assertFails(add("manager", "no-existe"));
+  });
+
+  it("máximo 6 por etapa (según el contador del servidor)", async () => {
+    await assertFails(add("washer", "w-lleno"));
+    await assertSucceeds(add("washer", "w-lleno", { stage: "exit" }));
+  });
+
+  it("nadie edita una foto; solo admin y gerente la borran", async () => {
+    const p = (r: Role) => db(r).doc(`${T}/carwashWashes/w-cola/photos/p1`);
+    await assertFails(p("admin").update({ stage: "exit" }));
+    await assertFails(p("washer").update({ byName: "otro" }));
+    for (const r of ["washer", "reception", "seller"] as Role[]) await assertFails(p(r).delete());
+    await assertSucceeds(p("manager").delete());
+  });
+
+  it("lectura: personal del carwash sí; técnico y bodega no", async () => {
+    for (const r of ROLES) {
+      const q = db(r).collection(`${T}/carwashWashes/w-cola/photos`).get();
+      if (CARWASH_STAFF.includes(r)) await assertSucceeds(q);
+      else await assertFails(q);
+    }
+    await assertFails(anon().doc(`${T}/carwashWashes/w-cola/photos/p1`).get());
+  });
+
+  it("el lavado mismo sigue cerrado a escritura (el contador lo mantiene el servidor)", async () => {
+    await assertFails(db("admin").doc(`${T}/carwashWashes/w-lleno`).update({ photoCounts: { entry: 0, exit: 0 } }));
   });
 });
 

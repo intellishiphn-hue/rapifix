@@ -221,10 +221,18 @@ export interface Sale {
   balance: number;
   status: "paid" | "partial" | "voided";
   voidReason?: string;
+  /** Unidad de negocio. Sin valor = taller (mostrador). */
+  unit?: BusinessUnit;
+  /** Lavado del carwash que originó la venta. */
+  washId?: string | null;
   by: string;
   byName: string;
   at: TimestampLike;
 }
+
+export const BUSINESS_UNITS = ["shop", "carwash"] as const;
+export type BusinessUnit = (typeof BUSINESS_UNITS)[number];
+export const BUSINESS_UNIT_LABELS: Record<BusinessUnit, string> = { shop: "Taller", carwash: "Carwash" };
 
 export const createSaleSchema = z.object({
   customerId: z.string().nullish(),

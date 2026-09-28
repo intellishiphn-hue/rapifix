@@ -11,6 +11,7 @@ import { errorMessage } from "@/lib/errors";
 import { formatDate, formatPlate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { usePublicLogo } from "@/lib/branding";
+import { ProofStatus, ProofUpload } from "./ProofUpload";
 
 const respondToQuote = callable<{ token: string; action: "approve" | "reject" | "question"; name?: string; comment?: string }, { result: string; approvalId?: string }>("respondToQuote");
 const markQuoteViewed = callable<{ token: string }, { ok: boolean }>("markQuoteViewed");
@@ -46,7 +47,10 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
 
   if (!op || portal.kind === "quote" || op.total <= 0) return null;
   const paidInFull = op.balance <= 0 && op.paid > 0;
-  if (!op.enabled && !paidInFull) return null;
+  const banks = portal.banks ?? [];
+  // Transferencia o depósito: se ofrece si el taller tiene bancos en Configuración (o ya hay un comprobante)
+  const canProof = banks.length > 0 || !!portal.proof;
+  if (!op.enabled && !paidInFull && !canProof) return null;
   const quotePending = portal.quote && (portal.quote.status === "sent" || portal.quote.status === "viewed");
 
   const pay = async () => {
@@ -80,10 +84,20 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
           {returnState === "ok" && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Su pago se está procesando. En unos minutos se verá reflejado aquí. Si ya le cobraron, no lo intente de nuevo.</p>}
           {returnState === "cancelado" && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">No se realizó el pago. Puede intentarlo de nuevo cuando guste.</p>}
           {error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-          <button onClick={() => void pay()} disabled={busy} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-base font-bold text-white hover:bg-brand-700 disabled:opacity-60">
-            {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <CreditCard className="h-5 w-5" />} Pagar en línea {formatMoney(op.balance)}
-          </button>
-          <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-slate-400"><ShieldCheck className="h-3.5 w-3.5" /> Pago seguro con tarjeta a través de ROKI</p>
+          {op.enabled && (
+            <>
+              <button onClick={() => void pay()} disabled={busy} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-base font-bold text-white hover:bg-brand-700 disabled:opacity-60">
+                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <CreditCard className="h-5 w-5" />} Pagar en línea {formatMoney(op.balance)}
+              </button>
+              <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-slate-400"><ShieldCheck className="h-3.5 w-3.5" /> Pago seguro con tarjeta a través de ROKI</p>
+            </>
+          )}
+          {canProof && (
+            <div className="mt-4 space-y-3">
+              <ProofStatus proof={portal.proof} paid={paidInFull} />
+              <ProofUpload token={token} kind="order" banks={banks} defaultAmount={op.balance} proof={portal.proof} />
+            </div>
+          )}
         </>
       )}
     </section>
@@ -104,30 +118,40 @@ function photoGroups(photos: PublicPortal["photos"]): Array<[string, PublicPorta
 const fuelLabel = (n: number) => (n <= 0 ? "Vacío" : n >= 8 ? "Lleno" : n === 4 ? "1/2 tanque" : n === 2 ? "1/4 de tanque" : n === 6 ? "3/4 de tanque" : `${n}/8 de tanque`);
 
 function Shell({ children, portal }: { children: React.ReactNode; portal?: PublicPortal | null }) {
-  // Logo actual de Configuración; el del link es una copia de cuando se creó la orden
+  return (
+    <PublicShell name={portal?.workshop.name} logoUrl={portal?.workshop.logoUrl} label={portal?.kind === "quote" ? "Cotización" : "Estado de su vehículo"}>
+      {children}
+    </PublicShell>
+  );
+}
+
+/** Marco de las páginas públicas del cliente (portal de la orden y link del lavado). */
+export function PublicShell({ children, name, logoUrl, label }: { children: React.ReactNode; name?: string; logoUrl?: string; label: string }) {
+  // Logo actual de Configuración; el del link es una copia de cuando se creó
   const liveLogo = usePublicLogo();
-  const logo = liveLogo || portal?.workshop.logoUrl || "";
+  const logo = liveLogo || logoUrl || "";
+  const title = name || "RAPIFIX";
   return (
     <div className="min-h-screen bg-canvas">
       <header className="bg-ink-900 text-white">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-4">
           {logo ? (
-            <img src={logo} alt={portal?.workshop.name ?? "RAPIFIX"} className="h-9 max-w-[160px] rounded bg-white/95 object-contain p-1" />
+            <img src={logo} alt={title} className="h-9 max-w-[160px] rounded bg-white/95 object-contain p-1" />
           ) : (
-            <div className="text-lg font-extrabold tracking-tight">{portal?.workshop.name ?? "RAPIFIX"}</div>
+            <div className="text-lg font-extrabold tracking-tight">{title}</div>
           )}
-          <span className="ml-auto text-xs text-slate-400">{portal?.kind === "quote" ? "Cotización" : "Estado de su vehículo"}</span>
+          <span className="ml-auto text-xs text-slate-400">{label}</span>
         </div>
       </header>
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-5">{children}</main>
       <footer className="pb-10 pt-4 text-center text-xs text-slate-400">
-        {portal?.workshop.name ?? "RAPIFIX"} · Sistema de Gestión para Taller Automotriz
+        {title} · Sistema de Gestión para Taller Automotriz
       </footer>
     </div>
   );
 }
 
-const card = "rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[var(--shadow-card)]";
+export const card = "rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[var(--shadow-card)]";
 
 export function PortalPage() {
   const { token = "" } = useParams();

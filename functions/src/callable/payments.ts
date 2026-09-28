@@ -1,12 +1,12 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
-import { catalogCol, formatMoney, orderCol, PAYMENT_METHOD_LABELS, registerPaymentSchema, voidPaymentSchema, attachPaymentReceiptSchema, type Role } from "@rapifix/shared";
+import { catalogCol, formatMoney, orderCol, registerPaymentSchema, voidPaymentSchema, attachPaymentReceiptSchema, type Role } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput, requireRole } from "../lib/guards";
 import { actorName } from "../lib/actors";
-import { pad, readCounter } from "../lib/counters";
 import { paymentExtras } from "../lib/paymentExtras";
+import { readPaymentTarget, writePaymentToTarget } from "../lib/payments";
 
 const CASHIERS: Role[] = ["admin", "manager", "reception", "seller"];
 
@@ -17,38 +17,13 @@ export const registerPayment = onCall({ region: REGION }, async (request) => {
   const tid = caller.tid;
   if (!!input.orderId === !!input.saleId) throw new HttpsError("invalid-argument", "Indique la orden o la venta.");
   const name = await actorName(caller.uid, caller.email);
-  const targetRef = input.orderId ? db.doc(`${orderCol.workOrders(tid)}/${input.orderId}`) : db.doc(`${catalogCol.sales(tid)}/${input.saleId}`);
-  const payRef = db.collection(catalogCol.payments(tid)).doc();
 
   return db.runTransaction(async (tx) => {
-    const t = await tx.get(targetRef);
-    if (!t.exists) throw new HttpsError("not-found", "La orden o venta no existe.");
-    const counter = await readCounter(tx, tid, "payments");
-    const total = Number(t.get("totals.total") ?? 0);
-    const paid = Number(t.get("paid") ?? 0);
-    const balance = total - paid;
-    if (input.amount > balance) throw new HttpsError("failed-precondition", `El monto supera el saldo pendiente (${formatMoney(balance)}).`);
-    const code = `REC-${pad(counter.next)}`;
-    tx.set(counter.ref, { next: counter.next + 1 }, { merge: true });
-    const newPaid = paid + input.amount;
-    const upd: Record<string, unknown> = { paid: newPaid, balance: total - newPaid };
-    if (input.saleId) upd.status = total - newPaid <= 0 ? "paid" : "partial";
-    tx.update(targetRef, upd);
-    tx.set(payRef, {
-      number: counter.next, code, amount: input.amount, method: input.method, reference: input.reference, ...paymentExtras(tid, input), status: "valid", voidReason: "",
-      customerId: (t.get("customerId") as string | null) ?? null,
-      customerName: (t.get("customer.fullName") as string) ?? (t.get("customerName") as string) ?? "Consumidor final",
-      orderId: input.orderId ?? null, orderCode: input.orderId ? t.get("code") : null,
-      saleId: input.saleId ?? null, saleCode: input.saleId ? t.get("code") : null,
-      receivedBy: caller.uid, receivedByName: name, at: FieldValue.serverTimestamp(),
+    const r = await readPaymentTarget(tx, tid, { orderId: input.orderId, saleId: input.saleId });
+    return writePaymentToTarget(tx, r, {
+      amount: input.amount, method: input.method, reference: input.reference, bank: input.bank, receiptPath: input.receiptPath,
+      uid: caller.uid, byName: name,
     });
-    if (input.orderId) {
-      tx.set(targetRef.collection("events").doc(), {
-        type: "note", text: `Pago ${code} por ${formatMoney(input.amount)} (${PAYMENT_METHOD_LABELS[input.method]}). Saldo: ${formatMoney(total - newPaid)}`,
-        visibleToCustomer: false, channels: [], fromStatus: null, toStatus: null, actorId: caller.uid, actorName: name, at: FieldValue.serverTimestamp(),
-      });
-    }
-    return { paymentId: payRef.id, code, balance: total - newPaid };
   });
 });
 

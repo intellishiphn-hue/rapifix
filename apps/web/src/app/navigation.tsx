@@ -15,6 +15,8 @@ export interface NavItem {
   phase?: number;
   /** Activo solo con la ruta exacta (para rutas base con subrutas propias) */
   end?: boolean;
+  /** Contador junto al nombre (ej. comprobantes por revisar) */
+  counter?: "proofs";
 }
 
 export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
@@ -51,7 +53,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: "Ventas y finanzas",
     items: [
       { label: "Punto de venta", to: "/pos", icon: ShoppingCart, permission: "sales.create" },
-      { label: "Pagos", to: "/pagos", icon: CreditCard, permission: "payments.read" },
+      { label: "Pagos", to: "/pagos", icon: CreditCard, permission: "payments.read", counter: "proofs" },
       { label: "Finanzas", to: "/finanzas", icon: Landmark, permission: "reports.financial" },
       { label: "Cuentas por cobrar", to: "/cuentas-por-cobrar", icon: HandCoins, permission: "payments.read" },
       { label: "Gastos", to: "/gastos", icon: Receipt, permission: "expenses.manage" },

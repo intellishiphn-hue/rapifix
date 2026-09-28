@@ -129,6 +129,11 @@ function TemplatesTab() {
               </div>
               {customized && <Badge tone="blue">Editada</Badge>}
             </button>
+            {(t.key === "carwashReady" || t.key === "carwashReadyPaid") && customized && !/\{\{\s*link\s*\}\}/.test(bodies[t.key] ?? "") && (
+              <p className="mx-5 mb-3 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Esta plantilla no incluye {"{{link}}"}: el cliente no recibirá el link para pagar con tarjeta o subir su comprobante. Agréguelo o restaure el texto original.
+              </p>
+            )}
             {open === t.key && <div className="border-t border-slate-100"><TemplateEditor t={t} saved={bodies[t.key]} canEdit={canEdit} taller={settings.name || "RAPIFIX"} /></div>}
           </Card>
         );

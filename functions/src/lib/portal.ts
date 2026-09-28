@@ -4,6 +4,7 @@ import {
   type PublicPortal, type Quote, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "./admin";
+import { bankList, latestProof } from "./publicWash";
 
 const PERCENT: Record<WorkOrderStatus, number> = {
   RECEIVED: 10, INSPECTION: 20, DIAGNOSIS: 35, AWAITING_QUOTE: 40, QUOTE_SENT: 50, AWAITING_APPROVAL: 50,
@@ -26,12 +27,13 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
   const token = o.portalToken as string | undefined;
   if (!token) return null;
 
-  const [settings, events, photos, quoteSnap, roki] = await Promise.all([
+  const [settings, events, photos, quoteSnap, roki, proofs] = await Promise.all([
     tx.get(db.doc(`${col.settings(tid)}/general`)),
     tx.get(orderSnap.ref.collection("events").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(30)),
     tx.get(orderSnap.ref.collection("photos").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(40)),
     o.activeQuoteId ? tx.get(db.doc(`${quoteCol.quotes(tid)}/${o.activeQuoteId}`)) : Promise.resolve(null),
     tx.get(db.doc(`${catalogCol.privateConfig(tid)}/roki`)),
+    tx.get(db.collection(catalogCol.paymentProofs(tid)).where("orderId", "==", orderId).limit(30)),
   ]);
   const s = settings.data() ?? {};
   const onlineEnabled = !!roki.get("enabled") && !!roki.get("secretKey");
@@ -110,6 +112,8 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
       total: Number(o.totals?.total ?? 0),
       paid: Number(o.paid ?? 0),
     },
+    banks: bankList(s),
+    proof: latestProof(proofs.docs),
     updatedAt: FieldValue.serverTimestamp(),
   };
   tx.set(db.doc(`${quoteCol.portal}/${token}`), portal);

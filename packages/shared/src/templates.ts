@@ -42,7 +42,8 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   { key: "cita_confirmacion", name: "Cita agendada", body: `¡Hola {{cliente}}! 📅\n\nSu cita en *{{taller}}* quedó agendada para *{{fecha}}*.\nVehículo: *{{vehiculo}}* (placa {{placa}})\n\n¿Nos confirma su asistencia?\n\n${FIRMA}` },
   { key: "cita_recordatorio", name: "Recordatorio de cita", body: `¡Hola {{cliente}}! 📅\n\nLe recordamos su cita en *{{taller}}* *{{fecha}}*.\nVehículo: *{{vehiculo}}* (placa {{placa}})\n\nSi necesita cambiar la hora, respóndanos este mensaje.\n\n${FIRMA}` },
   { key: "mantenimiento", name: "Mantenimiento próximo", body: `¡Hola {{cliente}}! 🔧\n\nSegún nuestros registros, es posible que a su *{{vehiculo}}* (placa {{placa}}) ya le toque *{{servicio}}*.\n{{ultimo}}\n\n¿Le agendamos una cita? Solo responda este mensaje.\n\n${FIRMA}` },
-  { key: "carwashReady", name: "Carwash: vehículo listo", body: `¡Hola {{cliente}}!\n\nSu vehículo placa *{{placa}}* ya está listo en nuestro carwash. Puede pasar a retirarlo cuando guste.\n\n{{sellos}}\n\n${FIRMA}` },
+  { key: "carwashReady", name: "Carwash: vehículo listo (por pagar)", body: `¡Hola {{cliente}}!\n\nSu vehículo placa *{{placa}}* ya está listo en nuestro carwash.\n*Total: {{total}}*\n\nPuede pagar aquí con tarjeta o subir su comprobante de transferencia: {{link}}\n\n{{sellos}}\n\n${FIRMA}` },
+  { key: "carwashReadyPaid", name: "Carwash: vehículo listo (ya pagado)", body: `¡Hola {{cliente}}!\n\nSu vehículo placa *{{placa}}* ya está listo en nuestro carwash. Puede pasar a retirarlo cuando guste.\n\n{{sellos}}\n\nVea el detalle de su lavado y sus sellos aquí: {{link}}\n\n${FIRMA}` },
   { key: "carwashMembershipExpiring", name: "Carwash: membresía por vencer", body: `¡Hola {{cliente}}!\n\nLe recordamos que su membresía *{{plan}}* del carwash (placa {{placa}}) vence el *{{fecha}}*.\n\nRenueve para seguir disfrutando sus lavados. Solo responda este mensaje.\n\n${FIRMA}` },
   { key: "pago_pendiente", name: "Pago pendiente", body: `¡Hola {{cliente}}! 🧾\n\nLe recordamos que la orden *{{orden}}* de su *{{vehiculo}}* tiene un saldo pendiente de *{{total}}*.\n\n${FIRMA}` },
 ];
@@ -60,6 +61,21 @@ export function templateBody(key: string): string {
 }
 export function isTemplateCustomized(key: string): boolean {
   return !!overrides[key]?.trim();
+}
+
+/** La plantilla fue editada por el taller y no incluye {{link}} (el mensaje saldrá sin link). */
+export function templateMissingLink(key: string): boolean {
+  return isTemplateCustomized(key) && !/\{\{\s*link\s*\}\}/.test(templateBody(key));
+}
+
+/**
+ * Texto del aviso "carro listo" del carwash. Por pagar: carwashReady (con el link para pagar).
+ * Ya pagado: carwashReadyPaid; si el taller editó solo carwashReady, se respeta su texto.
+ */
+export function carwashReadyBody(paid: boolean): string {
+  if (!paid) return templateBody("carwashReady");
+  if (isTemplateCustomized("carwashReadyPaid") || !isTemplateCustomized("carwashReady")) return templateBody("carwashReadyPaid");
+  return templateBody("carwashReady");
 }
 
 export function templateForStatus(status: WorkOrderStatus): DefaultTemplate | undefined {

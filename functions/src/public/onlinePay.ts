@@ -3,12 +3,14 @@ import { logger } from "firebase-functions/v2";
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { catalogCol, col, onlinePayStartSchema, orderCol, portalTokenSchema, quoteCol } from "@rapifix/shared";
+import { carwashCol, catalogCol, col, onlinePayCheckSchema, onlinePayStartSchema, orderCol, quoteCol, VEHICLE_SIZE_SHORT, type WashItem } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput } from "../lib/guards";
 import { applyOnlinePayment, markOnlinePayment } from "../lib/onlinePayments";
 import { getRokiConfig, hondurasTime, rokiRequest, toDecimal, verifyRokiSignature, type RokiPayment } from "../lib/roki";
+import { loadWashByToken } from "../lib/publicWash";
+import { toMs } from "../lib/carwash";
 
 const PROJECT = process.env.GCLOUD_PROJECT ?? "";
 const ALLOWED_ORIGINS = [`https://${PROJECT}.web.app`, `https://${PROJECT}.firebaseapp.com`, "http://localhost:5173"];
@@ -29,13 +31,75 @@ async function loadPortal(token: string) {
   return { tid: portal.get("tid") as string, orderId: portal.get("orderId") as string };
 }
 
-/** Crea (o reutiliza) el cobro en ROKI por el saldo de la orden y devuelve el link de pago. Público. */
+/**
+ * Cobro en ROKI de un lavado del carwash (link /lavado/:token). El monto es el total del lavado;
+ * el pago se registra solo cuando el servidor lo confirma (webhook firmado o consulta GET).
+ */
+async function createWashOnlinePayment(token: string, origin: string) {
+  const { tid, washId } = await loadWashByToken(token);
+  if (!(await allowedOrigin(tid, origin))) throw new HttpsError("permission-denied", "Origen no permitido.");
+  const cfg = await getRokiConfig(tid);
+  if (!cfg?.enabled || !cfg.secretKey) throw new HttpsError("failed-precondition", "Los pagos en línea no están activos. Pague en caja o suba su comprobante de transferencia.");
+
+  const wash = await db.doc(`${carwashCol.washes(tid)}/${washId}`).get();
+  if (!wash.exists) throw new HttpsError("not-found", "El lavado no existe.");
+  if (wash.get("status") === "cancelled") throw new HttpsError("failed-precondition", "El lavado está cancelado.");
+  const total = Number(wash.get("total") ?? 0);
+  if (wash.get("paid") || wash.get("saleId") || total <= 0) throw new HttpsError("failed-precondition", "Este lavado ya está pagado.");
+
+  // Reutiliza un link vigente por el mismo monto (evita cobros duplicados por doble clic)
+  const opsCol = db.collection(catalogCol.onlinePayments(tid));
+  const pending = await opsCol.where("washId", "==", washId).where("status", "==", "pending").get();
+  const reusable = pending.docs.find((d) => d.get("amount") === total && toMs(d.get("expiresAt")) > Date.now() + 10 * 60000);
+  if (reusable) return { checkoutUrl: reusable.get("checkoutUrl") as string };
+
+  const code = String(wash.get("code"));
+  const plate = String(wash.get("plate") ?? "");
+  const opRef = opsCol.doc();
+  const expires = new Date(Date.now() + 45 * 60000);
+  await opRef.set({
+    target: "wash", orderId: null, orderCode: null, washId, washCode: code,
+    amount: total, status: "creating", rokiPaymentId: null, transactionId: null,
+    checkoutUrl: "", serviceFee: 0, paymentId: null, error: "", expiresAt: Timestamp.fromDate(expires),
+    createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  const pageUrl = `${origin}/lavado/${token}`;
+  const phone = String(wash.get("phone") ?? "");
+  const items = ((wash.get("items") as WashItem[]) ?? []).map((i) => i.name).join(", ");
+  const size = VEHICLE_SIZE_SHORT[wash.get("size") as keyof typeof VEHICLE_SIZE_SHORT] ?? "";
+  try {
+    const p = await rokiRequest<RokiPayment>(cfg.secretKey, "POST", "/payments", {
+      amount: toDecimal(total),
+      currency_code: "340",
+      external_reference: `${tid}:${code}`,
+      name: `Lavado ${code}`,
+      description: `Carwash · placa ${plate} (${size}) · ${items}`.slice(0, 250),
+      metadata: { tid, washId, washCode: code, onlinePaymentId: opRef.id, target: "wash" },
+      success_url: `${pageUrl}?pago=ok`,
+      cancel_url: `${pageUrl}?pago=cancelado`,
+      expires_at: hondurasTime(expires),
+      customer: { name: String(wash.get("customerName") ?? "") || "Cliente", ...(phone ? { phone } : {}) },
+      lock_customer_fields: false,
+      reusable: false,
+      service_fee_enabled: cfg.serviceFee,
+    }, `rapifix-${tid}-${opRef.id}`);
+    await opRef.update({ status: "pending", rokiPaymentId: p.id, checkoutUrl: p.checkout_url, updatedAt: FieldValue.serverTimestamp() });
+    return { checkoutUrl: p.checkout_url };
+  } catch (err) {
+    await opRef.update({ status: "error", error: err instanceof Error ? err.message : String(err) });
+    throw err;
+  }
+}
+
+/** Crea (o reutiliza) el cobro en ROKI por el saldo de la orden (o el total del lavado) y devuelve el link de pago. Público. */
 export const createOnlinePayment = onCall({ region: REGION }, async (request) => {
   requireAppCheck(request);
   const input = parseInput(onlinePayStartSchema, request.data);
   await rateLimit("pay", [input.token], 10, 600);
   await rateLimit("pay-ip", [requestIp(request)], 60, 600);
   const origin = input.origin.replace(/\/$/, "");
+  if (input.kind === "wash") return createWashOnlinePayment(input.token, origin);
   const { tid, orderId } = await loadPortal(input.token);
   if (!(await allowedOrigin(tid, origin))) throw new HttpsError("permission-denied", "Origen no permitido.");
   const cfg = await getRokiConfig(tid);
@@ -99,12 +163,15 @@ export const createOnlinePayment = onCall({ region: REGION }, async (request) =>
 /** Al regresar del pago, consulta a ROKI directamente (no se confía en la redirección). Público. */
 export const checkOnlinePayment = onCall({ region: REGION }, async (request) => {
   requireAppCheck(request);
-  const { token } = parseInput(portalTokenSchema, request.data);
+  const { token, kind } = parseInput(onlinePayCheckSchema, request.data);
   await rateLimit("paycheck", [token], 30, 600);
-  const { tid, orderId } = await loadPortal(token);
+  const t = kind === "wash" ? await loadWashByToken(token) : await loadPortal(token);
+  const tid = t.tid;
   const cfg = await getRokiConfig(tid);
   if (!cfg?.secretKey) return { status: "disabled" };
-  const ops = await db.collection(catalogCol.onlinePayments(tid)).where("orderId", "==", orderId).where("status", "==", "pending").get();
+  const field = "washId" in t ? "washId" : "orderId";
+  const id = "washId" in t ? t.washId : t.orderId;
+  const ops = await db.collection(catalogCol.onlinePayments(tid)).where(field, "==", id).where("status", "==", "pending").get();
   let status = "pending";
   for (const op of ops.docs) {
     const id = op.get("rokiPaymentId") as number | null;

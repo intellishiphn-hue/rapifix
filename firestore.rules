@@ -291,6 +291,12 @@ service cloud.firestore {
         allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
         allow write: if false;
       }
+      // Comprobantes de transferencia/depósito que sube el cliente desde su link.
+      // Los crea submitPaymentProof y los aprueba o rechaza reviewPaymentProof (solo servidor).
+      match /paymentProofs/{proofId} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
 
       // ---------- FASE 5: agenda, mantenimiento, personal, proveedores, compras y gastos ----------
       // Todo se escribe por Cloud Functions (validación, numeración e inventario en el servidor).
@@ -408,6 +414,14 @@ service cloud.firestore {
     // Copia sanitizada de la orden. Se lee solo con el token exacto (link del cliente);
     // listar o adivinar portales es imposible. Solo la escriben Cloud Functions.
     match /publicPortal/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ---------- Página pública del lavado (/lavado/:token) ----------
+    // Copia mínima del lavado. Solo con el token exacto; nadie lista ni escribe (la arma el servidor).
+    match /publicWashes/{token} {
       allow get: if true;
       allow list: if false;
       allow write: if false;

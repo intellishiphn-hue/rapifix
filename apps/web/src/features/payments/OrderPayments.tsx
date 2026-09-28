@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { methodNeedsBank } from "@rapifix/shared";
 import { PaymentDialog, VoidPaymentDialog } from "./PaymentDialogs";
+import { PendingProofsPanel } from "./proofs";
 
 /** Ver comprobante, o adjuntarlo después (el depósito a veces se confirma más tarde). */
 function ReceiptActions({ payment: p }: { payment: Payment }) {
@@ -80,6 +81,7 @@ export function OrderPayments({ order }: { order: WorkOrder }) {
         ))}
       </div>
       {total === 0 && <p className="px-5 pb-3 text-sm text-slate-500">La orden aún no tiene total. Se toma de la cotización enviada/aprobada.</p>}
+      <PendingProofsPanel orderId={order.id} orderBalance={balance} className="px-5 pb-4" />
       {balance > 0 && can("sales.create") && (
         <div className="px-5 pb-4"><Button icon={<CreditCard className="h-4 w-4" />} onClick={() => setPaying(true)}>Registrar pago o abono</Button></div>
       )}

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { BaseDoc, TimestampLike } from "./types";
 import { computeQuote, type Totals } from "./quote";
-import { createSaleSchema } from "./catalog";
+import { createSaleSchema, type PublicProof } from "./catalog";
 import { buildSearchKeywords } from "./text";
 
 // ============================================================================
@@ -126,6 +126,8 @@ export interface Wash {
   loyaltyEvery?: number;
   /** se entregó sin cobrar (autorizado por gerencia) */
   deliveredUnpaid?: boolean;
+  /** token del link público del lavado (/lavado/:token): ver, pagar con tarjeta o subir comprobante */
+  payToken?: string | null;
   notes: string;
   cancelReason: string;
   createdAt: TimestampLike;
@@ -153,6 +155,25 @@ export interface CarwashLoyalty {
   size: VehicleSize | null;
   customerId: string | null;
   vehicleId: string | null;
+  /** tarjeta nueva que aún no recibe sus sellos de regalo (se aplican con el primer lavado que cuenta) */
+  welcomePending?: boolean;
+  /** sellos de regalo con que arrancó la tarjeta */
+  welcomeStamps?: number;
+  /** ajustes manuales de sellos (promociones o correcciones) */
+  adjustments?: LoyaltyAdjustment[];
+}
+
+export interface LoyaltyAdjustment {
+  delta: number;
+  reason: string;
+  countBefore: number;
+  countAfter: number;
+  /** premios generados por el ajuste */
+  rewardsEarned: number;
+  by: string;
+  byName: string;
+  /** epoch ms */
+  at: number;
 }
 
 // ---------------- Membresías ----------------
@@ -222,6 +243,8 @@ export type RewardMode = (typeof REWARD_MODES)[number];
 export interface CarwashSettings {
   /** cada cuántos lavados pagados se gana uno gratis (0 = desactivado) */
   loyaltyEvery: number;
+  /** sellos de regalo con que arranca una tarjeta nueva (0 a loyaltyEvery - 1) */
+  loyaltyStartStamps: number;
   /** cheapest: el premio cubre el lavado más barato del tamaño. upTo: cubre hasta rewardMaxPrice */
   rewardMode: RewardMode;
   rewardMaxPrice: number;
@@ -234,6 +257,7 @@ export interface CarwashSettings {
 
 export const DEFAULT_CARWASH_SETTINGS: CarwashSettings = {
   loyaltyEvery: 10,
+  loyaltyStartStamps: 0,
   rewardMode: "cheapest",
   rewardMaxPrice: 0,
   taxMode: "included",
@@ -243,9 +267,11 @@ export const DEFAULT_CARWASH_SETTINGS: CarwashSettings = {
 
 export function carwashSettingsFrom(data: Partial<CarwashSettings> | null | undefined): CarwashSettings {
   const d = { ...DEFAULT_CARWASH_SETTINGS, ...(data ?? {}) };
+  const loyaltyEvery = Math.max(0, Math.min(100, Math.floor(Number(d.loyaltyEvery) || 0)));
   return {
     ...d,
-    loyaltyEvery: Math.max(0, Math.min(100, Math.floor(Number(d.loyaltyEvery) || 0))),
+    loyaltyEvery,
+    loyaltyStartStamps: clampStartStamps(d.loyaltyStartStamps, loyaltyEvery),
     rewardMode: (REWARD_MODES as readonly string[]).includes(d.rewardMode) ? d.rewardMode : "cheapest",
     rewardMaxPrice: Math.max(0, Math.round(Number(d.rewardMaxPrice) || 0)),
     taxMode: (CARWASH_TAX_MODES as readonly string[]).includes(d.taxMode) ? d.taxMode : "included",
@@ -399,18 +425,71 @@ export function computeWashCharge(
 /** Total sin ISV (ingreso real del carwash). */
 export const netOf = (t: Totals) => t.subtotal - t.discount;
 
-/** Suma un lavado pagado a la tarjeta de lealtad. Al completar "every" se genera un premio. */
-export function applyLoyaltyWash(state: { count: number; rewardsAvailable: number }, every: number): { count: number; rewardsAvailable: number; earned: boolean } {
-  if (!(every > 0)) return { count: state.count, rewardsAvailable: state.rewardsAvailable, earned: false };
-  let count = Math.max(0, state.count) + 1;
-  let rewardsAvailable = Math.max(0, state.rewardsAvailable);
-  let earned = false;
-  if (count >= every) {
-    count -= every;
-    rewardsAvailable += 1;
-    earned = true;
+/** Sellos de regalo válidos: entero de 0 a every - 1 (0 si la tarjeta está desactivada). */
+export function clampStartStamps(value: unknown, every: number): number {
+  if (!(every > 0)) return 0;
+  return Math.max(0, Math.min(every - 1, Math.floor(Number(value) || 0)));
+}
+
+/**
+ * Sellos de regalo que recibe una tarjeta con el lavado que se está contando.
+ * Solo la tarjeta nueva de una placa: la que no existe todavía o la creada con "welcomePending".
+ * Las tarjetas que ya existían antes de esta opción (sin la marca) no reciben regalo.
+ */
+export function loyaltyWelcomeFor(card: { exists: boolean; welcomePending?: unknown }, settings: Pick<CarwashSettings, "loyaltyEvery" | "loyaltyStartStamps">): number {
+  if (card.exists && card.welcomePending !== true) return 0;
+  return clampStartStamps(settings.loyaltyStartStamps, settings.loyaltyEvery);
+}
+
+/** Pasa a premios los sellos que completan la tarjeta (puede ser más de uno si se bajó "every"). */
+function settleStamps(count: number, rewardsAvailable: number, every: number) {
+  let c = Math.max(0, Math.floor(count));
+  let r = Math.max(0, Math.floor(rewardsAvailable));
+  let earned = 0;
+  if (every > 0) {
+    while (c >= every) {
+      c -= every;
+      r += 1;
+      earned += 1;
+    }
   }
-  return { count, rewardsAvailable, earned };
+  return { count: c, rewardsAvailable: r, earned };
+}
+
+/**
+ * Suma un lavado pagado a la tarjeta de lealtad (más los sellos de regalo si es la tarjeta nueva).
+ * Al completar "every" se genera un premio.
+ */
+export function applyLoyaltyWash(
+  state: { count: number; rewardsAvailable: number },
+  every: number,
+  welcomeStamps = 0,
+): { count: number; rewardsAvailable: number; earned: boolean } {
+  if (!(every > 0)) return { count: state.count, rewardsAvailable: state.rewardsAvailable, earned: false };
+  const r = settleStamps(Math.max(0, state.count) + Math.max(0, Math.floor(welcomeStamps)) + 1, state.rewardsAvailable, every);
+  return { count: r.count, rewardsAvailable: r.rewardsAvailable, earned: r.earned > 0 };
+}
+
+/**
+ * Ajuste manual de sellos (promoción o corrección). Nunca baja de 0 y no quita premios ya ganados;
+ * si al sumar se completa la tarjeta, se genera el premio normal.
+ */
+export function adjustLoyaltyStamps(
+  state: { count: number; rewardsAvailable: number },
+  delta: number,
+  every: number,
+): { count: number; rewardsAvailable: number; rewardsEarned: number } {
+  const target = Math.max(0, Math.max(0, state.count) + Math.trunc(delta));
+  const r = settleStamps(target, state.rewardsAvailable, every);
+  return { count: r.count, rewardsAvailable: r.rewardsAvailable, rewardsEarned: r.earned };
+}
+
+/** "7 de 10: le faltan 3 para un lavado gratis" (página pública del lavado) */
+export function loyaltyProgressText(count: number, every: number, rewardsAvailable = 0): string {
+  if (!(every > 0)) return "";
+  if (rewardsAvailable > 0) return rewardsAvailable === 1 ? "Tiene 1 lavado gratis disponible." : `Tiene ${rewardsAvailable} lavados gratis disponibles.`;
+  const left = Math.max(1, every - count);
+  return `${count} de ${every}: ${left === 1 ? "¡su próximo lavado es gratis!" : `le faltan ${left} para un lavado gratis.`}`;
 }
 
 /** "7 de 10 sellos" / "Tiene 1 lavado gratis disponible" */
@@ -570,6 +649,25 @@ export type SellMembershipInput = z.infer<typeof sellMembershipSchema>;
 
 export const cancelMembershipSchema = z.object({ membershipId: id, reason: text(300).min(3, "Indique el motivo") });
 
+/** Sumar o quitar sellos a la tarjeta de una placa (solo admin y gerencia). */
+export const adjustLoyaltyStampsSchema = z.object({
+  plate: plateInput,
+  delta: z.number({ error: "Cantidad no válida" }).int("Use números enteros").min(-100).max(100).refine((v) => v !== 0, "Indique cuántos sellos sumar o quitar"),
+  reason: text(200).min(3, "Indique el motivo"),
+});
+export type AdjustLoyaltyStampsInput = z.infer<typeof adjustLoyaltyStampsSchema>;
+export interface AdjustLoyaltyStampsResult {
+  count: number;
+  rewardsAvailable: number;
+  rewardsEarned: number;
+}
+
+/** Link público del lavado (lo crea si el lavado aún no tiene). */
+export const getWashPayLinkSchema = z.object({ washId: id });
+export interface WashPayLinkResult {
+  token: string;
+}
+
 /** Vincular un lavado (y su placa) a un cliente del taller. Sin vehicleId se reusa o crea el vehículo de esa placa. */
 export const linkWashCustomerSchema = z.object({ washId: id, customerId: id, vehicleId: id.nullish() });
 export type LinkWashCustomerInput = z.infer<typeof linkWashCustomerSchema>;
@@ -658,7 +756,13 @@ export interface CarwashLookupResult {
   customer: { id: string; name: string; phone: string } | null;
   /** última vez en el carwash (nombre, teléfono y tamaño) */
   history: { customerName: string; phone: string; size: VehicleSize | null; totalWashes: number; lastWashAt: number | null } | null;
-  loyalty: { count: number; rewardsAvailable: number; every: number };
+  loyalty: {
+    count: number; rewardsAvailable: number; every: number;
+    /** la placa aún no tiene tarjeta (o no ha recibido sus sellos de regalo) */
+    isNew: boolean;
+    /** sellos de regalo con que arrancaría la tarjeta nueva */
+    startStamps: number;
+  };
   membership: {
     id: string; code: string; planName: string; size: VehicleSize; includedServiceIds: string[]; includedNames: string[];
     washesPerMonth: number | null; usedInPeriod: number; periodEnd: number; paidUntil: number; canUse: boolean;
@@ -666,6 +770,43 @@ export interface CarwashLookupResult {
   maintenance: Array<{ serviceName: string; status: string }>;
   /** lavado activo (en cola) con la misma placa */
   openWash: { id: string; code: string; status: WashStatus } | null;
+}
+
+// ============================================================================
+// Página pública del lavado (publicWashes/{token}): copia mínima que arma el servidor
+// ============================================================================
+
+export const PUBLIC_WASHES = "publicWashes";
+
+export interface PublicWash {
+  tid: string;
+  washId: string;
+  code: string;
+  plate: string;
+  size: VehicleSize;
+  business: { name: string; logoUrl: string; phone: string; whatsapp: string; address: string; city: string; hours: string };
+  customerFirstName: string;
+  items: Array<{ name: string; kind: CarwashServiceKind; listPrice: number; price: number; covered: WashCoverage | null }>;
+  totals: Totals;
+  total: number;
+  discount: number;
+  taxRate: number;
+  taxMode: CarwashTaxMode;
+  status: WashStatus;
+  paid: boolean;
+  /** saldo pendiente (0 si ya está pagado o no tiene cobro) */
+  balance: number;
+  createdAt: TimestampLike | null;
+  /** pendingWelcome: sellos de regalo que recibirá la tarjeta nueva con su primer lavado cobrado */
+  loyalty: { count: number; every: number; rewardsAvailable: number; pendingWelcome: number } | null;
+  membership: { code: string; planName: string; paidUntil: number; washesPerMonth: number | null; usedInPeriod: number } | null;
+  onlinePayment: { enabled: boolean };
+  /** bancos donde se puede transferir o depositar (settings/general.bankAccounts) */
+  banks: string[];
+  /** último comprobante enviado por el cliente */
+  proof: PublicProof | null;
+  active: boolean;
+  updatedAt: TimestampLike;
 }
 
 // ============================================================================

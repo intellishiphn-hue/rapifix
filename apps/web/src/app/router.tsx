@@ -20,6 +20,7 @@ const QuotesPage = page(() => import("@/features/quotes/QuotesPage"), "QuotesPag
 const DirectQuotePage = page(() => import("@/features/quotes/DirectQuotePage"), "DirectQuotePage");
 const PortalLinksPage = page(() => import("@/features/portal/PortalLinksPage"), "PortalLinksPage");
 const PortalPage = page(() => import("@/features/portal/PortalPage"), "PortalPage");
+const WashPublicPage = page(() => import("@/features/portal/WashPublicPage"), "WashPublicPage");
 const PrintOrderPage = page(() => import("@/features/print/PrintPages"), "PrintOrderPage");
 const PrintQuotePage = page(() => import("@/features/print/PrintPages"), "PrintQuotePage");
 const ProductsPage = page(() => import("@/features/catalog/ProductsPage"), "ProductsPage");
@@ -75,6 +76,8 @@ export const router = createBrowserRouter([
   // Portal público del cliente (sin cuenta). /aprobar y /seguimiento redirigen al mismo link.
   { path: "/orden/:token", element: <S><PortalPage /></S> },
   { path: "/orden/:token/cotizacion", element: <S><PortalPage /></S> },
+  // Link público del lavado del carwash (ver, pagar con tarjeta o subir comprobante)
+  { path: "/lavado/:token", element: <S><WashPublicPage /></S> },
   { path: "/aprobar/:token", element: <RedirectToPortal suffix="/cotizacion" /> },
   { path: "/seguimiento/:token", element: <RedirectToPortal suffix="" /> },
   // Documentos imprimibles (requieren sesión, sin menú)

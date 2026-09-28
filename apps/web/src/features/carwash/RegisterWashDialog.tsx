@@ -460,6 +460,12 @@ function LookupSummary({ r, every }: { r: CarwashLookupResult; every: number }) 
         )}
       </div>
       {every > 0 && <Stamps count={r.loyalty.count} every={every} />}
+      {every > 0 && r.loyalty.isNew && r.loyalty.startStamps > 0 && (
+        <p className="flex items-center gap-1.5 rounded-lg bg-violet-50 px-2.5 py-1.5 text-sm font-medium text-violet-800">
+          <Gift className="h-4 w-4 shrink-0" /> Tarjeta nueva: arranca con {r.loyalty.startStamps} sello{r.loyalty.startStamps === 1 ? "" : "s"} de regalo
+          {r.loyalty.count === 0 ? ` (con su primer lavado cobrado queda en ${Math.min(every, r.loyalty.startStamps + 1)} de ${every})` : ""}.
+        </p>
+      )}
       {r.openWash && (
         <p className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-sm text-amber-800">
           <AlertTriangle className="h-4 w-4" /> Esta placa ya está en la cola ({r.openWash.code}, {WASH_STATUS_LABELS[r.openWash.status].toLowerCase()}).
@@ -474,7 +480,7 @@ function LookupSummary({ r, every }: { r: CarwashLookupResult; every: number }) 
           </span>
         </p>
       )}
-      {every > 0 && r.loyalty.count === 0 && r.loyalty.rewardsAvailable === 0 && r.history && <p className="text-xs text-slate-500">{loyaltyText(0, every)}</p>}
+      {every > 0 && r.loyalty.count === 0 && r.loyalty.rewardsAvailable === 0 && r.history && !(r.loyalty.isNew && r.loyalty.startStamps > 0) && <p className="text-xs text-slate-500">{loyaltyText(0, every)}</p>}
     </div>
   );
 }

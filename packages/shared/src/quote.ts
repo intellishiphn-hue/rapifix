@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { BaseDoc, TimestampLike } from "./types";
 import type { WorkOrderStatus } from "./workOrderStatus";
+import type { PublicProof } from "./catalog";
 
 export const QUOTE_ITEM_TYPES = ["labor", "part", "service", "other"] as const;
 export type QuoteItemType = (typeof QUOTE_ITEM_TYPES)[number];
@@ -213,5 +214,9 @@ export interface PublicPortal {
   active: boolean;
   /** Pago en línea con ROKI (si el taller lo activó) */
   onlinePayment?: { enabled: boolean; balance: number; total: number; paid: number };
+  /** bancos para transferir o depositar (lista de Configuración) */
+  banks?: string[];
+  /** último comprobante de pago enviado por el cliente */
+  proof?: PublicProof | null;
   updatedAt: TimestampLike;
 }

@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { usePayments, type Range } from "./api";
 import { PaymentList } from "./OrderPayments";
 import { VoidPaymentDialog } from "./PaymentDialogs";
+import { ProofReviewCard, usePendingProofs } from "./proofs";
 
 const RANGES: Array<[Range, string]> = [["today", "Hoy"], ["week", "7 días"], ["month", "Este mes"], ["all", "Todo"]];
 
@@ -21,6 +22,7 @@ export function PaymentsPage() {
   const valid = data.filter((p) => p.status === "valid");
   const byMethod = useMemo(() => PAYMENT_METHODS.map((m) => ({ m, total: valid.filter((p) => p.method === m).reduce((a, p) => a + p.amount, 0) })), [valid]);
   const total = valid.reduce((a, p) => a + p.amount, 0);
+  const proofs = usePendingProofs(true);
 
   return (
     <>
@@ -33,6 +35,17 @@ export function PaymentsPage() {
         <Card className="col-span-2 p-4 sm:col-span-1"><div className="text-xs text-slate-500">Total cobrado</div><div className="tabular text-2xl font-bold">{formatMoney(total)}</div></Card>
         {byMethod.map(({ m, total: t }) => <Card key={m} className="p-4"><div className="text-xs text-slate-500">{PAYMENT_METHOD_LABELS[m]}</div><div className="tabular text-lg font-semibold">{formatMoney(t)}</div></Card>)}
       </div>
+      {proofs.data.length > 0 && (
+        <Card className="mb-5 border-amber-200">
+          <div className="border-b border-amber-100 bg-amber-50/70 px-5 py-3">
+            <h2 className="font-bold text-amber-900">Comprobantes por revisar ({proofs.data.length})</h2>
+            <p className="text-xs text-amber-800">Transferencias y depósitos que los clientes subieron desde su link. Revise que el dinero esté en el banco antes de aprobar.</p>
+          </div>
+          <div className="grid gap-3 p-4 lg:grid-cols-2">
+            {proofs.data.map((p) => <ProofReviewCard key={p.id} proof={p} showTarget />)}
+          </div>
+        </Card>
+      )}
       <Card>
         {error ? <ErrorState message={error} /> : loading ? <div className="p-5"><Skeleton className="h-24" /></div> : !data.length ? (
           <EmptyState icon={<CreditCard className="h-7 w-7" />} title="Sin pagos en este período" description="Los pagos se registran en la pestaña Pagos de cada orden o en el punto de venta." action={<Link to="/pos" className="font-semibold text-brand-700">Ir al punto de venta</Link>} />

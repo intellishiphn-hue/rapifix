@@ -257,10 +257,21 @@ export const createSaleSchema = z.object({
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 
 // ---------------- Pagos en línea (ROKI) ----------------
+/** Qué se paga con el link: el saldo de una orden del taller o un lavado del carwash. */
+export const ONLINE_PAY_TARGETS = ["order", "wash"] as const;
+export type OnlinePayTarget = (typeof ONLINE_PAY_TARGETS)[number];
+
 export interface OnlinePayment {
   id: string;
-  orderId: string;
-  orderCode: string;
+  /** sin valor = "order" (cobros creados antes de los lavados) */
+  target?: OnlinePayTarget;
+  orderId: string | null;
+  orderCode: string | null;
+  washId?: string | null;
+  washCode?: string | null;
+  /** el pago llegó pero algo no cuadró (lavado ya cobrado, cancelado o con otro total): revisar */
+  needsReview?: boolean;
+  reviewNote?: string;
   amount: number; // centavos
   status: "creating" | "pending" | "paid" | "failed" | "expired" | "voided" | "refunded" | "error";
   rokiPaymentId: number | null;
@@ -273,10 +284,16 @@ export interface OnlinePayment {
   paidAt?: TimestampLike | null;
 }
 
+const publicToken = z.string().regex(/^[2-9A-HJ-NP-Z]{10}$/, "Link no válido");
+
 export const onlinePayStartSchema = z.object({
-  token: z.string().regex(/^[2-9A-HJ-NP-Z]{10}$/, "Link no válido"),
+  token: publicToken,
   origin: z.string().url().max(200),
+  /** link de una orden (portal) o de un lavado (/lavado/:token). Sin valor = orden. */
+  kind: z.enum(ONLINE_PAY_TARGETS).nullish(),
 });
+
+export const onlinePayCheckSchema = z.object({ token: publicToken, kind: z.enum(ONLINE_PAY_TARGETS).nullish() });
 
 export const onlinePayConfigSchema = z.object({
   enabled: z.boolean(),
@@ -327,3 +344,99 @@ export const voidSaleSchema = z.object({
   saleId: z.string().min(1),
   reason: text(300).min(3, "Indique el motivo"),
 });
+
+// ---------------- Comprobantes enviados por el cliente (link público) ----------------
+export const PROOF_STATUSES = ["pending", "approved", "rejected"] as const;
+export type ProofStatus = (typeof PROOF_STATUSES)[number];
+export const PROOF_STATUS_LABELS: Record<ProofStatus, string> = { pending: "Por revisar", approved: "Aprobado", rejected: "Rechazado" };
+export const PROOF_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
+export type ProofContentType = (typeof PROOF_CONTENT_TYPES)[number];
+export const PROOF_EXT: Record<ProofContentType, "jpg" | "png" | "webp" | "pdf"> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
+};
+/** Tamaño máximo del archivo (ya decodificado) */
+export const PROOF_MAX_BYTES = 5 * 1024 * 1024;
+/** Máximo de comprobantes por revisar a la vez por lavado u orden */
+export const PROOF_MAX_PENDING = 3;
+/** Métodos con que se aprueba un comprobante */
+export const PROOF_METHODS = ["transfer", "deposit"] as const;
+
+export interface PaymentProof {
+  id: string;
+  kind: OnlinePayTarget;
+  washId: string | null;
+  orderId: string | null;
+  code: string;
+  customerName: string;
+  plate: string;
+  amount: number;
+  bank: string;
+  reference: string;
+  receiptPath: string;
+  receiptType: "image" | "pdf";
+  status: ProofStatus;
+  createdAt: TimestampLike;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  reviewedAt: TimestampLike | null;
+  rejectReason: string;
+  paymentId: string | null;
+  /** método con que se registró al aprobarlo */
+  method?: (typeof PROOF_METHODS)[number] | null;
+}
+
+/** Estado del último comprobante que ve el cliente en su link. */
+export interface PublicProof {
+  status: ProofStatus;
+  amount: number;
+  reason: string;
+  /** epoch ms */
+  at: number;
+}
+
+/** Tamaño en bytes de un texto base64 (sin decodificarlo). */
+export function base64Bytes(b64: string): number {
+  const clean = b64.replace(/\s/g, "");
+  const pad = clean.endsWith("==") ? 2 : clean.endsWith("=") ? 1 : 0;
+  return Math.floor((clean.length * 3) / 4) - pad;
+}
+
+/** Revisa los primeros bytes del archivo: que de verdad sea el tipo que dice ser. */
+export function sniffProofType(bytes: Uint8Array): ProofContentType | null {
+  const b = (i: number) => bytes[i] ?? -1;
+  if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return "image/jpeg";
+  if (b(0) === 0x89 && b(1) === 0x50 && b(2) === 0x4e && b(3) === 0x47) return "image/png";
+  if (b(0) === 0x52 && b(1) === 0x49 && b(2) === 0x46 && b(3) === 0x46 && b(8) === 0x57 && b(9) === 0x45 && b(10) === 0x42 && b(11) === 0x50) return "image/webp";
+  if (b(0) === 0x25 && b(1) === 0x50 && b(2) === 0x44 && b(3) === 0x46) return "application/pdf";
+  return null;
+}
+
+export const submitPaymentProofSchema = z.object({
+  token: publicToken,
+  kind: z.enum(ONLINE_PAY_TARGETS),
+  bank: text(60).min(1, "Seleccione el banco"),
+  reference: text(80),
+  amount: cents.refine((v) => v > 0, "Indique el monto"),
+  // 5 MB en base64 son unos 6.7 millones de caracteres
+  fileBase64: z.string().min(16, "Adjunte la foto o el PDF del comprobante").max(7_000_000, "El archivo supera 5 MB"),
+  contentType: z.enum(PROOF_CONTENT_TYPES, { error: "El comprobante debe ser una foto (JPG, PNG, WEBP) o un PDF" }),
+});
+export type SubmitPaymentProofInput = z.infer<typeof submitPaymentProofSchema>;
+
+export const reviewPaymentProofSchema = z
+  .object({
+    proofId: z.string().min(1).max(128),
+    action: z.enum(["approve", "reject"]),
+    method: z.enum(PROOF_METHODS).nullish(),
+    amount: cents.nullish(),
+    reason: text(300).nullish(),
+  })
+  .refine((v) => v.action !== "reject" || (v.reason ?? "").trim().length >= 3, { message: "Indique el motivo del rechazo", path: ["reason"] })
+  .refine((v) => v.action !== "approve" || v.amount == null || v.amount > 0, { message: "El monto debe ser mayor a 0", path: ["amount"] });
+export type ReviewPaymentProofInput = z.infer<typeof reviewPaymentProofSchema>;
+export interface ReviewPaymentProofResult {
+  status: ProofStatus;
+  paymentId: string | null;
+  /** ya estaba revisado (no se hizo nada) */
+  already: boolean;
+}

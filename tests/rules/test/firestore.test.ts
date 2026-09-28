@@ -26,6 +26,7 @@ const SERVER_ONLY = [
   "counters",
   "auditLogs",
   "onlinePayments",
+  "paymentProofs",
   "suppliers",
   "purchases",
   "supplierPayments",
@@ -97,6 +98,7 @@ beforeEach(async () => {
     }
 
     await s.doc("publicPortal/tok-abc123").set({ orderNumber: 1, status: "in_progress" });
+    await s.doc("publicWashes/LAVTOKEN23").set({ tid: "rapifix", washId: "w1", code: "LAV-0001", status: "ready", paid: false });
   });
 });
 
@@ -400,7 +402,7 @@ describe("lecturas restringidas por rol", () => {
   });
 
   it("pagos, ventas y cobros en línea: sin técnico ni bodega", async () => {
-    for (const c of ["payments", "sales", "onlinePayments", "maintenance"]) {
+    for (const c of ["payments", "sales", "onlinePayments", "paymentProofs", "maintenance"]) {
       await canRead(`${T}/${c}/x1`, ["admin", "manager", "reception", "seller"]);
     }
   });
@@ -614,5 +616,42 @@ describe("portal público del cliente (publicPortal)", () => {
     await assertFails(anon().doc("publicPortal/nuevo").set({ orderNumber: 9 }));
     await assertFails(db("admin").doc("publicPortal/tok-abc123").update({ status: "delivered" }));
     await assertFails(db("admin").doc("publicPortal/tok-abc123").delete());
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("link de pago del lavado y comprobantes del cliente", () => {
+  it("cualquiera (sin sesión) lee la página pública del lavado con el token exacto", async () => {
+    await assertSucceeds(anon().doc("publicWashes/LAVTOKEN23").get());
+  });
+
+  it("nadie lista las páginas públicas de lavados (ni sin sesión ni admin)", async () => {
+    await assertFails(anon().collection("publicWashes").get());
+    await assertFails(db("admin").collection("publicWashes").get());
+    await assertFails(anon().collection("publicWashes").where("tid", "==", "rapifix").get());
+  });
+
+  it("nadie escribe la página pública del lavado (ni marca pagado)", async () => {
+    await assertFails(anon().doc("publicWashes/LAVTOKEN23").update({ paid: true }));
+    await assertFails(anon().doc("publicWashes/NUEVO23456").set({ paid: true }));
+    await assertFails(db("admin").doc("publicWashes/LAVTOKEN23").update({ paid: true }));
+    await assertFails(db("admin").doc("publicWashes/LAVTOKEN23").delete());
+  });
+
+  it("comprobantes: los lee caja; el lavador, técnico, bodega y sin sesión no", async () => {
+    for (const r of ROLES) {
+      const q = db(r).doc(`${T}/paymentProofs/x1`).get();
+      if (["admin", "manager", "reception", "seller"].includes(r)) await assertSucceeds(q);
+      else await assertFails(q);
+    }
+    await assertFails(anon().doc(`${T}/paymentProofs/x1`).get());
+    await assertSucceeds(db("reception").collection(`${T}/paymentProofs`).where("status", "==", "pending").get());
+    await assertFails(db("washer").collection(`${T}/paymentProofs`).where("status", "==", "pending").get());
+  });
+
+  it("nadie aprueba un comprobante desde el cliente (ni el admin) ni lo crea sin sesión", async () => {
+    await assertFails(db("admin").doc(`${T}/paymentProofs/x1`).update({ status: "approved" }));
+    await assertFails(anon().doc(`${T}/paymentProofs/nuevo`).set({ status: "pending", amount: 100 }));
+    await assertFails(otherTenantAdmin().doc(`${T}/paymentProofs/x1`).get());
   });
 });

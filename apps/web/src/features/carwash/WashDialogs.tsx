@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Ban, BadgeCheck, CreditCard, Gift, Link2, MessageCircle, Pencil, Printer, StickyNote, Undo2, User } from "lucide-react";
+import { AlertTriangle, Ban, BadgeCheck, Copy, CreditCard, Gift, Link2, Loader2, MessageCircle, Pencil, Printer, StickyNote, Undo2, User } from "lucide-react";
 import {
-  formatMoney, formatPhone, loyaltyText, netOf, renderTemplate, templateBody, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS,
+  carwashReadyBody, formatMoney, formatPhone, loyaltyText, netOf, renderTemplate, templateMissingLink, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS,
   WASH_STATUS_LABELS, type Customer, type QueueStatus, type Wash,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -17,7 +17,9 @@ import { useSettings } from "@/features/settings/api";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
 import { CustomerPicker } from "@/features/vehicles/CustomerPicker";
 import { useCustomerVehicles } from "@/features/vehicles/api";
-import { assignWasher, cancelWash, linkWashCustomer, setWashStatus, useCarwashSettings, useLoyalty, useWashers } from "./api";
+import { PendingProofsPanel } from "@/features/payments/proofs";
+import { assignWasher, cancelWash, ensureWashPayUrl, linkWashCustomer, setWashStatus, useCarwashSettings, useLoyalty, useWashers } from "./api";
+import { AdjustStampsButton } from "./LoyaltyAdjust";
 import { Stamps } from "./RegisterWashDialog";
 import { formatMinutes, msOf, STATUS_STYLE } from "./ui";
 
@@ -50,28 +52,59 @@ export async function moveWash(w: Wash, to: QueueStatus): Promise<boolean> {
   }
 }
 
-/** Mensaje de WhatsApp "su vehículo está listo" con los sellos de lealtad. */
-export function useReadyMessage(w: Wash | null) {
+/** Lavado pagado o sin cobro (el mensaje no pide pago). */
+const isSettled = (w: Wash) => w.paid || w.total === 0;
+
+/**
+ * Link público del lavado (/lavado/:token). Si el lavado es de antes y no tiene, se crea en el servidor.
+ * "" mientras carga o si no se pudo (el mensaje sale sin link).
+ */
+export function useWashPayUrl(w: Wash | null) {
+  const [url, setUrl] = useState<{ id: string; url: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const id = w?.id ?? null;
+  const token = w?.payToken ?? null;
+  const cancelled = w?.status === "cancelled";
+  useEffect(() => {
+    setError(null);
+    if (!id || cancelled) return;
+    let alive = true;
+    ensureWashPayUrl({ id, payToken: token })
+      .then((u) => alive && setUrl({ id, url: u }))
+      .catch((e) => alive && setError(errorMessage(e)));
+    return () => {
+      alive = false;
+    };
+  }, [id, token, cancelled]);
+  const ready = !!url && url.id === id;
+  return { url: ready ? url.url : "", loading: !!id && !cancelled && !ready && !error, error };
+}
+
+/** Mensaje de WhatsApp "su vehículo está listo" con el link para pagar (o ver su lavado) y los sellos. */
+export function useReadyMessage(w: Wash | null, link: string) {
   const { settings: general } = useSettings();
   const { settings } = useCarwashSettings();
   const loyalty = useLoyalty(w?.plate);
   if (!w) return "";
   const l = loyalty.data;
   const sellos = settings.loyaltyEvery > 0 && l ? loyaltyText(l.count ?? 0, settings.loyaltyEvery, l.rewardsAvailable ?? 0) : "";
-  return renderTemplate(templateBody("carwashReady"), {
+  return renderTemplate(carwashReadyBody(isSettled(w)), {
     cliente: w.customerName || "",
     placa: formatPlate(w.plate),
     taller: general.name,
     sellos,
     total: formatMoney(w.total),
+    link,
   });
 }
 
 export function WhatsAppReadyDialog({ wash, onClose }: { wash: Wash | null; onClose: () => void }) {
-  const text = useReadyMessage(wash);
+  const pay = useWashPayUrl(wash);
+  const text = useReadyMessage(wash, pay.url);
   const { settings } = useCarwashSettings();
   const loyalty = useLoyalty(wash?.plate);
   if (!wash) return null;
+  const templateKey = isSettled(wash) ? "carwashReadyPaid" : "carwashReady";
   return (
     <Dialog open onClose={onClose} size="md" title="Avisar por WhatsApp" description={`${wash.code} · ${formatPlate(wash.plate)} · ${wash.customerName}`}>
       <div className="space-y-4">
@@ -81,9 +114,18 @@ export function WhatsAppReadyDialog({ wash, onClose }: { wash: Wash | null; onCl
             <Stamps count={loyalty.data.count ?? 0} every={settings.loyaltyEvery} />
           </div>
         )}
-        {wash.phone ? (
-          <WhatsAppComposer to={{ phone: wash.phone, name: wash.customerName || formatPlate(wash.plate) }} initial={text} context="carwash" onSent={onClose} />
+        {templateMissingLink(templateKey) && (
+          <p className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> La plantilla editada no incluye {"{{link}}"}: el cliente no recibirá el link para pagar. Agréguelo en WhatsApp → Plantillas.
+          </p>
+        )}
+        {pay.error && <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">No se pudo generar el link de pago ({pay.error}). El mensaje sale sin link.</p>}
+        {!wash.phone ? null : pay.loading ? (
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Preparando el link de pago…</div>
         ) : (
+          <WhatsAppComposer to={{ phone: wash.phone, name: wash.customerName || formatPlate(wash.plate) }} initial={text} context="carwash" onSent={onClose} />
+        )}
+        {wash.phone ? null : (
           <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Este lavado no tiene teléfono. Edite el lavado para agregarlo.</p>
         )}
       </div>
@@ -177,6 +219,9 @@ export function WashDetailDialog({
   const { can } = useAuth();
   const [busy, setBusy] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const { settings: cw } = useCarwashSettings();
+  const loyalty = useLoyalty(wash?.plate);
   useEffect(() => setLinking(false), [wash?.id]);
   if (!wash) return null;
   const w = wash;
@@ -187,6 +232,22 @@ export function WashDetailDialog({
     const x = msOf(a as Wash["createdAt"]);
     const y = msOf(b as Wash["createdAt"]);
     return x && y ? formatMinutes((y - x) / 60000) : "";
+  };
+  const copyLink = async () => {
+    setCopying(true);
+    try {
+      const url = await ensureWashPayUrl(w);
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link copiado. Péguelo en WhatsApp o donde quiera enviarlo.");
+      } catch {
+        window.prompt("Copie el link del lavado:", url);
+      }
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setCopying(false);
+    }
   };
   const back = async () => {
     if (!prev) return;
@@ -265,6 +326,21 @@ export function WashDetailDialog({
           {money && w.commission > 0 && <p className="mt-2 text-xs text-slate-500">Comisión del lavador: {formatMoney(w.commission)}</p>}
         </div>
 
+        {needsCharge(w) && <PendingProofsPanel washId={w.id} washTotal={w.total} />}
+
+        {cw.loyaltyEvery > 0 && loyalty.data && (
+          <div className="rounded-xl border border-slate-200 p-3">
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 font-semibold text-slate-800">
+                <Gift className="h-4 w-4 text-violet-600" /> Tarjeta de lealtad: {loyalty.data.count ?? 0} de {cw.loyaltyEvery}
+                {(loyalty.data.rewardsAvailable ?? 0) > 0 && <Badge tone="blue">{loyalty.data.rewardsAvailable} gratis</Badge>}
+              </span>
+              <AdjustStampsButton loyalty={loyalty.data} every={cw.loyaltyEvery} />
+            </div>
+            <Stamps count={loyalty.data.count ?? 0} every={cw.loyaltyEvery} />
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
           <TimeBox label="Espera" value={minutes(w.createdAt, w.startedAt)} />
           <TimeBox label="Lavado" value={minutes(w.startedAt, w.readyAt)} />
@@ -282,6 +358,11 @@ export function WashDetailDialog({
           )}
           {(w.status === "ready" || w.status === "delivered") && w.phone && onWhatsApp && (
             <Button variant="secondary" icon={<MessageCircle className="h-4 w-4" />} onClick={() => onWhatsApp(w)}>WhatsApp</Button>
+          )}
+          {w.status !== "cancelled" && (
+            <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => void copyLink()} loading={copying}>
+              {needsCharge(w) ? "Copiar link de pago" : "Copiar link del lavado"}
+            </Button>
           )}
           <Link to={`/imprimir/lavado/${w.id}`} target="_blank"><Button variant="secondary" icon={<Printer className="h-4 w-4" />}>Ticket</Button></Link>
           {open && !w.paid && onEdit && can("carwash.create") && (

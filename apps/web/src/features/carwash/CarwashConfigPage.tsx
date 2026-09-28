@@ -49,6 +49,7 @@ export function CarwashConfigPage() {
       await saveCarwashSettings(
         {
           loyaltyEvery: clean.loyaltyEvery,
+          loyaltyStartStamps: clean.loyaltyStartStamps,
           rewardMode: clean.rewardMode,
           rewardMaxPrice: clean.rewardMaxPrice,
           taxMode: clean.taxMode,
@@ -94,6 +95,21 @@ export function CarwashConfigPage() {
             </Field>
             {form.loyaltyEvery > 0 && (
               <>
+                <Field
+                  label="Sellos de regalo al empezar la tarjeta"
+                  hint={`De 0 a ${form.loyaltyEvery - 1}. Ej. 2: la tarjeta nueva arranca en 2 de ${form.loyaltyEvery} y con su primer lavado queda en 3. Solo aplica a placas que aún no tienen tarjeta; las que ya tienen no cambian.`}
+                >
+                  <Input
+                    type="number"
+                    min={0}
+                    max={Math.max(0, form.loyaltyEvery - 1)}
+                    inputMode="numeric"
+                    value={form.loyaltyStartStamps}
+                    onChange={(e) => set("loyaltyStartStamps", Math.max(0, Math.min(form.loyaltyEvery - 1, Math.floor(Number(e.target.value) || 0))))}
+                    className="w-32"
+                    disabled={!editable}
+                  />
+                </Field>
                 <div>
                   <div className="mb-1.5 text-[13px] font-medium text-slate-700">Qué cubre el lavado gratis</div>
                   <div className="grid gap-2 sm:grid-cols-2">

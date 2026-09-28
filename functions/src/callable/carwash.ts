@@ -1,10 +1,11 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp, type DocumentSnapshot } from "firebase-admin/firestore";
 import {
-  applyLoyaltyWash, buildSearchKeywords, buildWashItems, cancelMembershipSchema, cancelWashSchema, carwashCol, carwashLookupSchema,
+  adjustLoyaltyStamps as adjustStamps, adjustLoyaltyStampsSchema, buildSearchKeywords, catalogCol, formatMoney, getWashPayLinkSchema, PUBLIC_WASHES, buildWashItems, cancelMembershipSchema, cancelWashSchema, carwashCol, carwashLookupSchema,
   chargeWashSchema, col, computeWashCharge, extendMembership, isValidPhone, membershipCanUse, membershipWindow, monthsLabel,
   normalizePhone, normalizeText, opsCol, orderCol, reorderCarwashServicesSchema, rewardCap, SAMPLE_CARWASH_MENU,
-  saveCarwashPlanSchema, saveCarwashServiceSchema, saveWashSchema, sellMembershipSchema, setWashStatusSchema, VEHICLE_SIZE_SHORT,
+  saveCarwashPlanSchema, saveCarwashServiceSchema, saveWashSchema, sellMembershipSchema, setWashStatusSchema,
+  type AdjustLoyaltyStampsResult, type LoyaltyAdjustment, type WashPayLinkResult,
   washCommissionTotal, assignWasherSchema, carwashVehicleData, hnDayKey, isPendingVehicle, linkWashCustomerSchema, pickVehicleForPlate, washPlate,
   type CarwashLookupResult, type LinkWashCustomerResult, type SaveWashResult, type CarwashMembership, type MembershipStatus, type VehicleSize, type WashItem, type WashStatus,
 } from "@rapifix/shared";
@@ -13,7 +14,9 @@ import { REGION } from "../lib/params";
 import { parseInput, requireRole } from "../lib/guards";
 import { actorName } from "../lib/actors";
 import { pad, readCounter } from "../lib/counters";
-import { CARWASH_MANAGERS, CARWASH_STAFF, CASHIERS, loadCarwashConfig, loadCarwashServices, toMs, writeCarwashSale } from "../lib/carwash";
+import { secureToken } from "../lib/token";
+import { buildPublicWash, rebuildPlatePublicWashes } from "../lib/publicWash";
+import { CARWASH_MANAGERS, CARWASH_STAFF, CASHIERS, loadCarwashConfig, loadCarwashServices, readWashCharge, toMs, writeCarwashSale, writeWashCharge } from "../lib/carwash";
 
 const bad = (msg: string) => new HttpsError("failed-precondition", msg);
 
@@ -164,7 +167,11 @@ export const carwashLookup = onCall({ region: REGION }, async (request): Promise
           lastWashAt: toMs(loyalty.get("lastWashAt")) || null,
         }
       : null,
-    loyalty: { count: Number(loyalty.get("count") ?? 0), rewardsAvailable: Number(loyalty.get("rewardsAvailable") ?? 0), every: cfg.cw.loyaltyEvery },
+    loyalty: {
+      count: Number(loyalty.get("count") ?? 0), rewardsAvailable: Number(loyalty.get("rewardsAvailable") ?? 0), every: cfg.cw.loyaltyEvery,
+      isNew: !loyalty.exists || loyalty.get("welcomePending") === true,
+      startStamps: cfg.cw.loyaltyStartStamps,
+    },
     membership: membership
       ? {
           id: membership.doc.id,
@@ -350,6 +357,16 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
     const total = charge.totals.total;
     const commission = washCommissionTotal(items);
 
+    // Si el cliente tiene abierto el link de pago con tarjeta, no se cambia el total (pagaría otro monto)
+    if (prev && Number(prev.get("total") ?? 0) !== total) {
+      const open = await tx.get(db.collection(catalogCol.onlinePayments(tid)).where("washId", "==", washRef.id).limit(20));
+      const live = open.docs.find((d) => ["creating", "pending"].includes(String(d.get("status"))) && toMs(d.get("expiresAt")) > now);
+      if (live) {
+        const mins = Math.max(1, Math.ceil((toMs(live.get("expiresAt")) - now) / 60000));
+        throw bad(`El cliente abrió el link para pagar ${formatMoney(Number(live.get("amount") ?? 0))} con tarjeta. Espere a que pague o a que el link venza (unos ${mins} min) para cambiar el total.`);
+      }
+    }
+
     // ---------- escrituras ----------
     if (newCustomerRef) {
       const [firstName, ...rest] = customerName.split(/\s+/);
@@ -392,7 +409,8 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
     // No se borra el vínculo con el cliente si este lavado llega sin cliente
     if (wCustomerId) loyaltyPatch.customerId = wCustomerId;
     if (wVehicleId) loyaltyPatch.vehicleId = wVehicleId;
-    if (!loyaltySnap.exists) Object.assign(loyaltyPatch, { count: 0, rewardsAvailable: 0, rewardsUsed: 0, totalWashes: 0, customerId: wCustomerId, vehicleId: wVehicleId });
+    // Tarjeta nueva: los sellos de regalo se aplican con el primer lavado que cuente (al cobrarlo)
+    if (!loyaltySnap.exists) Object.assign(loyaltyPatch, { count: 0, rewardsAvailable: 0, rewardsUsed: 0, totalWashes: 0, customerId: wCustomerId, vehicleId: wVehicleId, welcomePending: true });
     if (!prev || !samePlate) loyaltyPatch.totalWashes = FieldValue.increment(1);
     if (input.useReward && !keepReward) {
       loyaltyPatch.rewardsAvailable = FieldValue.increment(-1);
@@ -416,7 +434,7 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
     const code = `LAV-${pad(counter!.next)}`;
     tx.set(counter!.ref, { next: counter!.next + 1 }, { merge: true });
     tx.set(washRef, {
-      ...common, number: counter!.next, code, status: "waiting", cancelReason: "",
+      ...common, number: counter!.next, code, status: "waiting", cancelReason: "", payToken: secureToken(),
       createdAt: FieldValue.serverTimestamp(), startedAt: null, readyAt: null, deliveredAt: null,
       createdBy: caller.uid, createdByName: name,
     });
@@ -498,7 +516,7 @@ export const linkWashCustomer = onCall({ region: REGION }, async (request): Prom
       customerId: input.customerId, vehicleId,
       customerName: customer.fullName || String(loyalty.get("customerName") ?? ""),
       phone: String(loyalty.get("phone") || customerPhone),
-      ...(loyalty.exists ? {} : { count: 0, rewardsAvailable: 0, rewardsUsed: 0, totalWashes: 1, size: w.get("size") ?? null, lastWashAt: w.get("createdAt") ?? null }),
+      ...(loyalty.exists ? {} : { count: 0, rewardsAvailable: 0, rewardsUsed: 0, totalWashes: 1, size: w.get("size") ?? null, lastWashAt: w.get("createdAt") ?? null, welcomePending: true }),
     }, { merge: true });
     return { customerId: input.customerId, vehicleId: vehicleId!, vehicleCreated: !!newVehicleRef, linkedWashes: linked };
   });
@@ -601,67 +619,14 @@ export const chargeWash = onCall({ region: REGION }, async (request) => {
   const tid = caller.tid;
   const name = await actorName(caller.uid, caller.email);
   const cfg = await loadCarwashConfig(tid);
-  const ref = db.doc(`${carwashCol.washes(tid)}/${input.washId}`);
 
   return db.runTransaction(async (tx) => {
-    // ---------- lecturas ----------
-    const w = await tx.get(ref);
-    if (!w.exists) throw new HttpsError("not-found", "El lavado no existe.");
-    if (w.get("status") === "cancelled") throw bad("El lavado está cancelado.");
-    if (w.get("saleId")) throw bad(`Este lavado ya fue cobrado (${w.get("saleCode")}).`);
-    const plate = String(w.get("plate"));
-    const loyaltyRef = db.doc(`${carwashCol.loyalty(tid)}/${plate}`);
-    const loyalty = await tx.get(loyaltyRef);
-    const saleCounter = await readCounter(tx, tid, "sales");
-    const payCounter = await readCounter(tx, tid, "payments");
-
-    // ---------- cálculo ----------
-    const items = (w.get("items") as WashItem[]) ?? [];
-    const gross = items.reduce((a, i) => a + i.price, 0);
-    if (input.discount > gross) throw new HttpsError("invalid-argument", "El descuento es mayor que el total.");
-    // Se respeta el modo de ISV con que se registró el lavado
-    const taxMode = (w.get("taxMode") as typeof cfg.cw.taxMode) ?? cfg.cw.taxMode;
-    const taxRate = Number(w.get("taxRate") ?? cfg.taxRate);
-    const charge = computeWashCharge(items.map((i) => i.price), taxRate, taxMode, input.discount);
-    const total = charge.totals.total;
-    if (total <= 0) throw bad("El total es 0: no hay nada que cobrar.");
-    const paidTotal = input.payments.reduce((a, p) => a + p.amount, 0);
-    if (paidTotal !== total) throw new HttpsError("invalid-argument", "Los pagos deben sumar exactamente el total a cobrar.");
-
-    const size = w.get("size") as VehicleSize;
-    const main = items.find((i) => i.kind === "wash");
-    const counts = !!main && !main.covered && cfg.cw.loyaltyEvery > 0;
-    const loyaltyAfter = counts
-      ? applyLoyaltyWash({ count: Number(loyalty.get("count") ?? 0), rewardsAvailable: Number(loyalty.get("rewardsAvailable") ?? 0) }, cfg.cw.loyaltyEvery)
-      : null;
-
-    // ---------- escrituras ----------
-    const customerName = String(w.get("customerName") || "Consumidor final");
-    const sale = writeCarwashSale(tx, {
-      tid, uid: caller.uid, byName: name, saleCounter, payCounter,
-      customerId: (w.get("customerId") as string | null) ?? null, customerName,
-      vehicleId: (w.get("vehicleId") as string | null) ?? null,
-      vehicleLabel: `${VEHICLE_SIZE_SHORT[size] ?? ""} · placa ${plate}`,
-      items: items.map((it, i) => ({
-        refId: it.serviceId,
-        description: `${it.name} (${VEHICLE_SIZE_SHORT[size] ?? size})${it.covered === "membership" ? " · membresía" : it.covered === "reward" ? " · premio de lealtad" : ""}`,
-        unitPrice: charge.lines[i]!.unitPrice, discount: charge.lines[i]!.discount, taxable: charge.lines[i]!.taxable, lineTotal: charge.lines[i]!.lineTotal,
-      })),
-      taxRate, totals: charge.totals, payments: input.payments, washId: ref.id,
-      extra: { washCode: w.get("code") },
-    });
-    if (loyaltyAfter) {
-      tx.set(loyaltyRef, { count: loyaltyAfter.count, rewardsAvailable: loyaltyAfter.rewardsAvailable, lastWashAt: FieldValue.serverTimestamp() }, { merge: true });
+    const r = await readWashCharge(tx, tid, input.washId);
+    if (r.wash.exists && r.wash.get("saleId") && !r.wash.get("paid")) {
+      throw bad(`Este lavado tiene un pago en línea incompleto (venta ${r.wash.get("saleCode")}). Revíselo en Pagos.`);
     }
-    tx.update(ref, {
-      paid: true, paidAt: FieldValue.serverTimestamp(), saleId: sale.saleId, saleCode: sale.code,
-      discount: input.discount, totals: charge.totals, total,
-      loyaltyCounted: !!loyaltyAfter,
-      loyaltyStamps: loyaltyAfter ? loyaltyAfter.count : Number(loyalty.get("count") ?? 0),
-      loyaltyEvery: cfg.cw.loyaltyEvery,
-      updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
-    });
-    return { saleId: sale.saleId, code: sale.code, paymentIds: sale.paymentIds, earnedReward: !!loyaltyAfter?.earned, stamps: loyaltyAfter?.count ?? null };
+    const res = writeWashCharge(tx, r, { cfg, uid: caller.uid, byName: name, discount: input.discount, payments: input.payments, mode: "exact" });
+    return { saleId: res.saleId, code: res.code, paymentIds: res.paymentIds, earnedReward: res.earnedReward, stamps: res.stamps };
   });
 });
 
@@ -784,4 +749,70 @@ export const cancelMembership = onCall({ region: REGION }, async (request) => {
   if (m.get("status") === "cancelled") throw bad("La membresía ya está cancelada.");
   await ref.update({ status: "cancelled", cancelReason: input.reason, cancelledAt: FieldValue.serverTimestamp(), cancelledBy: caller.uid, updatedAt: FieldValue.serverTimestamp() });
   return { ok: true };
+});
+
+// ============================================================================
+// Link público del lavado (/lavado/:token): ver, pagar con tarjeta o subir comprobante
+// ============================================================================
+
+/** Devuelve el token del link del lavado; si el lavado es de antes y no tiene, lo crea. Caja y lavadores. */
+export const getWashPayLink = onCall({ region: REGION }, async (request): Promise<WashPayLinkResult> => {
+  const caller = requireRole(request, CARWASH_STAFF);
+  const { washId } = parseInput(getWashPayLinkSchema, request.data);
+  const tid = caller.tid;
+  const ref = db.doc(`${carwashCol.washes(tid)}/${washId}`);
+  const token = await db.runTransaction(async (tx) => {
+    const w = await tx.get(ref);
+    if (!w.exists) throw new HttpsError("not-found", "El lavado no existe.");
+    if (w.get("status") === "cancelled") throw bad("El lavado está cancelado.");
+    const current = w.get("payToken") as string | undefined;
+    if (current) return current;
+    let t = secureToken();
+    // Muy improbable, pero se revisa que el token no esté usado
+    for (let i = 0; i < 3 && (await tx.get(db.doc(`${PUBLIC_WASHES}/${t}`))).exists; i++) t = secureToken();
+    tx.update(ref, { payToken: t });
+    return t;
+  });
+  // Se arma la página pública ya, para que el link funcione al instante
+  await buildPublicWash(tid, washId);
+  return { token };
+});
+
+// ============================================================================
+// Ajuste manual de sellos de lealtad (promociones o correcciones). Solo admin y gerencia.
+// ============================================================================
+
+export const adjustLoyaltyStamps = onCall({ region: REGION }, async (request): Promise<AdjustLoyaltyStampsResult> => {
+  const caller = requireRole(request, CARWASH_MANAGERS);
+  const input = parseInput(adjustLoyaltyStampsSchema, request.data);
+  const tid = caller.tid;
+  const name = await actorName(caller.uid, caller.email);
+  const cfg = await loadCarwashConfig(tid);
+  const every = cfg.cw.loyaltyEvery;
+  if (!(every > 0)) throw bad("La tarjeta de lealtad está desactivada en la configuración del carwash.");
+  const ref = db.doc(`${carwashCol.loyalty(tid)}/${input.plate}`);
+
+  const result = await db.runTransaction(async (tx) => {
+    const l = await tx.get(ref);
+    if (!l.exists) throw new HttpsError("not-found", "Esta placa aún no tiene tarjeta de lealtad.");
+    const before = { count: Number(l.get("count") ?? 0), rewardsAvailable: Number(l.get("rewardsAvailable") ?? 0) };
+    if (input.delta < 0 && before.count <= 0) throw bad("La tarjeta ya está en 0 sellos.");
+    const after = adjustStamps(before, input.delta, every);
+    const entry: LoyaltyAdjustment = {
+      delta: input.delta, reason: input.reason, countBefore: before.count, countAfter: after.count, rewardsEarned: after.rewardsEarned,
+      by: caller.uid, byName: name, at: Date.now(),
+    };
+    tx.update(ref, { count: after.count, rewardsAvailable: after.rewardsAvailable, adjustments: FieldValue.arrayUnion(entry) });
+    tx.set(db.collection(col.auditLogs(tid)).doc(), {
+      action: "update", entity: "carwashLoyalty", entityId: input.plate, path: ref.path,
+      actorId: caller.uid, actorType: "user",
+      before, after: { count: after.count, rewardsAvailable: after.rewardsAvailable },
+      changedFields: ["count", "rewardsAvailable"],
+      note: `Ajuste de sellos ${input.delta > 0 ? "+" : ""}${input.delta} (${name}): ${input.reason}`,
+      at: FieldValue.serverTimestamp(),
+    });
+    return after;
+  });
+  await rebuildPlatePublicWashes(tid, input.plate);
+  return result;
 });

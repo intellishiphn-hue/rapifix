@@ -3,6 +3,7 @@ import { ChevronsLeft, ChevronsRight, X } from "lucide-react";
 import { NAV_GROUPS } from "@/app/navigation";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useSettings } from "@/features/settings/api";
+import { usePendingProofs } from "@/features/payments/proofs";
 import { Logo } from "@/components/common/Logo";
 import { cn } from "@/lib/cn";
 
@@ -19,6 +20,7 @@ export function Sidebar({
 }) {
   const { can } = useAuth();
   const { settings } = useSettings();
+  const proofCount = usePendingProofs(can("payments.read")).data.length;
 
   return (
     <>
@@ -72,6 +74,14 @@ export function Sidebar({
                       >
                         <item.icon className="h-[18px] w-[18px] shrink-0" />
                         <span className={cn("flex-1 truncate", collapsed && "lg:hidden")}>{item.label}</span>
+                        {item.counter === "proofs" && proofCount > 0 && (
+                          <span
+                            title={`Comprobantes por revisar: ${proofCount}`}
+                            className={cn("rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white", collapsed && "lg:hidden")}
+                          >
+                            {proofCount}
+                          </span>
+                        )}
                         {item.phase && (
                           <span className={cn("rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500", collapsed && "lg:hidden")}>
                             F{item.phase}

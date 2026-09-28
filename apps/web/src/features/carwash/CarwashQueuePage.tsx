@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { BadgeCheck, ChevronRight, Clock, CreditCard, Droplets, Gift, MessageCircle, Plus, StickyNote, User } from "lucide-react";
+import { BadgeCheck, ChevronRight, Clock, CreditCard, Droplets, FileClock, Gift, MessageCircle, Plus, StickyNote, User } from "lucide-react";
 import { formatMoney, QUEUE_STATUSES, VEHICLE_SIZE_SHORT, WASH_STATUS_LABELS, type QueueStatus, type Wash } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { cn } from "@/lib/cn";
@@ -11,7 +12,8 @@ import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState, ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { hnTodayStart } from "@/features/reports/period";
-import { useWashQueue } from "./api";
+import { usePendingProofs } from "@/features/payments/proofs";
+import { useWash, useWashQueue } from "./api";
 import { ChargeDialog } from "./ChargeDialog";
 import { RegisterWashDialog } from "./RegisterWashDialog";
 import { CarwashTabs, formatMinutes, formatTime, msOf, STATUS_STYLE, useNow } from "./ui";
@@ -33,6 +35,18 @@ export function CarwashQueuePage() {
   const [cancel, setCancel] = useState<Wash | null>(null);
   const [unpaid, setUnpaid] = useState<Wash | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const proofs = usePendingProofs(can("payments.read"));
+  const proofWashIds = useMemo(() => new Set(proofs.data.map((p) => p.washId).filter(Boolean)), [proofs.data]);
+
+  // /carwash?lavado=<id> (desde "Comprobantes por revisar" en Pagos) abre el detalle de ese lavado
+  const [params, setParams] = useSearchParams();
+  const linked = params.get("lavado");
+  useEffect(() => {
+    if (!linked) return;
+    setDetailId(linked);
+    setParams((p) => { p.delete("lavado"); return p; }, { replace: true });
+  }, [linked, setParams]);
+  const outside = useWash(detailId && !queue.data.some((w) => w.id === detailId) ? detailId : undefined);
 
   const columns = useMemo(() => {
     const map: Record<QueueStatus, Wash[]> = { waiting: [], washing: [], ready: [], delivered: [] };
@@ -49,7 +63,7 @@ export function CarwashQueuePage() {
     return map;
   }, [queue.data, today]);
 
-  const detail = detailId ? queue.data.find((w) => w.id === detailId) ?? null : null;
+  const detail = detailId ? queue.data.find((w) => w.id === detailId) ?? (outside.data?.id === detailId ? outside.data : null) : null;
   const isManager = can("carwash.manage");
 
   const advance = async (w: Wash, force = false) => {
@@ -115,6 +129,7 @@ export function CarwashQueuePage() {
                   onAdvance={() => void advance(w)}
                   onCharge={can("carwash.charge") ? () => setCharge(w) : undefined}
                   onWhatsApp={() => setWhatsapp(w)}
+                  proofPending={proofWashIds.has(w.id)}
                 />
               ))}
               {!columns[s].length && (
@@ -168,9 +183,9 @@ export function CarwashQueuePage() {
 }
 
 function WashCard({
-  wash: w, now, busy, onOpen, onAdvance, onCharge, onWhatsApp,
+  wash: w, now, busy, onOpen, onAdvance, onCharge, onWhatsApp, proofPending,
 }: {
-  wash: Wash; now: number; busy: boolean; onOpen: () => void; onAdvance: () => void; onCharge?: () => void; onWhatsApp: () => void;
+  wash: Wash; now: number; busy: boolean; onOpen: () => void; onAdvance: () => void; onCharge?: () => void; onWhatsApp: () => void; proofPending?: boolean;
 }) {
   const { can } = useAuth();
   const mins = stageMinutes(w, now);
@@ -201,6 +216,7 @@ function WashCard({
           {w.membershipId && <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700"><BadgeCheck className="h-3 w-3" />Membresía</span>}
           {w.loyaltyRedeemed && <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-700"><Gift className="h-3 w-3" />Premio</span>}
           {w.notes && <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-800"><StickyNote className="h-3 w-3" />Notas</span>}
+          {proofPending && needsCharge(w) && <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800"><FileClock className="h-3 w-3" />Comprobante por revisar</span>}
           {money && (
             <span className={cn("ml-auto tabular font-bold", w.paid ? "text-emerald-700" : "text-slate-900")}>
               {w.total > 0 ? formatMoney(w.total) : "Sin cobro"}{w.paid && w.total > 0 ? " · pagado" : ""}

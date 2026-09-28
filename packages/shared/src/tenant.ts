@@ -43,6 +43,8 @@ export const catalogCol = {
   payments: (tid: string) => `tenants/${tid}/payments`,
   sales: (tid: string) => `tenants/${tid}/sales`,
   onlinePayments: (tid: string) => `tenants/${tid}/onlinePayments`,
+  /** comprobantes de transferencia/depósito que sube el cliente desde su link (los revisa caja) */
+  paymentProofs: (tid: string) => `tenants/${tid}/paymentProofs`,
   rokiEvents: (tid: string) => `tenants/${tid}/rokiEvents`,
   privateConfig: (tid: string) => `tenants/${tid}/private`,
 } as const;

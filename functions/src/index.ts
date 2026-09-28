@@ -38,6 +38,10 @@ export { voidSale } from "./callable/voidSale";
 // Carwash: menú, cola, cobros, lealtad y membresías
 export {
   saveCarwashService, reorderCarwashServices, seedCarwashMenu, saveCarwashPlan, carwashLookup, saveWash, linkWashCustomer, setWashStatus,
-  assignWasher, cancelWash, chargeWash, sellMembership, cancelMembership,
+  assignWasher, cancelWash, chargeWash, sellMembership, cancelMembership, getWashPayLink, adjustLoyaltyStamps,
 } from "./callable/carwash";
+export { onCarwashWashWritten } from "./triggers/carwash";
+// Comprobantes de transferencia/depósito que sube el cliente desde su link
+export { submitPaymentProof } from "./public/paymentProofs";
+export { reviewPaymentProof } from "./callable/paymentProofs";
 export { carwashDaily } from "./scheduled/carwash";

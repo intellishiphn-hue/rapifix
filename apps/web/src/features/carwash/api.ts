@@ -5,6 +5,7 @@ import {
   type CarwashLoyalty, type CarwashLookupResult, type CarwashMembership, type CarwashPlan, type CarwashService, type CarwashSettings,
   type ChargeWashInput, type LinkWashCustomerInput, type LinkWashCustomerResult, type SaveCarwashPlanInput, type SaveCarwashServiceInput,
   type SaveWashInput, type SaveWashResult, type SellMembershipInput, type SetWashStatusInput, type Wash,
+  type AdjustLoyaltyStampsInput, type AdjustLoyaltyStampsResult, type WashPayLinkResult,
 } from "@rapifix/shared";
 import { callable, db, TENANT_ID } from "@/lib/firebase";
 import { useDocData, useQueryData } from "@/lib/firestore/hooks";
@@ -24,6 +25,18 @@ export const cancelWash = callable<{ washId: string; reason: string }, { ok: boo
 export const chargeWash = callable<ChargeWashInput, { saleId: string; code: string; paymentIds: string[]; earnedReward: boolean; stamps: number | null }>("chargeWash");
 export const sellMembership = callable<SellMembershipInput, { membershipId: string; code: string; saleId: string; saleCode: string; paidUntil: number }>("sellMembership");
 export const cancelMembership = callable<{ membershipId: string; reason: string }, { ok: boolean }>("cancelMembership");
+export const getWashPayLink = callable<{ washId: string }, WashPayLinkResult>("getWashPayLink");
+export const adjustLoyaltyStamps = callable<AdjustLoyaltyStampsInput, AdjustLoyaltyStampsResult>("adjustLoyaltyStamps");
+
+/** Link público del lavado (ver, pagar con tarjeta o subir comprobante) en el dominio actual. */
+export const washPayUrl = (token: string) => `${window.location.origin}/lavado/${token}`;
+
+/** Link del lavado: usa el token guardado o lo crea en el servidor (lavados de antes). */
+export async function ensureWashPayUrl(w: Pick<Wash, "id" | "payToken">): Promise<string> {
+  if (w.payToken) return washPayUrl(w.payToken);
+  const { token } = await getWashPayLink({ washId: w.id });
+  return washPayUrl(token);
+}
 
 // ---------------- Configuración ----------------
 export const carwashSettingsRef = () => doc(db, col.settings(TENANT_ID), "carwash");

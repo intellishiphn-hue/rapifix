@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { useCarwashFor, useCarwashSettings } from "./api";
 import { Stamps } from "./RegisterWashDialog";
+import { AdjustStampsButton } from "./LoyaltyAdjust";
 import { MEMBERSHIP_TONE, membershipNow, STATUS_STYLE } from "./ui";
 
 const CASHIER_ROLES = ["admin", "manager", "reception", "seller"];
@@ -82,11 +83,13 @@ export function CarwashCustomerHistory({ customerId, vehicleId, plates }: { cust
                   {(l.rewardsAvailable ?? 0) > 0 && (
                     <Badge tone="blue"><Gift className="h-3 w-3" /> {l.rewardsAvailable === 1 ? "1 premio disponible" : `${l.rewardsAvailable} premios disponibles`}</Badge>
                   )}
+                  <span className="ml-auto"><AdjustStampsButton loyalty={l} every={every} /></span>
                 </div>
                 <div className="mt-2"><Stamps count={l.count ?? 0} every={every} /></div>
                 <div className="mt-1.5 text-xs text-slate-500">
                   {l.totalWashes ?? 0} visita{l.totalWashes === 1 ? "" : "s"}{l.rewardsUsed ? ` · ${l.rewardsUsed} premio${l.rewardsUsed === 1 ? "" : "s"} usado${l.rewardsUsed === 1 ? "" : "s"}` : ""}
                   {l.lastWashAt ? ` · último ${formatDate(l.lastWashAt)}` : ""}
+                  {l.welcomeStamps ? ` · arrancó con ${l.welcomeStamps} de regalo` : ""}
                 </div>
               </div>
             ))}

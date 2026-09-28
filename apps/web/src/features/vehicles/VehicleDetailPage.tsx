@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Archive, ArchiveRestore, Camera, Car, ClipboardList, Gauge, History, MessageCircle, Pencil, Phone, Plus, User } from "lucide-react";
+import { Archive, ArchiveRestore, Camera, Car, ClipboardList, Droplets, Gauge, History, MessageCircle, Pencil, Phone, Plus, User } from "lucide-react";
 import { toast } from "sonner";
-import { FUEL_LABELS, TRANSMISSION_LABELS, formatPhone, whatsappLink } from "@rapifix/shared";
+import { FUEL_LABELS, TRANSMISSION_LABELS, formatPhone, isPendingVehicle, whatsappLink } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
 import { formatDate, formatKm, formatRelative } from "@/lib/format";
@@ -18,13 +18,14 @@ import { useVehicleOrders } from "@/features/work-orders/api";
 import { OrdersMiniList } from "@/features/work-orders/OrdersMiniList";
 import { StatusBadge } from "@/features/work-orders/StatusBadge";
 import { VehicleMaintenanceCard } from "@/features/maintenance/VehicleMaintenanceCard";
+import { CarwashCustomerHistory } from "@/features/carwash/CarwashCustomerHistory";
 import { setVehicleArchived, useMileageLog, useVehicle } from "./api";
 import { PlateTag } from "./VehicleCard";
 import { VehicleFormDialog } from "./VehicleFormDialog";
 import { VehiclePhotos } from "./VehiclePhotos";
 import { MileageDialog } from "./MileageDialog";
 
-type Tab = "photos" | "mileage" | "timeline" | "changes";
+type Tab = "photos" | "mileage" | "timeline" | "carwash" | "changes";
 
 function Spec({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -55,6 +56,7 @@ export function VehicleDetailPage() {
 
   const canWrite = can("vehicles.write");
   const canAudit = can("audit.read");
+  const pending = isPendingVehicle(vehicle);
 
   const toggleArchive = async () => {
     if (!user) return;
@@ -74,6 +76,7 @@ export function VehicleDetailPage() {
     { value: "timeline", label: "Órdenes e historial", icon: <ClipboardList className="h-4 w-4" />, count: orders.data.length },
     { value: "photos", label: "Fotos", icon: <Camera className="h-4 w-4" />, count: vehicle.photoCount ?? 0 },
     { value: "mileage", label: "Kilometraje", icon: <Gauge className="h-4 w-4" /> },
+    ...(can("carwash.read") ? [{ value: "carwash" as Tab, label: "Carwash", icon: <Droplets className="h-4 w-4" /> }] : []),
     ...(canAudit ? [{ value: "changes" as Tab, label: "Cambios", icon: <History className="h-4 w-4" /> }] : []),
   ];
 
@@ -83,7 +86,7 @@ export function VehicleDetailPage() {
         back={{ to: "/vehiculos", label: "Vehículos" }}
         title={
           <span className="flex flex-wrap items-center gap-3">
-            {vehicle.make} {vehicle.model} <span className="font-medium text-slate-400">{vehicle.year}</span>
+            {pending ? "Vehículo por completar" : <>{vehicle.make} {vehicle.model} <span className="font-medium text-slate-400">{vehicle.year}</span></>}
             <PlateTag plate={vehicle.plate} className="text-sm" />
             {vehicle.archived && <Badge tone="gray">Archivado</Badge>}
           </span>
@@ -101,6 +104,14 @@ export function VehicleDetailPage() {
           )
         }
       />
+
+      {pending && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <Droplets className="h-4 w-4" />
+          <span className="flex-1">Registrado desde el carwash: faltan marca, modelo y año.</span>
+          {canWrite && <Button size="sm" variant="secondary" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>Completar datos</Button>}
+        </div>
+      )}
 
       {orders.data.filter((o) => o.isOpen).map((o) => (
         <Link key={o.id} to={`/ordenes/${o.id}`} className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm hover:bg-brand-100/60">
@@ -182,6 +193,7 @@ export function VehicleDetailPage() {
             )}
           />
         )}
+        {tab === "carwash" && can("carwash.read") && <CarwashCustomerHistory vehicleId={vehicle.id} plates={[vehicle.plate]} />}
         {tab === "changes" && canAudit && <AuditTrail entityId={vehicle.id} />}
       </Card>
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Car, ChevronRight, Phone, Plus, Search, Users } from "lucide-react";
+import { Car, ChevronRight, Droplets, Phone, Plus, Search, Users } from "lucide-react";
 import { formatPhone } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useDebounced } from "@/lib/firestore/hooks";
@@ -12,13 +12,14 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input, Select } from "@/components/ui/Field";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
+import { useCarwashCustomerIds } from "@/features/carwash/api";
 import { useCustomers, type StatusFilter } from "./api";
 import { CustomerFormDialog } from "./CustomerFormDialog";
 
 const PAGE = 25;
 
 export function CustomersPage() {
-  const { can } = useAuth();
+  const { can, role } = useAuth();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("active");
@@ -27,6 +28,11 @@ export function CustomersPage() {
   const debounced = useDebounced(search, 300);
   const { data, loading, error, hasMore } = useCustomers({ search: debounced, status, pageSize });
   const canWrite = can("customers.write");
+  // Indicador "Carwash": una consulta por cada 30 clientes de la página, no una por fila
+  const carwashIds = useCarwashCustomerIds(data.map((c) => c.id), {
+    enabled: can("carwash.read"),
+    memberships: !!role && ["admin", "manager", "reception", "seller"].includes(role),
+  });
 
   return (
     <>
@@ -84,6 +90,7 @@ export function CustomersPage() {
                           <div>
                             <div className="font-semibold text-slate-900">{c.fullName}</div>
                             {c.status === "inactive" && <Badge tone="gray">Inactivo</Badge>}
+                            {carwashIds.has(c.id) && <CarwashTag />}
                           </div>
                         </div>
                       </td>
@@ -111,7 +118,10 @@ export function CustomersPage() {
                   <Link to={`/clientes/${c.id}`} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
                     <Avatar name={c.fullName} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold">{c.fullName}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-semibold">{c.fullName}</span>
+                        {carwashIds.has(c.id) && <CarwashTag />}
+                      </div>
                       <div className="flex items-center gap-3 text-xs text-slate-500">
                         <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{formatPhone(c.phone)}</span>
                         <span className="inline-flex items-center gap-1"><Car className="h-3 w-3" />{c.vehicleCount ?? 0}</span>
@@ -133,5 +143,13 @@ export function CustomersPage() {
 
       <CustomerFormDialog open={creating} onClose={() => setCreating(false)} onSaved={(id) => navigate(`/clientes/${id}`)} />
     </>
+  );
+}
+
+function CarwashTag() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700 ring-1 ring-inset ring-sky-100" title="Tiene lavados o membresía en el carwash">
+      <Droplets className="h-3 w-3" /> Carwash
+    </span>
   );
 }

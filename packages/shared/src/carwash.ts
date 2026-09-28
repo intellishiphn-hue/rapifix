@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { BaseDoc, TimestampLike } from "./types";
 import { computeQuote, type Totals } from "./quote";
 import { createSaleSchema } from "./catalog";
+import { buildSearchKeywords } from "./text";
 
 // ============================================================================
 // CARWASH: tamaños, menú de lavados, cola, lealtad y membresías.
@@ -568,6 +569,87 @@ export const sellMembershipSchema = z.object({
 export type SellMembershipInput = z.infer<typeof sellMembershipSchema>;
 
 export const cancelMembershipSchema = z.object({ membershipId: id, reason: text(300).min(3, "Indique el motivo") });
+
+/** Vincular un lavado (y su placa) a un cliente del taller. Sin vehicleId se reusa o crea el vehículo de esa placa. */
+export const linkWashCustomerSchema = z.object({ washId: id, customerId: id, vehicleId: id.nullish() });
+export type LinkWashCustomerInput = z.infer<typeof linkWashCustomerSchema>;
+
+export interface SaveWashResult {
+  washId: string;
+  code: string;
+  total: number;
+  paid: boolean;
+  customerId: string | null;
+  vehicleId: string | null;
+  /** se agregó la placa a los vehículos del cliente */
+  vehicleCreated: boolean;
+}
+
+export interface LinkWashCustomerResult {
+  customerId: string;
+  vehicleId: string;
+  vehicleCreated: boolean;
+  /** lavados de la misma placa que quedaron vinculados (incluye este) */
+  linkedWashes: number;
+}
+
+// ============================================================================
+// Carros del carwash en el taller (vehículo mínimo)
+// ============================================================================
+
+/** Marca y modelo de un vehículo registrado desde el carwash (se completan en el taller). */
+export const CARWASH_VEHICLE_PENDING = "Por completar";
+export const CARWASH_VEHICLE_NOTE = "Registrado desde el carwash";
+
+/** El vehículo se registró desde el carwash y le faltan marca/modelo. */
+export const isPendingVehicle = (v: { make?: string; model?: string } | null | undefined) =>
+  !!v && (v.make === CARWASH_VEHICLE_PENDING || v.model === CARWASH_VEHICLE_PENDING);
+
+/**
+ * Documento mínimo de vehículo (sin timestamps ni autor) con la misma forma que los del taller:
+ * pasa vehicleSchema y las reglas, así se puede editar después desde la ficha del vehículo.
+ */
+export function carwashVehicleData(args: { plate: string; customerId: string; customer: { fullName: string; phone: string }; year: number }) {
+  const plate = washPlate(args.plate);
+  return {
+    customerId: args.customerId,
+    customer: { fullName: args.customer.fullName, phone: args.customer.phone },
+    make: CARWASH_VEHICLE_PENDING,
+    model: CARWASH_VEHICLE_PENDING,
+    year: args.year,
+    color: "",
+    plate,
+    vin: "",
+    mileage: 0,
+    mileageUpdatedAt: null,
+    fuelType: "gasolina" as const,
+    engine: "",
+    transmission: "automatica" as const,
+    notes: CARWASH_VEHICLE_NOTE,
+    coverPhotoUrl: "",
+    photoCount: 0,
+    archived: false,
+    searchKeywords: buildSearchKeywords([plate, args.customer.fullName]),
+  };
+}
+
+/**
+ * De los vehículos con una misma placa, el que se enlaza al lavado:
+ * primero uno activo del cliente, luego cualquiera activo, luego uno archivado del cliente, luego cualquiera.
+ */
+export function pickVehicleForPlate<T extends { id: string; customerId?: string | null; archived?: boolean | null }>(
+  vehicles: T[],
+  customerId: string | null,
+): T | null {
+  const own = (v: T) => !!customerId && v.customerId === customerId;
+  return (
+    vehicles.find((v) => !v.archived && own(v)) ??
+    vehicles.find((v) => !v.archived) ??
+    vehicles.find(own) ??
+    vehicles[0] ??
+    null
+  );
+}
 
 /** Respuesta de carwashLookup (datos para registrar un carro por placa). */
 export interface CarwashLookupResult {

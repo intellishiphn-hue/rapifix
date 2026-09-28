@@ -1,10 +1,10 @@
-import { useMemo } from "react";
-import { collection, doc, limit, query, serverTimestamp, setDoc, Timestamp, where } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
+import { collection, doc, documentId, getDocs, limit, query, serverTimestamp, setDoc, Timestamp, where } from "firebase/firestore";
 import {
   carwashCol, carwashSettingsFrom, col,
   type CarwashLoyalty, type CarwashLookupResult, type CarwashMembership, type CarwashPlan, type CarwashService, type CarwashSettings,
-  type ChargeWashInput, type SaveCarwashPlanInput, type SaveCarwashServiceInput, type SaveWashInput, type SellMembershipInput,
-  type SetWashStatusInput, type Wash,
+  type ChargeWashInput, type LinkWashCustomerInput, type LinkWashCustomerResult, type SaveCarwashPlanInput, type SaveCarwashServiceInput,
+  type SaveWashInput, type SaveWashResult, type SellMembershipInput, type SetWashStatusInput, type Wash,
 } from "@rapifix/shared";
 import { callable, db, TENANT_ID } from "@/lib/firebase";
 import { useDocData, useQueryData } from "@/lib/firestore/hooks";
@@ -16,7 +16,8 @@ export const reorderCarwashServices = callable<{ ids: string[] }, { ok: boolean 
 export const seedCarwashMenu = callable<void, { created: number }>("seedCarwashMenu");
 export const saveCarwashPlan = callable<SaveCarwashPlanInput, { planId: string }>("saveCarwashPlan");
 export const carwashLookup = callable<{ plate: string }, CarwashLookupResult>("carwashLookup");
-export const saveWash = callable<SaveWashInput, { washId: string; code: string; total: number; paid: boolean }>("saveWash");
+export const saveWash = callable<SaveWashInput, SaveWashResult>("saveWash");
+export const linkWashCustomer = callable<LinkWashCustomerInput, LinkWashCustomerResult>("linkWashCustomer");
 export const setWashStatus = callable<SetWashStatusInput, { ok: boolean }>("setWashStatus");
 export const assignWasher = callable<{ washId: string; washerId: string | null }, { ok: boolean }>("assignWasher");
 export const cancelWash = callable<{ washId: string; reason: string }, { ok: boolean }>("cancelWash");
@@ -99,4 +100,102 @@ export function useWashers() {
     const others = active.filter((s) => s.role !== "washer");
     return { washers, others, all: [...washers, ...others], loading: staff.loading };
   }, [staff.active, staff.loading]);
+}
+
+// ---------------- Historial del carwash de un cliente o vehículo ----------------
+const byId = <T extends { id: string }>(...lists: T[][]) => {
+  const map = new Map<string, T>();
+  for (const l of lists) for (const x of l) map.set(x.id, x);
+  return [...map.values()];
+};
+
+/**
+ * Lavados, tarjetas de lealtad y membresías de un cliente (customerId) o de un vehículo (vehicleId),
+ * más lo registrado con sus placas antes de vincularse. Un solo campo por consulta (sin índices compuestos);
+ * se ordena en memoria.
+ */
+export function useCarwashFor(opts: { customerId?: string; vehicleId?: string; plates: string[]; memberships: boolean; enabled?: boolean }) {
+  const on = opts.enabled !== false;
+  const field = opts.customerId ? "customerId" : "vehicleId";
+  const value = opts.customerId ?? opts.vehicleId ?? "";
+  const plates = useMemo(() => [...new Set(opts.plates.filter(Boolean))].sort().slice(0, 30), [opts.plates]);
+  const pk = plates.join(",");
+  const base = on && value ? `${field}:${value}` : "";
+  const hasPlates = on && plates.length > 0;
+
+  const w1 = useQueryData<Wash>(base ? query(washesCol(), where(field, "==", value), limit(200)) : null, `cw-for-w1|${base}`);
+  const w2 = useQueryData<Wash>(hasPlates ? query(washesCol(), where("plate", "in", plates), limit(200)) : null, `cw-for-w2|${on}|${pk}`);
+  const loyaltyCol = collection(db, carwashCol.loyalty(TENANT_ID));
+  const l1 = useQueryData<CarwashLoyalty>(base ? query(loyaltyCol, where(field, "==", value), limit(50)) : null, `cw-for-l1|${base}`);
+  const l2 = useQueryData<CarwashLoyalty>(hasPlates ? query(loyaltyCol, where(documentId(), "in", plates)) : null, `cw-for-l2|${on}|${pk}`);
+  const memCol = collection(db, carwashCol.memberships(TENANT_ID));
+  const m1 = useQueryData<CarwashMembership>(
+    opts.memberships && on && opts.customerId ? query(memCol, where("customerId", "==", opts.customerId), limit(50)) : null,
+    `cw-for-m1|${opts.memberships}|${on}|${opts.customerId ?? ""}`,
+  );
+  const m2 = useQueryData<CarwashMembership>(
+    opts.memberships && hasPlates ? query(memCol, where("plate", "in", plates), limit(50)) : null,
+    `cw-for-m2|${opts.memberships}|${on}|${pk}`,
+  );
+
+  const washes = useMemo(() => {
+    const all = byId(w1.data, w2.data);
+    // Por vehículo: solo lo de esa placa o de ese vehículo
+    const filtered = opts.vehicleId && !opts.customerId ? all.filter((w) => w.vehicleId === opts.vehicleId || plates.includes(w.plate)) : all;
+    return filtered.sort((a, b) => (tsMs(b.createdAt) - tsMs(a.createdAt)));
+  }, [w1.data, w2.data, opts.vehicleId, opts.customerId, plates]);
+  const loyalty = useMemo(() => byId(l1.data, l2.data).sort((a, b) => tsMs(b.lastWashAt) - tsMs(a.lastWashAt)), [l1.data, l2.data]);
+  const memberships = useMemo(() => byId(m1.data, m2.data), [m1.data, m2.data]);
+  const loading = w1.loading || w2.loading || l1.loading || l2.loading || m1.loading || m2.loading;
+  const error = w1.error ?? w2.error ?? l1.error ?? l2.error ?? m1.error ?? m2.error;
+  return { washes, loyalty, memberships, loading, error };
+}
+
+const tsMs = (v: unknown): number => {
+  if (!v) return 0;
+  if (v instanceof Timestamp) return v.toMillis();
+  if (typeof v === "number") return v;
+  const t = v as { toMillis?: () => number; seconds?: number };
+  return t.toMillis ? t.toMillis() : typeof t.seconds === "number" ? t.seconds * 1000 : 0;
+};
+
+/**
+ * Qué clientes de una lista tienen historial en el carwash (tarjeta de lealtad o membresía).
+ * Consultas "in" de 30 en 30: no una por fila.
+ */
+export function useCarwashCustomerIds(ids: string[], opts: { enabled: boolean; memberships: boolean }) {
+  const [found, setFound] = useState<Set<string>>(new Set());
+  const key = opts.enabled ? [...new Set(ids)].sort().join(",") : "";
+  useEffect(() => {
+    if (!key) {
+      setFound(new Set());
+      return;
+    }
+    let cancelled = false;
+    const list = key.split(",");
+    const chunks: string[][] = [];
+    for (let i = 0; i < list.length; i += 30) chunks.push(list.slice(i, i + 30));
+    const loyaltyCol = collection(db, carwashCol.loyalty(TENANT_ID));
+    const memCol = collection(db, carwashCol.memberships(TENANT_ID));
+    Promise.all(
+      chunks.flatMap((c) => [
+        getDocs(query(loyaltyCol, where("customerId", "in", c))),
+        ...(opts.memberships ? [getDocs(query(memCol, where("customerId", "in", c)))] : []),
+      ]),
+    )
+      .then((snaps) => {
+        if (cancelled) return;
+        const s = new Set<string>();
+        for (const snap of snaps) for (const d of snap.docs) {
+          const id = d.get("customerId");
+          if (typeof id === "string") s.add(id);
+        }
+        setFound(s);
+      })
+      .catch(() => !cancelled && setFound(new Set()));
+    return () => {
+      cancelled = true;
+    };
+  }, [key, opts.memberships]);
+  return found;
 }

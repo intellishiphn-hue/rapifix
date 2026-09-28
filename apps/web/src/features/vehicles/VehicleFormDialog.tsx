@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { getDoc } from "firebase/firestore";
 import {
-  FUEL_LABELS, FUEL_TYPES, TRANSMISSION_LABELS, TRANSMISSIONS, vehicleSchema,
+  CARWASH_VEHICLE_PENDING, FUEL_LABELS, FUEL_TYPES, TRANSMISSION_LABELS, TRANSMISSIONS, vehicleSchema,
   type Customer, type Vehicle, type VehicleInput,
 } from "@rapifix/shared";
 import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
@@ -54,7 +54,11 @@ export function VehicleFormDialog({
     setPlateWarning(null);
     if (vehicle) {
       reset({
-        customerId: vehicle.customerId, make: vehicle.make, model: vehicle.model, year: vehicle.year, color: vehicle.color,
+        // Vehículo registrado desde el carwash: marca y modelo vacíos para completarlos
+        customerId: vehicle.customerId,
+        make: vehicle.make === CARWASH_VEHICLE_PENDING ? "" : vehicle.make,
+        model: vehicle.model === CARWASH_VEHICLE_PENDING ? "" : vehicle.model,
+        year: vehicle.year, color: vehicle.color,
         plate: formatPlate(vehicle.plate), vin: vehicle.vin, mileage: vehicle.mileage, fuelType: vehicle.fuelType,
         engine: vehicle.engine, transmission: vehicle.transmission, notes: vehicle.notes ?? "",
       });

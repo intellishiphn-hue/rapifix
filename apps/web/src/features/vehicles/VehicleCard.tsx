@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Car, Gauge } from "lucide-react";
-import type { Vehicle } from "@rapifix/shared";
+import { isPendingVehicle, type Vehicle } from "@rapifix/shared";
 import { formatKm, formatPlate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -21,7 +21,11 @@ export function VehicleCard({ vehicle, showOwner = true }: { vehicle: Vehicle; s
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="truncate font-semibold text-slate-900 group-hover:text-brand-700">
-            {vehicle.make} {vehicle.model} <span className="font-normal text-slate-500">{vehicle.year}</span>
+            {isPendingVehicle(vehicle) ? (
+              <span className="text-amber-700">Datos por completar</span>
+            ) : (
+              <>{vehicle.make} {vehicle.model} <span className="font-normal text-slate-500">{vehicle.year}</span></>
+            )}
           </div>
           <PlateTag plate={vehicle.plate} />
         </div>

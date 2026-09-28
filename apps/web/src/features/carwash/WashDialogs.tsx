@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Ban, BadgeCheck, CreditCard, Gift, MessageCircle, Pencil, Printer, StickyNote, Undo2 } from "lucide-react";
+import { Ban, BadgeCheck, CreditCard, Gift, Link2, MessageCircle, Pencil, Printer, StickyNote, Undo2, User } from "lucide-react";
 import {
   formatMoney, formatPhone, loyaltyText, netOf, renderTemplate, templateBody, VEHICLE_SIZE_LABELS, WASH_COVERAGE_LABELS,
-  WASH_STATUS_LABELS, type QueueStatus, type Wash,
+  WASH_STATUS_LABELS, type Customer, type QueueStatus, type Wash,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
@@ -15,7 +15,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Field, Select, Textarea } from "@/components/ui/Field";
 import { useSettings } from "@/features/settings/api";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
-import { assignWasher, cancelWash, setWashStatus, useCarwashSettings, useLoyalty, useWashers } from "./api";
+import { CustomerPicker } from "@/features/vehicles/CustomerPicker";
+import { useCustomerVehicles } from "@/features/vehicles/api";
+import { assignWasher, cancelWash, linkWashCustomer, setWashStatus, useCarwashSettings, useLoyalty, useWashers } from "./api";
 import { Stamps } from "./RegisterWashDialog";
 import { formatMinutes, msOf, STATUS_STYLE } from "./ui";
 
@@ -174,6 +176,8 @@ export function WashDetailDialog({
 }) {
   const { can } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [linking, setLinking] = useState(false);
+  useEffect(() => setLinking(false), [wash?.id]);
   if (!wash) return null;
   const w = wash;
   const money = can("carwash.charge");
@@ -214,6 +218,19 @@ export function WashDetailDialog({
             <dd>{open || can("carwash.manage") ? <WasherSelect wash={w} className="mt-0.5 h-9" /> : w.washerName || "Sin asignar"}</dd>
           </div>
         </dl>
+
+        {w.customerId && can("customers.read") && (
+          <Link to={`/clientes/${w.customerId}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700">
+            <User className="h-4 w-4" /> Ver cliente en el taller
+          </Link>
+        )}
+        {!w.customerId && can("carwash.charge") && w.status !== "cancelled" && (
+          linking ? (
+            <LinkCustomerPanel wash={w} onDone={() => setLinking(false)} />
+          ) : (
+            <Button variant="secondary" size="sm" icon={<Link2 className="h-4 w-4" />} onClick={() => setLinking(true)}>Vincular a cliente del taller</Button>
+          )
+        )}
 
         {w.notes && (
           <p className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-amber-900"><StickyNote className="mt-0.5 h-4 w-4 shrink-0" />{w.notes}</p>
@@ -290,6 +307,49 @@ function TimeBox({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-slate-200 px-2.5 py-2">
       <div className="text-slate-500">{label}</div>
       <div className="tabular font-semibold text-slate-800">{value || "-"}</div>
+    </div>
+  );
+}
+
+/** Vincula un lavado sin cliente (y su placa) a un cliente del taller. Solo caja/recepción. */
+function LinkCustomerPanel({ wash, onDone }: { wash: Wash; onDone: () => void }) {
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [saving, setSaving] = useState(false);
+  const vehicles = useCustomerVehicles(customer?.id);
+  const own = vehicles.data.find((v) => v.plate === wash.plate);
+  const save = async () => {
+    if (!customer) return toast.error("Busque y elija el cliente");
+    setSaving(true);
+    try {
+      const r = await linkWashCustomer({ washId: wash.id, customerId: customer.id, ...(own ? { vehicleId: own.id } : {}) });
+      toast.success(
+        `${wash.code} vinculado a ${customer.fullName}` +
+          (r.linkedWashes > 1 ? ` (con ${r.linkedWashes - 1} lavado${r.linkedWashes === 2 ? "" : "s"} más de la placa)` : "") +
+          (r.vehicleCreated ? ". Placa agregada a sus vehículos." : ""),
+      );
+      onDone();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="space-y-3 rounded-xl border border-brand-200 bg-brand-50/40 p-3">
+      <div className="text-sm font-semibold text-slate-900">Vincular a cliente del taller</div>
+      <CustomerPicker value={customer} onChange={setCustomer} placeholder="Nombre o teléfono del cliente..." emptyText="Sin resultados. Créelo primero en Clientes." />
+      {customer && !vehicles.loading && (
+        <p className="text-xs text-slate-600">
+          {own
+            ? `La placa ${formatPlate(wash.plate)} ya está en sus vehículos.`
+            : `Se agregará la placa ${formatPlate(wash.plate)} a sus vehículos (si ya está registrada a otro cliente, solo se enlaza).`}{" "}
+          También se vinculan los demás lavados de esta placa que no tienen cliente y su tarjeta de lealtad.
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onDone}>Cancelar</Button>
+        <Button size="sm" icon={<Link2 className="h-4 w-4" />} onClick={() => void save()} loading={saving} disabled={!customer}>Vincular</Button>
+      </div>
     </div>
   );
 }

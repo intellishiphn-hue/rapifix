@@ -475,6 +475,34 @@ describe("carwash", () => {
     }
   });
 
+  it("historial del carwash en la ficha del cliente/vehículo: consultas por cliente y placa (caja sí, técnico y bodega no)", async () => {
+    const queries = (r: Role) => {
+      const f = db(r);
+      return [
+        () => f.collection(`${T}/carwashWashes`).where("customerId", "==", "c1").limit(200).get(),
+        () => f.collection(`${T}/carwashWashes`).where("plate", "in", ["HAA1234"]).limit(200).get(),
+        () => f.collection(`${T}/carwashLoyalty`).where("customerId", "in", ["c1"]).get(),
+        () => f.collection(`${T}/carwashMemberships`).where("customerId", "==", "c1").limit(50).get(),
+      ];
+    };
+    for (const r of ["admin", "manager", "reception", "seller"] as Role[]) {
+      for (const q of queries(r)) await assertSucceeds(q());
+    }
+    for (const r of ["technician", "warehouse"] as Role[]) {
+      for (const q of queries(r)) await assertFails(q());
+    }
+    // El lavador ve lavados y lealtad por cliente, pero no membresías
+    const [w1, w2, l1, m1] = queries("washer");
+    await assertSucceeds(w1!());
+    await assertSucceeds(w2!());
+    await assertSucceeds(l1!());
+    await assertFails(m1!());
+  });
+
+  it("el vehículo mínimo del carwash no lo puede crear el lavador desde el cliente (lo crea saveWash)", async () => {
+    await assertFails(db("washer").doc(`${T}/vehicles/nuevo`).set({ customerId: "c1", plate: "HAB9999" }));
+  });
+
   it("el lavador lee la configuración del carwash pero no la cambia", async () => {
     await assertSucceeds(db("washer").doc(`${T}/settings/general`).get());
     await assertFails(db("washer").doc(`${T}/settings/carwash`).set({ loyaltyEvery: 1, updatedBy: "washer1", updatedAt: serverTs() }));

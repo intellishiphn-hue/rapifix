@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, BadgeCheck, Car, Check, Gift, Loader2, Search, Wrench } from "lucide-react";
+import { getDoc } from "firebase/firestore";
+import { AlertTriangle, BadgeCheck, Car, Check, Gift, Info, Loader2, Plus, Search, Wrench } from "lucide-react";
 import {
-  buildWashItems, computeWashCharge, formatMoney, formatPhone, loyaltyText, priceForSize, rewardCap, washPlate,
-  WASH_STATUS_LABELS, type CarwashLookupResult, type VehicleSize, type Wash,
+  buildWashItems, computeWashCharge, formatMoney, formatPhone, isPendingVehicle, loyaltyText, priceForSize, rewardCap, washPlate,
+  WASH_STATUS_LABELS, type CarwashLookupResult, type Customer, type Vehicle, type VehicleSize, type Wash,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
@@ -14,6 +15,10 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
+import { customerRef } from "@/features/customers/api";
+import { CustomerPicker } from "@/features/vehicles/CustomerPicker";
+import { useCustomerVehicles } from "@/features/vehicles/api";
+import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { useSettings } from "@/features/settings/api";
 import { carwashLookup, saveWash, useCarwashServices, useCarwashSettings, useWashers } from "./api";
 import { SizePicker } from "./ui";
@@ -42,6 +47,10 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
   const [useReward, setUseReward] = useState(false);
   const [createCustomer, setCreateCustomer] = useState(false);
   const [saving, setSaving] = useState(false);
+  /** cliente del taller elegido con el buscador (nombre o teléfono) */
+  const [picked, setPicked] = useState<Customer | null>(null);
+  const pickedVehicles = useCustomerVehicles(picked?.id);
+  const ownVehicles = pickedVehicles.data.filter((v) => !v.archived);
 
   useEffect(() => {
     if (!open) return;
@@ -57,7 +66,32 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
     setUseMembership(!!wash?.membershipId);
     setUseReward(!!wash?.loyaltyRedeemed);
     setCreateCustomer(false);
+    setPicked(null);
+    let cancelled = false;
+    if (open && wash?.customerId) {
+      getDoc(customerRef(wash.customerId))
+        .then((snap) => !cancelled && snap.exists() && setPicked({ id: snap.id, ...snap.data() } as Customer))
+        .catch(() => undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [open, wash]);
+
+  // Al elegir el cliente del taller se llenan nombre y teléfono; con un solo carro, también la placa
+  const pickCustomer = (c: Customer | null) => {
+    setPicked(c);
+    if (!c) return;
+    setName(c.fullName);
+    setPhone(formatPhone(c.whatsapp || c.phone));
+    setCreateCustomer(false);
+  };
+  const pickVehicle = (v: Vehicle) => setPlate(v.plate);
+  useEffect(() => {
+    if (!picked || editing || pickedVehicles.loading || plate.trim()) return;
+    if (ownVehicles.length === 1) setPlate(ownVehicles[0]!.plate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked?.id, pickedVehicles.loading]);
 
   // Búsqueda por placa (vehículo del taller, última visita, lealtad, membresía y mantenimientos)
   const normalized = washPlate(plate);
@@ -133,8 +167,10 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
     if (name.trim().length < 2) return toast.error("Escriba el nombre del cliente");
     setSaving(true);
     try {
-      const vehicleId = lookup?.vehicle?.id ?? wash?.vehicleId ?? null;
-      const customerId = lookup?.customer?.id ?? wash?.customerId ?? null;
+      // El servidor valida que el vehículo sea de esta placa; si el cliente no la tiene, la agrega a sus vehículos
+      const current = lookup && lookup.plate === normalized ? lookup : null;
+      const vehicleId = current?.vehicle?.id ?? (wash && wash.plate === normalized ? wash.vehicleId : null) ?? null;
+      const customerId = picked?.id ?? current?.customer?.id ?? wash?.customerId ?? null;
       const r = await saveWash({
         ...(wash ? { washId: wash.id } : {}),
         plate: normalized,
@@ -155,6 +191,7 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
         ...(createCustomer ? { createCustomer: true } : {}),
       });
       toast.success(editing ? `Lavado ${r.code} actualizado` : `${r.code} registrado${r.paid ? " (cubierto, sin cobro)" : ` · ${formatMoney(r.total)}`}`);
+      if (r.vehicleCreated) toast.info(`Placa ${formatPlate(normalized)} agregada a los vehículos del cliente en el taller`);
       onClose(r.washId);
     } catch (err) {
       toast.error(errorMessage(err));
@@ -169,7 +206,9 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
     const p = priceForSize(s, size);
     return p === null ? "A convenir" : formatMoney(p);
   };
-  const noCustomer = !lookup?.customer && !wash?.customerId;
+  const noCustomer = !picked && !lookup?.customer && !wash?.customerId;
+  const lookupNow = lookup && lookup.plate === normalized ? lookup : null;
+  const plateIsOwn = !!picked && ownVehicles.some((v) => v.plate === normalized);
 
   return (
     <Dialog
@@ -204,6 +243,64 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
             {looking && <Loader2 className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-brand-600" />}
           </div>
           {lookup && <LookupSummary r={lookup} every={settings.loyaltyEvery} />}
+        </div>
+
+        {/* Cliente del taller: buscar por nombre o teléfono y elegir uno de sus carros */}
+        <div>
+          <div className="mb-1.5 text-[13px] font-medium text-slate-700">
+            Cliente del taller <span className="font-normal text-slate-400">· opcional, buscar por nombre o teléfono</span>
+          </div>
+          <CustomerPicker
+            value={picked}
+            onChange={pickCustomer}
+            placeholder="Nombre o teléfono del cliente..."
+            emptyText="No está en el taller. Escriba nombre y teléfono abajo."
+            className="h-12 text-base"
+          />
+          {picked && (
+            <div className="mt-2">
+              {pickedVehicles.loading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Cargando sus vehículos...</div>
+              ) : ownVehicles.length ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {ownVehicles.map((v) => {
+                    const on = v.plate === normalized;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => pickVehicle(v)}
+                        className={cn("flex min-h-16 flex-col items-start justify-center gap-1 rounded-xl border-2 px-3 py-2 text-left", on ? "border-brand-600 bg-brand-50" : "border-slate-200 hover:border-slate-300 active:bg-slate-50")}
+                      >
+                        <PlateTag plate={v.plate} className="text-sm" />
+                        <span className="w-full truncate text-xs font-medium text-slate-600">
+                          {isPendingVehicle(v) ? "Datos por completar" : `${v.make} ${v.model}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {normalized.length >= 2 && !plateIsOwn && lookupNow && (
+                lookupNow.vehicle && lookupNow.vehicle.customerId !== picked.id ? (
+                  <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-sm text-amber-800">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>La placa {formatPlate(normalized)} está registrada a nombre de {lookupNow.customer?.name || "otro cliente"}. El lavado se enlaza sin cambiar el dueño.</span>
+                  </p>
+                ) : !lookupNow.vehicle ? (
+                  <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1.5 text-sm text-sky-900">
+                    <Plus className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>La placa {formatPlate(normalized)} se agregará a los vehículos de {picked.fullName}.</span>
+                  </p>
+                ) : null
+              )}
+              {!pickedVehicles.loading && !ownVehicles.length && normalized.length < 2 && (
+                <p className="mt-2 flex items-start gap-1.5 text-sm text-slate-500">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0" /> No tiene vehículos registrados: escriba la placa y se agregará a sus vehículos.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Cliente */}

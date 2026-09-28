@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   addMonthsHN, applyLoyaltyWash, buildWashItems, carwashSettingsFrom, computeCommission, computeWashCharge, extendMembership,
   loyaltyText, membershipCanUse, membershipWindow, netOf, priceForSize, rewardCap, SAMPLE_CARWASH_MENU, washCommissionTotal, washPlate,
-  saveWashSchema, chargeWashSchema, type CarwashService,
+  saveWashSchema, chargeWashSchema, carwashVehicleData, isPendingVehicle, CARWASH_VEHICLE_NOTE, pickVehicleForPlate, linkWashCustomerSchema,
+  type CarwashService,
 } from "../carwash";
+import { vehicleSchema } from "../schemas";
 import { can, ROLES } from "../roles";
 import { renderTemplate, templateBody } from "../templates";
 
@@ -186,5 +188,45 @@ describe("carwash: configuración, validaciones, roles y plantillas", () => {
     expect(t).toContain("7 de 10");
     const t2 = renderTemplate(templateBody("carwashReady"), { cliente: "Ana", placa: "HAB-1234", taller: "RAPIFIX" });
     expect(t2).not.toContain("{{");
+  });
+});
+
+describe("carros del carwash en el taller", () => {
+  it("el vehículo mínimo pasa la validación de vehículos del taller y normaliza la placa", () => {
+    const v = carwashVehicleData({ plate: "hab-12 34", customerId: "c1", customer: { fullName: "Juan Pérez", phone: "+50499998888" }, year: 2026 });
+    expect(v.plate).toBe("HAB1234");
+    expect(v.customerId).toBe("c1");
+    expect(v.notes).toBe(CARWASH_VEHICLE_NOTE);
+    expect(v.archived).toBe(false);
+    expect(v.photoCount).toBe(0);
+    expect(v.searchKeywords).toContain("hab1234");
+    expect(v.searchKeywords).toContain("juan");
+    expect(v.searchKeywords).toContain("perez");
+    expect(isPendingVehicle(v)).toBe(true);
+    expect(isPendingVehicle({ make: "Toyota", model: "Hilux" })).toBe(false);
+    const { customer: _c, mileageUpdatedAt: _m, coverPhotoUrl: _p, photoCount: _n, archived: _a, searchKeywords: _k, ...input } = v;
+    expect(vehicleSchema.safeParse(input).success).toBe(true);
+    // Mismos campos que permiten las reglas para vehículos
+    const allowed = ["customerId", "customer", "make", "model", "year", "color", "plate", "vin", "mileage", "mileageUpdatedAt", "fuelType", "engine",
+      "transmission", "notes", "coverPhotoUrl", "photoCount", "archived", "searchKeywords", "createdAt", "createdBy", "updatedAt", "updatedBy"];
+    expect(Object.keys(v).every((k) => allowed.includes(k))).toBe(true);
+  });
+
+  it("elige el vehículo de la placa sin reasignar dueños", () => {
+    const a = { id: "a", customerId: "otro", archived: false };
+    const b = { id: "b", customerId: "c1", archived: false };
+    const c = { id: "c", customerId: "c1", archived: true };
+    expect(pickVehicleForPlate([a, b], "c1")?.id).toBe("b");
+    expect(pickVehicleForPlate([a, b], null)?.id).toBe("a");
+    expect(pickVehicleForPlate([c, a], "c1")?.id).toBe("a");
+    expect(pickVehicleForPlate([c], "c1")?.id).toBe("c");
+    expect(pickVehicleForPlate([], "c1")).toBeNull();
+  });
+
+  it("vincular lavado: pide lavado y cliente", () => {
+    expect(linkWashCustomerSchema.safeParse({ washId: "w1", customerId: "c1" }).success).toBe(true);
+    expect(linkWashCustomerSchema.safeParse({ washId: "w1", customerId: "c1", vehicleId: null }).success).toBe(true);
+    expect(linkWashCustomerSchema.safeParse({ washId: "w1", customerId: "" }).success).toBe(false);
+    expect(linkWashCustomerSchema.safeParse({ customerId: "c1" }).success).toBe(false);
   });
 });

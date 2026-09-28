@@ -5,8 +5,8 @@ import {
   chargeWashSchema, col, computeWashCharge, extendMembership, isValidPhone, membershipCanUse, membershipWindow, monthsLabel,
   normalizePhone, normalizeText, opsCol, orderCol, reorderCarwashServicesSchema, rewardCap, SAMPLE_CARWASH_MENU,
   saveCarwashPlanSchema, saveCarwashServiceSchema, saveWashSchema, sellMembershipSchema, setWashStatusSchema, VEHICLE_SIZE_SHORT,
-  washCommissionTotal, assignWasherSchema,
-  type CarwashLookupResult, type CarwashMembership, type MembershipStatus, type VehicleSize, type WashItem, type WashStatus,
+  washCommissionTotal, assignWasherSchema, carwashVehicleData, hnDayKey, isPendingVehicle, linkWashCustomerSchema, pickVehicleForPlate, washPlate,
+  type CarwashLookupResult, type LinkWashCustomerResult, type SaveWashResult, type CarwashMembership, type MembershipStatus, type VehicleSize, type WashItem, type WashStatus,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
@@ -132,9 +132,13 @@ export const carwashLookup = onCall({ region: REGION }, async (request): Promise
   const v = vehicles.docs.find((d) => !d.get("archived")) ?? vehicles.docs[0];
   let customer: CarwashLookupResult["customer"] = null;
   let maintenance: CarwashLookupResult["maintenance"] = [];
-  if (v) {
-    const c = await db.doc(`${col.customers(tid)}/${v.get("customerId")}`).get();
+  // Cliente: el dueño del vehículo o, si la placa no está en el taller, el vinculado a la tarjeta de lealtad
+  const ownerId = (v?.get("customerId") as string | undefined) || (loyalty.get("customerId") as string | undefined) || null;
+  if (ownerId) {
+    const c = await db.doc(`${col.customers(tid)}/${ownerId}`).get();
     if (c.exists) customer = { id: c.id, name: String(c.get("fullName") ?? ""), phone: String(c.get("whatsapp") || c.get("phone") || "") };
+  }
+  if (v) {
     const m = await db.collection(opsCol.maintenance(tid)).where("vehicleId", "==", v.id).limit(30).get();
     maintenance = m.docs
       .filter((d) => d.get("status") === "due" || d.get("status") === "overdue")
@@ -143,7 +147,13 @@ export const carwashLookup = onCall({ region: REGION }, async (request): Promise
   const open = washes.docs[0];
   return {
     plate,
-    vehicle: v ? { id: v.id, label: `${v.get("make") ?? ""} ${v.get("model") ?? ""} ${v.get("year") ?? ""}`.trim(), customerId: String(v.get("customerId") ?? "") } : null,
+    vehicle: v
+      ? {
+          id: v.id,
+          label: isPendingVehicle({ make: v.get("make"), model: v.get("model") }) ? "Vehículo (datos por completar)" : `${v.get("make") ?? ""} ${v.get("model") ?? ""} ${v.get("year") ?? ""}`.trim(),
+          customerId: String(v.get("customerId") ?? ""),
+        }
+      : null,
     customer,
     history: loyalty.exists
       ? {
@@ -176,10 +186,25 @@ export const carwashLookup = onCall({ region: REGION }, async (request): Promise
 });
 
 // ============================================================================
+// Clientes y vehículos del taller en el carwash
+// ============================================================================
+
+const customerInfoOf = (c: DocumentSnapshot) => ({ fullName: String(c.get("fullName") ?? ""), phone: String(c.get("phone") ?? "") });
+
+/** Año actual en Honduras (para el vehículo mínimo). */
+const hnYear = (ms: number) => Number(hnDayKey(ms).slice(0, 4));
+
+/** Vehículo del taller con esa placa (ver pickVehicleForPlate), o null. */
+async function findVehicleByPlate(tid: string, plate: string, customerId: string | null) {
+  const snap = await db.collection(col.vehicles(tid)).where("plate", "==", plate).limit(10).get();
+  return pickVehicleForPlate(snap.docs.map((d) => ({ id: d.id, customerId: (d.get("customerId") as string | null) ?? null, archived: !!d.get("archived") })), customerId);
+}
+
+// ============================================================================
 // Registrar / editar un lavado
 // ============================================================================
 
-export const saveWash = onCall({ region: REGION }, async (request) => {
+export const saveWash = onCall({ region: REGION }, async (request): Promise<SaveWashResult> => {
   const caller = requireRole(request, CARWASH_STAFF);
   const input = parseInput(saveWashSchema, request.data);
   const tid = caller.tid;
@@ -189,20 +214,30 @@ export const saveWash = onCall({ region: REGION }, async (request) => {
 
   // Cliente y vehículo del taller (opcionales)
   let customerId = input.customerId ?? null;
+  let customerInfo: { fullName: string; phone: string } | null = null;
   let customerName = input.customerName.trim();
   let phone = input.phone.trim() ? normalizePhone(input.phone) : "";
   if (phone && !isValidPhone(phone)) throw new HttpsError("invalid-argument", "El teléfono no es válido.");
   if (customerId) {
     const c = await db.doc(`${col.customers(tid)}/${customerId}`).get();
     if (!c.exists) throw new HttpsError("not-found", "El cliente no existe.");
-    if (!customerName) customerName = String(c.get("fullName") ?? "");
+    customerInfo = customerInfoOf(c);
+    if (!customerName) customerName = customerInfo.fullName;
     if (!phone) phone = String(c.get("whatsapp") || c.get("phone") || "");
   }
+  // Vehículo: el indicado (si es de esta placa) o el que ya existe con la placa. Nunca se reasigna de dueño.
   let vehicleId = input.vehicleId ?? null;
   if (vehicleId) {
     const v = await db.doc(`${col.vehicles(tid)}/${vehicleId}`).get();
-    if (!v.exists) vehicleId = null;
+    if (!v.exists || washPlate(String(v.get("plate") ?? "")) !== input.plate) vehicleId = null;
     else if (!customerId) customerId = String(v.get("customerId") ?? "") || null;
+  }
+  if (!vehicleId) {
+    const found = await findVehicleByPlate(tid, input.plate, customerId);
+    if (found) {
+      vehicleId = found.id;
+      if (!customerId) customerId = found.customerId || null;
+    }
   }
   if (customerName.length < 2) throw new HttpsError("invalid-argument", "Escriba el nombre del cliente.");
 
@@ -211,12 +246,18 @@ export const saveWash = onCall({ region: REGION }, async (request) => {
   if (input.createCustomer && !customerId && CASHIERS.includes(caller.role)) {
     if (!phone) throw new HttpsError("invalid-argument", "Para crear el cliente escriba su teléfono.");
     const same = await db.collection(col.customers(tid)).where("phone", "==", phone).limit(1).get();
-    if (!same.empty) customerId = same.docs[0]!.id;
-    else {
+    if (!same.empty) {
+      customerId = same.docs[0]!.id;
+      customerInfo = customerInfoOf(same.docs[0]!);
+    } else {
       newCustomerRef = db.collection(col.customers(tid)).doc();
       customerId = newCustomerRef.id;
+      customerInfo = { fullName: customerName.slice(0, 130), phone };
     }
   }
+  // Placa nueva de un cliente del taller: se agrega a sus vehículos (también si registra el lavador,
+  // porque el cliente ya existe; crear clientes sigue siendo solo de caja).
+  const plannedVehicleRef = customerId && !vehicleId ? db.collection(col.vehicles(tid)).doc() : null;
 
   let washerId = input.washerId ?? null;
   let washerName = "";
@@ -250,6 +291,24 @@ export const saveWash = onCall({ region: REGION }, async (request) => {
     const prevMembershipSnap = prevMembershipId ? await tx.get(db.doc(`${carwashCol.memberships(tid)}/${prevMembershipId}`)) : null;
     const found = input.useMembership && !keepMembership ? await activeMembershipFor(tid, input.plate, now, tx) : null;
     const counter = prev ? null : await readCounter(tx, tid, "washes");
+
+    // Vehículo del taller: se revisa otra vez la placa dentro de la transacción para no duplicarla
+    let wCustomerId = customerId;
+    let wVehicleId = vehicleId;
+    let newVehicleRef = plannedVehicleRef;
+    if (newVehicleRef) {
+      const dup = await tx.get(db.collection(col.vehicles(tid)).where("plate", "==", input.plate).limit(10));
+      const pick = pickVehicleForPlate(dup.docs.map((d) => ({ id: d.id, customerId: d.get("customerId") as string | null, archived: !!d.get("archived") })), wCustomerId);
+      if (pick) {
+        wVehicleId = pick.id;
+        newVehicleRef = null;
+      } else {
+        wVehicleId = newVehicleRef.id;
+      }
+    }
+    // La tarjeta de la placa ya estaba vinculada a un cliente
+    if (!wCustomerId && loyaltySnap.get("customerId")) wCustomerId = String(loyaltySnap.get("customerId"));
+    if (!wVehicleId && loyaltySnap.get("vehicleId")) wVehicleId = String(loyaltySnap.get("vehicleId"));
 
     // ---------- membresía ----------
     let membershipId: string | null = null;
@@ -302,6 +361,12 @@ export const saveWash = onCall({ region: REGION }, async (request) => {
         createdAt: FieldValue.serverTimestamp(), createdBy: caller.uid, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
       });
     }
+    if (newVehicleRef && wCustomerId) {
+      tx.set(newVehicleRef, {
+        ...carwashVehicleData({ plate: input.plate, customerId: wCustomerId, customer: customerInfo ?? { fullName: customerName, phone }, year: hnYear(now) }),
+        createdAt: FieldValue.serverTimestamp(), createdBy: caller.uid, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
+      });
+    }
 
     // Devolver premio / uso de membresía que ya no aplica (edición)
     if (prevReward && !keepReward) {
@@ -322,9 +387,12 @@ export const saveWash = onCall({ region: REGION }, async (request) => {
 
     // Tarjeta de la placa: datos para la próxima visita y consumo del premio
     const loyaltyPatch: Record<string, unknown> = {
-      customerName, phone, size: input.size, customerId, vehicleId, lastWashAt: FieldValue.serverTimestamp(),
+      customerName, phone, size: input.size, lastWashAt: FieldValue.serverTimestamp(),
     };
-    if (!loyaltySnap.exists) Object.assign(loyaltyPatch, { count: 0, rewardsAvailable: 0, rewardsUsed: 0, totalWashes: 0 });
+    // No se borra el vínculo con el cliente si este lavado llega sin cliente
+    if (wCustomerId) loyaltyPatch.customerId = wCustomerId;
+    if (wVehicleId) loyaltyPatch.vehicleId = wVehicleId;
+    if (!loyaltySnap.exists) Object.assign(loyaltyPatch, { count: 0, rewardsAvailable: 0, rewardsUsed: 0, totalWashes: 0, customerId: wCustomerId, vehicleId: wVehicleId });
     if (!prev || !samePlate) loyaltyPatch.totalWashes = FieldValue.increment(1);
     if (input.useReward && !keepReward) {
       loyaltyPatch.rewardsAvailable = FieldValue.increment(-1);
@@ -333,16 +401,17 @@ export const saveWash = onCall({ region: REGION }, async (request) => {
     tx.set(loyaltyRef, loyaltyPatch, { merge: true });
 
     const common = {
-      plate: input.plate, vehicleId, customerId, customerName, phone, size: input.size,
+      plate: input.plate, vehicleId: wVehicleId, customerId: wCustomerId, customerName, phone, size: input.size,
       items, total, totals: charge.totals, taxRate: cfg.taxRate, taxMode: cfg.cw.taxMode, discount: 0,
       washerId, washerName, commission,
       paid: total === 0, saleId: null, saleCode: null,
       membershipId, membershipCode, loyaltyRedeemed: !!input.useReward,
       notes: input.notes, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
     };
+    const linkResult = { customerId: wCustomerId, vehicleId: wVehicleId, vehicleCreated: !!newVehicleRef };
     if (prev) {
       tx.update(washRef, common);
-      return { washId: washRef.id, code: String(prev.get("code")), total, paid: total === 0 };
+      return { washId: washRef.id, code: String(prev.get("code")), total, paid: total === 0, ...linkResult };
     }
     const code = `LAV-${pad(counter!.next)}`;
     tx.set(counter!.ref, { next: counter!.next + 1 }, { merge: true });
@@ -351,7 +420,87 @@ export const saveWash = onCall({ region: REGION }, async (request) => {
       createdAt: FieldValue.serverTimestamp(), startedAt: null, readyAt: null, deliveredAt: null,
       createdBy: caller.uid, createdByName: name,
     });
-    return { washId: washRef.id, code, total, paid: total === 0 };
+    return { washId: washRef.id, code, total, paid: total === 0, ...linkResult };
+  });
+});
+
+// ============================================================================
+// Vincular un lavado (de antes, sin cliente) a un cliente del taller. Solo caja/recepción.
+// Vincula también los demás lavados y membresías de esa placa que no tenían cliente,
+// la tarjeta de lealtad, y agrega la placa a los vehículos del cliente si no existe.
+// ============================================================================
+
+export const linkWashCustomer = onCall({ region: REGION }, async (request): Promise<LinkWashCustomerResult> => {
+  const caller = requireRole(request, CASHIERS);
+  const input = parseInput(linkWashCustomerSchema, request.data);
+  const tid = caller.tid;
+  const now = Date.now();
+  const washRef = db.doc(`${carwashCol.washes(tid)}/${input.washId}`);
+  const customerSnap = await db.doc(`${col.customers(tid)}/${input.customerId}`).get();
+  if (!customerSnap.exists) throw new HttpsError("not-found", "El cliente no existe.");
+  const customer = customerInfoOf(customerSnap);
+  const customerPhone = String(customerSnap.get("whatsapp") || customerSnap.get("phone") || "");
+
+  return db.runTransaction(async (tx) => {
+    // ---------- lecturas ----------
+    const w = await tx.get(washRef);
+    if (!w.exists) throw new HttpsError("not-found", "El lavado no existe.");
+    const current = (w.get("customerId") as string | null) ?? null;
+    if (current && current !== input.customerId) throw bad("Este lavado ya está vinculado a otro cliente.");
+    const plate = String(w.get("plate"));
+    const loyaltyRef = db.doc(`${carwashCol.loyalty(tid)}/${plate}`);
+    const loyalty = await tx.get(loyaltyRef);
+
+    let vehicleId: string | null = null;
+    let newVehicleRef: FirebaseFirestore.DocumentReference | null = null;
+    if (input.vehicleId) {
+      const v = await tx.get(db.doc(`${col.vehicles(tid)}/${input.vehicleId}`));
+      if (!v.exists) throw new HttpsError("not-found", "El vehículo no existe.");
+      if (washPlate(String(v.get("plate") ?? "")) !== plate) throw bad("El vehículo elegido no tiene la placa de este lavado.");
+      vehicleId = v.id;
+    } else {
+      const same = await tx.get(db.collection(col.vehicles(tid)).where("plate", "==", plate).limit(10));
+      const pick = pickVehicleForPlate(same.docs.map((d) => ({ id: d.id, customerId: (d.get("customerId") as string | null) ?? null, archived: !!d.get("archived") })), input.customerId);
+      if (pick) vehicleId = pick.id;
+      else {
+        newVehicleRef = db.collection(col.vehicles(tid)).doc();
+        vehicleId = newVehicleRef.id;
+      }
+    }
+    const others = await tx.get(db.collection(carwashCol.washes(tid)).where("plate", "==", plate).limit(300));
+    const memberships = await tx.get(db.collection(carwashCol.memberships(tid)).where("plate", "==", plate).limit(50));
+
+    // ---------- escrituras ----------
+    if (newVehicleRef) {
+      tx.set(newVehicleRef, {
+        ...carwashVehicleData({ plate, customerId: input.customerId, customer, year: hnYear(now) }),
+        createdAt: FieldValue.serverTimestamp(), createdBy: caller.uid, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
+      });
+    }
+    const meta = { updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid };
+    tx.update(washRef, {
+      customerId: input.customerId, vehicleId,
+      customerName: customer.fullName || String(w.get("customerName") ?? ""),
+      phone: String(w.get("phone") || customerPhone),
+      ...meta,
+    });
+    let linked = 1;
+    for (const d of others.docs) {
+      if (d.id === washRef.id || d.get("customerId")) continue;
+      tx.update(d.ref, { customerId: input.customerId, vehicleId, ...meta });
+      linked++;
+    }
+    for (const m of memberships.docs) {
+      if (m.get("customerId")) continue;
+      tx.update(m.ref, { customerId: input.customerId, updatedAt: FieldValue.serverTimestamp() });
+    }
+    tx.set(loyaltyRef, {
+      customerId: input.customerId, vehicleId,
+      customerName: customer.fullName || String(loyalty.get("customerName") ?? ""),
+      phone: String(loyalty.get("phone") || customerPhone),
+      ...(loyalty.exists ? {} : { count: 0, rewardsAvailable: 0, rewardsUsed: 0, totalWashes: 1, size: w.get("size") ?? null, lastWashAt: w.get("createdAt") ?? null }),
+    }, { merge: true });
+    return { customerId: input.customerId, vehicleId: vehicleId!, vehicleCreated: !!newVehicleRef, linkedWashes: linked };
   });
 });
 

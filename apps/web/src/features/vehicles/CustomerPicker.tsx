@@ -11,10 +11,17 @@ export function CustomerPicker({
   value,
   onChange,
   invalid,
+  placeholder = "Buscar cliente por nombre o teléfono...",
+  emptyText = "Sin resultados. Cree el cliente primero.",
+  className,
 }: {
   value: Customer | null;
   onChange: (c: Customer | null) => void;
   invalid?: boolean;
+  placeholder?: string;
+  emptyText?: string;
+  /** clases extra del campo de búsqueda (ej. más alto en el celular) */
+  className?: string;
 }) {
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
@@ -64,10 +71,11 @@ export function CustomerPicker({
         value={text}
         onChange={(e) => setText(e.target.value)}
         onFocus={() => setOpen(true)}
-        placeholder="Buscar cliente por nombre o teléfono..."
+        placeholder={placeholder}
         className={cn(
           "h-10 w-full rounded-[10px] border bg-white pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-100",
           invalid ? "border-red-400" : "border-slate-200",
+          className,
         )}
       />
       {open && (
@@ -75,7 +83,7 @@ export function CustomerPicker({
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-3 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Buscando...</div>
           ) : !results.length ? (
-            <div className="px-3 py-3 text-sm text-slate-500">Sin resultados. Cree el cliente primero.</div>
+            <div className="px-3 py-3 text-sm text-slate-500">{emptyText}</div>
           ) : (
             results.map((c) => (
               <button

@@ -37,7 +37,7 @@ export { onSettingsBranding } from "./triggers/branding";
 export { voidSale } from "./callable/voidSale";
 // Carwash: menú, cola, cobros, lealtad y membresías
 export {
-  saveCarwashService, reorderCarwashServices, seedCarwashMenu, saveCarwashPlan, carwashLookup, saveWash, setWashStatus,
+  saveCarwashService, reorderCarwashServices, seedCarwashMenu, saveCarwashPlan, carwashLookup, saveWash, linkWashCustomer, setWashStatus,
   assignWasher, cancelWash, chargeWash, sellMembership, cancelMembership,
 } from "./callable/carwash";
 export { carwashDaily } from "./scheduled/carwash";

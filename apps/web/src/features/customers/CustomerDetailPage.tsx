@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Car, ClipboardList, CreditCard, FileText, History, Mail, MapPin, MessageCircle, Pencil, Phone, Plus, User } from "lucide-react";
+import { Car, ClipboardList, CreditCard, Droplets, FileText, History, Mail, MapPin, MessageCircle, Pencil, Phone, Plus, User } from "lucide-react";
 import { formatMoney, formatPhone, whatsappLink } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { formatDate } from "@/lib/format";
@@ -17,10 +17,11 @@ import { OrdersMiniList } from "@/features/work-orders/OrdersMiniList";
 import { useCustomerVehicles } from "@/features/vehicles/api";
 import { VehicleCard } from "@/features/vehicles/VehicleCard";
 import { VehicleFormDialog } from "@/features/vehicles/VehicleFormDialog";
+import { CarwashCustomerHistory } from "@/features/carwash/CarwashCustomerHistory";
 import { useCustomer } from "./api";
 import { CustomerFormDialog } from "./CustomerFormDialog";
 
-type Tab = "vehicles" | "orders" | "quotes" | "payments" | "changes";
+type Tab = "vehicles" | "orders" | "carwash" | "quotes" | "payments" | "changes";
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value?: React.ReactNode }) {
   return (
@@ -56,6 +57,7 @@ export function CustomerDetailPage() {
   const tabs: Array<{ value: Tab; label: string; icon: React.ReactNode; count?: number; disabled?: boolean }> = [
     { value: "vehicles", label: "Vehículos", icon: <Car className="h-4 w-4" />, count: activeVehicles.length },
     { value: "orders", label: "Órdenes", icon: <ClipboardList className="h-4 w-4" />, count: orders.data.length },
+    ...(can("carwash.read") ? [{ value: "carwash" as Tab, label: "Carwash", icon: <Droplets className="h-4 w-4" /> }] : []),
     { value: "quotes", label: "Cotizaciones", icon: <FileText className="h-4 w-4" /> },
     { value: "payments", label: "Pagos", icon: <CreditCard className="h-4 w-4" /> },
     ...(canAudit ? [{ value: "changes" as Tab, label: "Cambios", icon: <History className="h-4 w-4" /> }] : []),
@@ -144,6 +146,7 @@ export function CustomerDetailPage() {
             />
           )}
           {tab === "orders" && <OrdersMiniList orders={orders.data} loading={orders.loading} error={orders.error} showVehicle />}
+          {tab === "carwash" && can("carwash.read") && <CarwashCustomerHistory customerId={customer.id} plates={vehicles.data.map((v) => v.plate)} />}
           {tab === "changes" && canAudit && <AuditTrail entityId={customer.id} />}
         </Card>
       </div>

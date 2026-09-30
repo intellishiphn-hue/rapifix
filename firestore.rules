@@ -118,7 +118,7 @@ service cloud.firestore {
       function validVehicle(d) {
         return d.keys().hasOnly([
             'customerId', 'customer', 'make', 'model', 'year', 'color', 'plate', 'vin', 'mileage',
-            'mileageUpdatedAt', 'fuelType', 'engine', 'transmission', 'notes', 'coverPhotoUrl',
+            'odometerUnit', 'mileageUpdatedAt', 'fuelType', 'engine', 'transmission', 'notes', 'coverPhotoUrl',
             'photoCount', 'archived', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
           ])
           && isStr(d.customerId, 1, 128)
@@ -130,6 +130,8 @@ service cloud.firestore {
           && isStr(d.plate, 2, 12)
           && isStr(d.vin, 0, 20)
           && d.mileage is int && d.mileage >= 0 && d.mileage <= 2000000
+          // Unidad del odómetro (opcional: los vehículos viejos no la tienen y son km)
+          && (!('odometerUnit' in d) || d.odometerUnit in ['km', 'mi'])
           && d.fuelType in ['gasolina', 'diesel', 'hibrido', 'electrico', 'gas']
           && isStr(d.engine, 0, 40)
           && d.transmission in ['automatica', 'manual', 'cvt', 'otra']
@@ -157,8 +159,9 @@ service cloud.firestore {
         match /mileageLog/{entryId} {
           allow read: if inTenant(tid);
           allow create: if hasRole(tid, writers())
-            && incoming().keys().hasOnly(['mileage', 'source', 'note', 'at', 'by', 'byName'])
+            && incoming().keys().hasOnly(['mileage', 'unit', 'source', 'note', 'at', 'by', 'byName'])
             && incoming().mileage is int && incoming().mileage >= 0
+            && (!('unit' in incoming()) || incoming().unit in ['km', 'mi'])
             && incoming().source in ['manual', 'reception', 'delivery']
             && isStr(incoming().note, 0, 200)
             && incoming().by == request.auth.uid

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { isValidPhone } from "./phone";
+import { isValidPhone, PHONE_ERROR } from "./phone";
+import { odometerUnitSchema } from "./odometer";
 import { FUEL_TYPES, TRANSMISSIONS } from "./types";
 import { ROLES } from "./roles";
 
@@ -13,11 +14,11 @@ const requiredPhone = z
   .string()
   .trim()
   .min(1, "El teléfono es obligatorio")
-  .refine(isValidPhone, "Teléfono no válido (ej. 9999-8888)");
+  .refine((v) => isValidPhone(v), PHONE_ERROR);
 const optionalPhone = z
   .string()
   .trim()
-  .refine((v) => v === "" || isValidPhone(v), "Teléfono no válido (ej. 9999-8888)");
+  .refine((v) => v === "" || isValidPhone(v), PHONE_ERROR);
 
 export const customerSchema = z.object({
   firstName: trimmed(60).min(1, "El nombre es obligatorio"),
@@ -49,15 +50,19 @@ export const vehicleSchema = z.object({
   plate: trimmed(12).min(2, "La placa es obligatoria"),
   vin: trimmed(20).refine((v) => v === "" || /^[A-HJ-NPR-Z0-9]{11,17}$/i.test(v), "VIN no válido (11 a 17 caracteres, sin I, O ni Q)"),
   mileage: z.number({ error: "Kilometraje no válido" }).int().min(0, "Kilometraje no válido").max(2_000_000, "Kilometraje no válido"),
+  odometerUnit: odometerUnitSchema.default("km"),
   fuelType: z.enum(FUEL_TYPES),
   engine: trimmed(40),
   transmission: z.enum(TRANSMISSIONS),
   notes: trimmed(1000),
 });
 export type VehicleInput = z.infer<typeof vehicleSchema>;
+/** Valores del formulario (odometerUnit opcional: vehículos viejos = km) */
+export type VehicleFormValues = z.input<typeof vehicleSchema>;
 
 export const mileageEntrySchema = z.object({
   mileage: z.number({ error: "Kilometraje no válido" }).int().min(0).max(2_000_000),
+  unit: odometerUnitSchema.nullish(),
   note: trimmed(200),
 });
 

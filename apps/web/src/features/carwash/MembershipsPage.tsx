@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { BadgeCheck, Ban, Loader2, MessageCircle, Plus, Printer, RefreshCw, Search } from "lucide-react";
 import {
-  computeWashCharge, formatMoney, formatPhone, isPlaceholderPlate, MEMBERSHIP_STATUS_LABELS, renderTemplate, templateBody, VEHICLE_SIZE_LABELS, washPlate,
+  computeWashCharge, formatMoney, formatPhone, isPlaceholderPlate, isValidPhone, PHONE_ERROR, MEMBERSHIP_STATUS_LABELS, renderTemplate, templateBody, VEHICLE_SIZE_LABELS, washPlate,
   type CarwashLookupResult, type CarwashMembership,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState, ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { useSettings } from "@/features/settings/api";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
 import { StatCard } from "@/features/reports/ui";
@@ -243,7 +244,7 @@ export function SellMembershipDialog({ open, renew, onClose }: { open: boolean; 
     if (!open) return;
     setPlate(renew?.plate ?? "");
     setName(renew?.customerName ?? "");
-    setPhone(renew?.phone ? formatPhone(renew.phone) : "");
+    setPhone(renew?.phone ?? "");
     setPlanId(renew?.planId ?? "");
     setMonths(1);
     setLookup(null);
@@ -266,7 +267,7 @@ export function SellMembershipDialog({ open, renew, onClose }: { open: boolean; 
         const n = r.customer?.name || r.history?.customerName || "";
         const p = r.customer?.phone || r.history?.phone || "";
         if (n) setName((cur) => cur || n);
-        if (p) setPhone((cur) => cur || formatPhone(p));
+        if (p) setPhone((cur) => cur || p);
       })
       .catch(() => undefined)
       .finally(() => !cancelled && setLooking(false));
@@ -286,6 +287,7 @@ export function SellMembershipDialog({ open, renew, onClose }: { open: boolean; 
     if (!renew && normalized.length < 2) return toast.error("Escriba la placa");
     if (!plan) return toast.error("Seleccione el plan");
     if (!renew && name.trim().length < 2) return toast.error("Escriba el nombre del cliente");
+    if (phone.trim() && !isValidPhone(phone)) return toast.error(PHONE_ERROR);
     const bad = payLinesError(lines, total);
     if (bad) return toast.error(bad);
     setSaving(true);
@@ -364,7 +366,7 @@ export function SellMembershipDialog({ open, renew, onClose }: { open: boolean; 
             )}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Cliente" required><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} /></Field>
-              <Field label="Teléfono / WhatsApp"><Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" maxLength={20} /></Field>
+              <Field label="Teléfono / WhatsApp"><PhoneInput value={phone} onChange={setPhone} /></Field>
             </div>
           </>
         )}

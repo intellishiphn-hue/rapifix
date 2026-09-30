@@ -277,6 +277,17 @@ describe("vehículos", () => {
   it("no se crea un vehículo con photoCount distinto de 0", async () => {
     await assertFails(db("reception").doc(`${T}/vehicles/nuevo`).set({ ...vehicle("reception1", "c1"), photoCount: 4 }));
   });
+  it("acepta la unidad del odómetro en km o millas, y nada más", async () => {
+    await assertSucceeds(db("reception").doc(`${T}/vehicles/usa`).set({ ...vehicle("reception1", "c1"), odometerUnit: "mi" }));
+    await assertSucceeds(db("reception").doc(`${T}/vehicles/local`).set({ ...vehicle("reception1", "c1"), odometerUnit: "km" }));
+    await assertFails(db("reception").doc(`${T}/vehicles/malo`).set({ ...vehicle("reception1", "c1"), odometerUnit: "millas" }));
+  });
+  it("el historial de kilometraje acepta la unidad de la lectura", async () => {
+    const entry = { mileage: 28100, source: "manual", note: "", at: serverTs(), by: "reception1", byName: "Recepción" };
+    await assertSucceeds(db("reception", "reception1").collection(`${T}/vehicles/v1/mileageLog`).add({ ...entry, unit: "mi" }));
+    await assertSucceeds(db("reception", "reception1").collection(`${T}/vehicles/v1/mileageLog`).add(entry));
+    await assertFails(db("reception", "reception1").collection(`${T}/vehicles/v1/mileageLog`).add({ ...entry, unit: "yd" }));
+  });
 });
 
 // ---------------------------------------------------------------------------

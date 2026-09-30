@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarCheck, CalendarClock, History, Info, MessageCircle, Plus, Search } from "lucide-react";
-import { MAINTENANCE_STATUS_LABELS, normalizeText, type Maintenance, type MaintenanceStatus } from "@rapifix/shared";
-import { formatDate, formatKm, formatRelative } from "@/lib/format";
+import { formatOdometer, MAINTENANCE_STATUS_LABELS, normalizeText, type Maintenance, type MaintenanceStatus } from "@rapifix/shared";
+import { formatDate, formatRelative } from "@/lib/format";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { Tabs } from "@/components/ui/Tabs";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
-import { backfillMaintenance, estimateLabel, MAINT_TONE, nextLabel, useMaintenanceByStatus } from "./api";
+import { backfillMaintenance, estimateLabel, intervalLabel, MAINT_TONE, nextLabel, useMaintenanceByStatus } from "./api";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
@@ -151,7 +151,7 @@ function StatusCell({ m }: { m: Maintenance }) {
 }
 
 function lastLabel(m: Maintenance) {
-  return [m.lastDate ? formatDate(m.lastDate) : "", m.lastMileage ? formatKm(m.lastMileage) : ""].filter(Boolean).join(" · ") || "—";
+  return [m.lastDate ? formatDate(m.lastDate) : "", m.lastMileage ? formatOdometer(m.lastMileage, m.odometerUnit) : ""].filter(Boolean).join(" · ") || "—";
 }
 
 function DesktopTable({ rows, api }: { rows: Maintenance[]; api: MaintenanceActionsApi }) {
@@ -180,7 +180,7 @@ function DesktopTable({ rows, api }: { rows: Maintenance[]; api: MaintenanceActi
               <td className="px-3 py-3">
                 <div className="font-medium text-slate-800">{m.serviceName}</div>
                 <div className="text-xs text-slate-500">
-                  {[m.intervalDays ? `cada ${m.intervalDays} días` : "", m.intervalKm ? `cada ${formatKm(m.intervalKm)}` : ""].filter(Boolean).join(" o ")}
+                  {intervalLabel(m)}
                 </div>
               </td>
               <td className="px-3 py-3 text-slate-600">

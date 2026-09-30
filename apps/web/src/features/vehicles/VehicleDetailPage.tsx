@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Archive, ArchiveRestore, Camera, Car, ClipboardList, Droplets, Gauge, History, MessageCircle, Pencil, Phone, Plus, User } from "lucide-react";
 import { toast } from "sonner";
-import { FUEL_LABELS, TRANSMISSION_LABELS, formatPhone, isPendingVehicle, whatsappLink } from "@rapifix/shared";
+import { FUEL_LABELS, TRANSMISSION_LABELS, formatOdometer, formatPhone, isPendingVehicle, normalizeUnit, odometerNoun, whatsappLink } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
-import { formatDate, formatKm, formatRelative } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -75,7 +75,7 @@ export function VehicleDetailPage() {
   const tabs: Array<{ value: Tab; label: string; icon: React.ReactNode; count?: number }> = [
     { value: "timeline", label: "Órdenes e historial", icon: <ClipboardList className="h-4 w-4" />, count: orders.data.length },
     { value: "photos", label: "Fotos", icon: <Camera className="h-4 w-4" />, count: vehicle.photoCount ?? 0 },
-    { value: "mileage", label: "Kilometraje", icon: <Gauge className="h-4 w-4" /> },
+    { value: "mileage", label: odometerNoun(vehicle.odometerUnit), icon: <Gauge className="h-4 w-4" /> },
     ...(can("carwash.read") ? [{ value: "carwash" as Tab, label: "Carwash", icon: <Droplets className="h-4 w-4" /> }] : []),
     ...(canAudit ? [{ value: "changes" as Tab, label: "Cambios", icon: <History className="h-4 w-4" /> }] : []),
   ];
@@ -95,7 +95,7 @@ export function VehicleDetailPage() {
         actions={
           canWrite && (
             <>
-              <Button variant="secondary" icon={<Gauge className="h-4 w-4" />} onClick={() => setKm(true)}>Kilometraje</Button>
+              <Button variant="secondary" icon={<Gauge className="h-4 w-4" />} onClick={() => setKm(true)}>{odometerNoun(vehicle.odometerUnit)}</Button>
               <Button variant="secondary" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>Editar</Button>
               <Button variant="ghost" icon={vehicle.archived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />} onClick={() => setArchiving(true)}>
                 {vehicle.archived ? "Restaurar" : "Archivar"}
@@ -129,12 +129,12 @@ export function VehicleDetailPage() {
               {vehicle.coverPhotoUrl ? <img src={vehicle.coverPhotoUrl} alt="" className="h-full w-full object-cover" /> : <Car className="h-16 w-16" />}
             </div>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-4 p-5 sm:grid-cols-3">
-              <Spec label="Kilometraje" value={<span className="tabular">{formatKm(vehicle.mileage)}</span>} />
+              <Spec label={odometerNoun(vehicle.odometerUnit)} value={<span className="tabular">{formatOdometer(vehicle.mileage, vehicle.odometerUnit)}</span>} />
               <Spec label="Color" value={vehicle.color} />
               <Spec label="Combustible" value={FUEL_LABELS[vehicle.fuelType]} />
               <Spec label="Transmisión" value={TRANSMISSION_LABELS[vehicle.transmission]} />
               <Spec label="Motor" value={vehicle.engine} />
-              <Spec label="Km actualizado" value={formatRelative(vehicle.mileageUpdatedAt)} />
+              <Spec label={`${odometerNoun(vehicle.odometerUnit)} actualizado`} value={formatRelative(vehicle.mileageUpdatedAt)} />
               <Spec label="VIN / chasis" value={<span className="break-all font-mono text-xs">{vehicle.vin}</span>} />
               {vehicle.notes && <div className="col-span-2 sm:col-span-3"><Spec label="Notas" value={<span className="whitespace-pre-line font-normal text-slate-700">{vehicle.notes}</span>} /></div>}
             </dl>
@@ -168,13 +168,13 @@ export function VehicleDetailPage() {
         {tab === "photos" && <VehiclePhotos vehicle={vehicle} />}
         {tab === "mileage" && (
           mileage.error ? <ErrorState message={mileage.error} /> : !mileage.data.length ? (
-            <EmptyState icon={<Gauge className="h-7 w-7" />} title="Sin registros de kilometraje" />
+            <EmptyState icon={<Gauge className="h-7 w-7" />} title={`Sin registros de ${odometerNoun(vehicle.odometerUnit).toLowerCase()}`} />
           ) : (
             <ul className="divide-y divide-slate-100">
               {mileage.data.map((m) => (
                 <li key={m.id} className="flex items-center justify-between gap-4 px-5 py-3">
                   <div>
-                    <div className="tabular font-semibold">{formatKm(m.mileage)}</div>
+                    <div className="tabular font-semibold">{formatOdometer(m.mileage, m.unit ?? normalizeUnit(vehicle.odometerUnit))}</div>
                     <div className="text-xs text-slate-500">{m.note || "Sin nota"} · {m.byName}</div>
                   </div>
                   <div className="text-right text-xs text-slate-500">{formatDate(m.at, true)}</div>

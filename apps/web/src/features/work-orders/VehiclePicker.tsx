@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { Car, Loader2, Search, X } from "lucide-react";
-import { col, searchToken, type Vehicle } from "@rapifix/shared";
+import { col, formatOdometer, searchToken, type Vehicle } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { useDebounced } from "@/lib/firestore/hooks";
-import { formatKm } from "@/lib/format";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
 
 export function VehiclePicker({ value, onChange }: { value: Vehicle | null; onChange: (v: Vehicle | null) => void }) {
@@ -39,7 +38,7 @@ export function VehiclePicker({ value, onChange }: { value: Vehicle | null; onCh
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 font-semibold">{value.make} {value.model} {value.year} <PlateTag plate={value.plate} /></div>
-          <div className="text-sm text-slate-600">{value.customer?.fullName} · {formatKm(value.mileage)}</div>
+          <div className="text-sm text-slate-600">{value.customer?.fullName} · {formatOdometer(value.mileage, value.odometerUnit)}</div>
         </div>
         <button type="button" onClick={() => onChange(null)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white" aria-label="Cambiar vehículo">
           <X className="h-5 w-5" />

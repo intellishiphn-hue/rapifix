@@ -46,7 +46,7 @@ function ServiceDialog({ service, onClose }: { service: Service | null | undefin
         <Field label="Precio" required><MoneyInput value={price} onChange={(v) => setValue("price", v)} /></Field>
         <Field label="Horas estimadas" error={formState.errors.estimatedHours?.message}><Input type="number" step="0.5" min={0} {...register("estimatedHours", { valueAsNumber: true })} /></Field>
         <Field label="Repetir cada (días)" hint="0 = sin recordatorio" error={formState.errors.intervalDays?.message}><Input type="number" min={0} step={1} {...register("intervalDays", { valueAsNumber: true })} /></Field>
-        <Field label="Repetir cada (km)" hint="Ej. 5000 para cambio de aceite" error={formState.errors.intervalKm?.message}><Input type="number" min={0} step={500} {...register("intervalKm", { valueAsNumber: true })} /></Field>
+        <Field label="Repetir cada (km)" hint="Ej. 5000 para cambio de aceite. En carros que marcan millas se convierte solo." error={formState.errors.intervalKm?.message}><Input type="number" min={0} step={500} {...register("intervalKm", { valueAsNumber: true })} /></Field>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("taxable")} /> Aplica ISV</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("active")} /> Activo</label>
         <button type="submit" className="hidden" />

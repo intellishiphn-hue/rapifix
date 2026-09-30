@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input, Textarea } from "@/components/ui/Field";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Skeleton } from "@/components/ui/Feedback";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { currentMonth, isOverdue, monthLabel, paySupplier, shiftMonth, saveSupplier, useSupplierPayments, voidPurchase } from "./api";
@@ -94,7 +95,7 @@ export function SupplierFormDialog({ open, supplier, onClose }: { open: boolean;
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Nombre o razón social" required error={errors.name} className="sm:col-span-2"><Input value={form.name} onChange={(e) => set("name", e.target.value)} maxLength={120} autoFocus /></Field>
         <Field label="Persona de contacto" error={errors.contactName}><Input value={form.contactName} onChange={(e) => set("contactName", e.target.value)} maxLength={80} /></Field>
-        <Field label="Teléfono" error={errors.phone}><Input value={form.phone} onChange={(e) => set("phone", e.target.value)} maxLength={30} inputMode="tel" /></Field>
+        <Field label="Teléfono" error={errors.phone}><PhoneInput value={form.phone} onChange={(v) => set("phone", v)} /></Field>
         <Field label="Correo" error={errors.email}><Input value={form.email} onChange={(e) => set("email", e.target.value)} maxLength={120} type="email" /></Field>
         <Field label="RTN" error={errors.rtn}><Input value={form.rtn} onChange={(e) => set("rtn", e.target.value)} maxLength={20} /></Field>
         <Field label="Qué nos vende" hint="Ej. repuestos, aceites, llantas" error={errors.categories} className="sm:col-span-2"><Input value={form.categories} onChange={(e) => set("categories", e.target.value)} maxLength={200} /></Field>

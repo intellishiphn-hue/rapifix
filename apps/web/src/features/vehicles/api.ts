@@ -5,7 +5,7 @@ import {
 import { deleteObject, ref as storageRef } from "firebase/storage";
 import {
   buildSearchKeywords, col, normalizePlate, searchToken, storagePath,
-  type Customer, type MileageEntry, type Vehicle, type VehicleInput, type VehiclePhoto,
+  type Customer, type MileageEntry, type OdometerUnit, type Vehicle, type VehicleInput, type VehiclePhoto,
 } from "@rapifix/shared";
 import { db, storage, TENANT_ID } from "@/lib/firebase";
 import { useDocData, useQueryData } from "@/lib/firestore/hooks";
@@ -50,34 +50,42 @@ export async function createVehicle(input: VehicleInput, owner: Customer, uid: s
     updatedBy: uid,
   });
   batch.set(doc(collection(db, col.mileageLog(TENANT_ID, id))), {
-    mileage: input.mileage, source: "manual", note: "Registro inicial", at: serverTimestamp(), by: uid, byName,
+    mileage: input.mileage, unit: input.odometerUnit, source: "manual", note: "Registro inicial", at: serverTimestamp(), by: uid, byName,
   });
   await batch.commit();
   return id;
 }
 
-export async function updateVehicle(id: string, input: VehicleInput, owner: Customer, previousMileage: number, uid: string, byName: string) {
+export async function updateVehicle(
+  id: string, input: VehicleInput, owner: Customer, previousMileage: number, uid: string, byName: string,
+  previousUnit?: OdometerUnit | null,
+) {
   const batch = writeBatch(db);
+  const unitChanged = input.odometerUnit !== (previousUnit ?? "km");
+  const readingChanged = input.mileage !== previousMileage || unitChanged;
   batch.update(vehicleRef(id), {
     ...toDoc(input, owner),
-    ...(input.mileage !== previousMileage ? { mileageUpdatedAt: serverTimestamp() } : {}),
+    ...(readingChanged ? { mileageUpdatedAt: serverTimestamp() } : {}),
     updatedAt: serverTimestamp(),
     updatedBy: uid,
   });
-  if (input.mileage !== previousMileage) {
+  if (readingChanged) {
     batch.set(doc(collection(db, col.mileageLog(TENANT_ID, id))), {
-      mileage: input.mileage, source: "manual", note: "Actualizado al editar el vehículo", at: serverTimestamp(), by: uid, byName,
+      mileage: input.mileage, unit: input.odometerUnit, source: "manual",
+      note: unitChanged ? `Unidad cambiada a ${input.odometerUnit === "mi" ? "millas" : "kilómetros"} al editar el vehículo` : "Actualizado al editar el vehículo",
+      at: serverTimestamp(), by: uid, byName,
     });
   }
   await batch.commit();
 }
 
-export async function addMileage(vehicleId: string, mileage: number, note: string, uid: string, byName: string) {
+/** Nueva lectura del odómetro en la unidad indicada (si cambia, el vehículo pasa a esa unidad). */
+export async function addMileage(vehicleId: string, mileage: number, unit: OdometerUnit, note: string, uid: string, byName: string) {
   const batch = writeBatch(db);
   batch.set(doc(collection(db, col.mileageLog(TENANT_ID, vehicleId))), {
-    mileage, source: "manual", note, at: serverTimestamp(), by: uid, byName,
+    mileage, unit, source: "manual", note, at: serverTimestamp(), by: uid, byName,
   });
-  batch.update(vehicleRef(vehicleId), { mileage, mileageUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid });
+  batch.update(vehicleRef(vehicleId), { mileage, odometerUnit: unit, mileageUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid });
   await batch.commit();
 }
 

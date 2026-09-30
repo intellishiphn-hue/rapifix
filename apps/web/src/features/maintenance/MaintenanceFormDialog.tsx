@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import { getDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { Wrench, X } from "lucide-react";
-import { saveMaintenanceSchema, type Maintenance, type SaveMaintenanceInput, type Vehicle } from "@rapifix/shared";
+import {
+  formatOdometer, intervalInUnit, normalizeUnit, odometerFieldLabel, saveMaintenanceSchema,
+  type Maintenance, type OdometerUnit, type SaveMaintenanceInput, type Vehicle,
+} from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
-import { formatKm } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input, Textarea } from "@/components/ui/Field";
+import { OdometerUnitSelect } from "@/components/common/OdometerUnitSelect";
 import { CatalogPicker } from "@/features/catalog/CatalogPicker";
 import { vehicleRef } from "@/features/vehicles/api";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
@@ -23,6 +26,7 @@ export function MaintenanceFormDialog({ open, onClose, maintenance }: { open: bo
   const [serviceName, setServiceName] = useState("");
   const [lastDate, setLastDate] = useState(todayKey());
   const [lastKm, setLastKm] = useState("");
+  const [unit, setUnit] = useState<OdometerUnit>("km");
   const [days, setDays] = useState("");
   const [km, setKm] = useState("");
   const [notes, setNotes] = useState("");
@@ -37,6 +41,7 @@ export function MaintenanceFormDialog({ open, onClose, maintenance }: { open: bo
     setServiceName(m?.serviceName ?? "");
     setLastDate(m?.lastDate ? msToDayKey(m.lastDate.toMillis()) : todayKey());
     setLastKm(m ? String(m.lastMileage) : "");
+    setUnit(normalizeUnit(m?.odometerUnit));
     setDays(m?.intervalDays ? String(m.intervalDays) : "");
     setKm(m?.intervalKm ? String(m.intervalKm) : "");
     setNotes(m?.notes ?? "");
@@ -48,7 +53,10 @@ export function MaintenanceFormDialog({ open, onClose, maintenance }: { open: bo
 
   const pickVehicle = (v: Vehicle) => {
     setVehicle(v);
-    if (!lastKm) setLastKm(String(v.mileage ?? 0));
+    if (!lastKm) {
+      setLastKm(String(v.mileage ?? 0));
+      setUnit(normalizeUnit(v.odometerUnit));
+    }
   };
 
   const submit = async () => {
@@ -58,6 +66,7 @@ export function MaintenanceFormDialog({ open, onClose, maintenance }: { open: bo
       serviceName: serviceName.trim(),
       lastDate: lastDate ? dayStartMs(lastDate) + 12 * 3600000 : Date.now(),
       lastMileage: num(lastKm),
+      odometerUnit: unit,
       intervalDays: num(days),
       intervalKm: num(km),
       notes: notes.trim(),
@@ -84,7 +93,7 @@ export function MaintenanceFormDialog({ open, onClose, maintenance }: { open: bo
         open={open}
         onClose={onClose}
         title={maintenance ? "Editar mantenimiento" : "Nuevo mantenimiento"}
-        description="El sistema calcula la próxima fecha y kilometraje con el intervalo."
+        description="El sistema calcula la próxima fecha y kilometraje (o millaje) con el intervalo."
         footer={
           <>
             <Button variant="secondary" onClick={onClose}>Cancelar</Button>
@@ -100,7 +109,7 @@ export function MaintenanceFormDialog({ open, onClose, maintenance }: { open: bo
                 <PlateTag plate={vehicle.plate} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{vehicle.make} {vehicle.model} {vehicle.year}</div>
-                  <div className="truncate text-xs text-slate-500">{vehicle.customer?.fullName} · {formatKm(vehicle.mileage ?? 0)}</div>
+                  <div className="truncate text-xs text-slate-500">{vehicle.customer?.fullName} · {formatOdometer(vehicle.mileage ?? 0, vehicle.odometerUnit)}</div>
                 </div>
                 {!maintenance && (
                   <button type="button" onClick={() => setVehicle(null)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white" aria-label="Cambiar vehículo"><X className="h-4 w-4" /></button>
@@ -122,13 +131,19 @@ export function MaintenanceFormDialog({ open, onClose, maintenance }: { open: bo
           <Field label="Fecha del último servicio">
             <Input type="date" value={lastDate} onChange={(e) => setLastDate(e.target.value)} />
           </Field>
-          <Field label="Kilometraje del último servicio">
-            <Input inputMode="numeric" value={lastKm} onChange={(e) => setLastKm(e.target.value)} placeholder="0" />
+          <Field label={odometerFieldLabel(unit, "del último servicio")}>
+            <div className="flex gap-2">
+              <Input inputMode="numeric" value={lastKm} onChange={(e) => setLastKm(e.target.value)} placeholder="0" />
+              <OdometerUnitSelect value={unit} onChange={setUnit} />
+            </div>
           </Field>
           <Field label="Repetir cada (días)" hint="0 o vacío si no aplica">
             <Input inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} placeholder="Ej. 90" />
           </Field>
-          <Field label="Repetir cada (km)" hint="0 o vacío si no aplica">
+          <Field
+            label="Repetir cada (km)"
+            hint={unit === "mi" && num(km) > 0 ? `≈ ${formatOdometer(intervalInUnit(num(km), "mi"), "mi")} en este vehículo` : "0 o vacío si no aplica"}
+          >
             <Input inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} placeholder="Ej. 5000" />
           </Field>
           <Field label="Notas" className="sm:col-span-2">

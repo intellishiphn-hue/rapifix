@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { Banknote, Check, CheckCircle2, Clock, CreditCard, HelpCircle, Phone, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
-import { formatMoney, normalizePhone, QUOTE_ITEM_LABELS, whatsappLink, type PublicPortal } from "@rapifix/shared";
+import { formatMoney, formatOdometer, normalizePhone, odometerNoun, QUOTE_ITEM_LABELS, whatsappLink, type PublicPortal } from "@rapifix/shared";
 
 /** Número de RAPIFIX (9285-4852) si en Configuración no se ha puesto otro */
 const RAPIFIX_PHONE = "92854852";
@@ -394,8 +394,8 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
           {p.reception.receivedAt && <p className="text-xs text-slate-500">{formatDate(p.reception.receivedAt, true)}</p>}
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs text-slate-500">Kilometraje</div>
-              <div className="tabular font-bold">{new Intl.NumberFormat("es-HN").format(p.reception.mileageIn)} km</div>
+              <div className="text-xs text-slate-500">{odometerNoun(p.reception.mileageUnit)}</div>
+              <div className="tabular font-bold">{formatOdometer(p.reception.mileageIn, p.reception.mileageUnit)}</div>
             </div>
             <div className="rounded-xl bg-slate-50 p-3">
               <div className="text-xs text-slate-500">Combustible</div>

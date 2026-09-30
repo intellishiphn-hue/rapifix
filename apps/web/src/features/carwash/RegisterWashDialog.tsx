@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { getDoc } from "firebase/firestore";
 import { AlertTriangle, BadgeCheck, Car, Check, Gift, Info, Loader2, Plus, Search, Wrench } from "lucide-react";
 import {
-  buildWashItems, computeWashCharge, formatMoney, formatPhone, isPendingVehicle, isPlaceholderPlate, loyaltyText, priceForSize, rewardCap, washPlate,
+  buildWashItems, computeWashCharge, formatMoney, isPendingVehicle, isValidPhone, PHONE_ERROR, isPlaceholderPlate, loyaltyText, priceForSize, rewardCap, washPlate,
   WASH_STATUS_LABELS, type CarwashLookupResult, type Customer, type Vehicle, type VehicleSize, type Wash,
 } from "@rapifix/shared";
 import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
@@ -14,6 +14,7 @@ import { formatDate, formatPlate } from "@/lib/format";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { customerRef } from "@/features/customers/api";
 import { CustomerPicker } from "@/features/vehicles/CustomerPicker";
@@ -61,7 +62,7 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
     setPlate(wash?.plate ?? "");
     setLookup(null);
     setName(wash?.customerName ?? "");
-    setPhone(wash?.phone ? formatPhone(wash.phone) : "");
+    setPhone(wash?.phone ?? "");
     setSize(wash?.size ?? null);
     setSizeTouched(!!wash);
     setSel(wash ? wash.items.map((i) => ({ serviceId: i.serviceId, price: i.listPrice })) : []);
@@ -87,7 +88,7 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
     setPicked(c);
     if (!c) return;
     setName(c.fullName);
-    setPhone(formatPhone(c.whatsapp || c.phone));
+    setPhone(c.whatsapp || c.phone || "");
     setCreateCustomer(false);
   };
   const pickVehicle = (v: Vehicle) => setPlate(v.plate);
@@ -122,7 +123,7 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
         const n = r.customer?.name || r.history?.customerName || "";
         const p = r.customer?.phone || r.history?.phone || "";
         if (n) setName((cur) => cur || n);
-        if (p) setPhone((cur) => cur || formatPhone(p));
+        if (p) setPhone((cur) => cur || p);
         const suggested = r.membership?.size ?? r.history?.size ?? null;
         if (suggested) setSize((cur) => (sizeTouched && cur ? cur : suggested));
         setUseMembership(!!r.membership?.canUse);
@@ -176,6 +177,7 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
     if (!sel.length) return toast.error("Seleccione el lavado");
     if (preview.error) return toast.error(preview.error);
     if (name.trim().length < 2) return toast.error("Escriba el nombre del cliente");
+    if (phone.trim() && !isValidPhone(phone)) return toast.error(PHONE_ERROR);
     setSaving(true);
     try {
       // El servidor valida que el vehículo sea de esta placa; si el cliente no la tiene, la agrega a sus vehículos
@@ -327,7 +329,7 @@ export function RegisterWashDialog({ open, onClose, wash }: { open: boolean; onC
             <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="Nombre" />
           </Field>
           <Field label="Teléfono / WhatsApp" hint="Opcional. Para avisarle cuando esté listo.">
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" maxLength={20} placeholder="9999-9999" />
+            <PhoneInput value={phone} onChange={setPhone} />
           </Field>
         </div>
         {noCustomer && can("carwash.charge") && phone.replace(/\D/g, "").length >= 8 && !editing && (

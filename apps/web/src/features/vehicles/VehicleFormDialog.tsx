@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { getDoc } from "firebase/firestore";
 import {
-  CARWASH_VEHICLE_PENDING, FUEL_LABELS, FUEL_TYPES, TRANSMISSION_LABELS, TRANSMISSIONS, vehicleSchema,
-  type Customer, type Vehicle, type VehicleInput,
+  CARWASH_VEHICLE_PENDING, FUEL_LABELS, FUEL_TYPES, normalizeUnit, odometerNoun, TRANSMISSION_LABELS, TRANSMISSIONS, vehicleSchema,
+  type Customer, type Vehicle, type VehicleFormValues, type VehicleInput,
 } from "@rapifix/shared";
 import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
@@ -14,6 +14,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { customerRef } from "@/features/customers/api";
+import { OdometerUnitSelect } from "@/components/common/OdometerUnitSelect";
 import { CustomerPicker } from "./CustomerPicker";
 import { createVehicle, findByPlate, updateVehicle } from "./api";
 
@@ -21,7 +22,7 @@ const MAKES = ["Toyota", "Nissan", "Honda", "Hyundai", "Kia", "Mitsubishi", "Maz
 
 const empty = (customerId = ""): VehicleInput => ({
   customerId, make: "", model: "", year: new Date().getFullYear(), color: "", plate: "", vin: "",
-  mileage: 0, fuelType: "gasolina", engine: "", transmission: "automatica", notes: "",
+  mileage: 0, odometerUnit: "km", fuelType: "gasolina", engine: "", transmission: "automatica", notes: "",
 });
 
 export function VehicleFormDialog({
@@ -43,11 +44,12 @@ export function VehicleFormDialog({
   const [owner, setOwner] = useState<Customer | null>(null);
   const [plateWarning, setPlateWarning] = useState<Vehicle | null>(null);
 
-  const { register, handleSubmit, reset, control, setValue, formState } = useForm<VehicleInput>({
+  const { register, handleSubmit, reset, control, setValue, formState } = useForm<VehicleFormValues, unknown, VehicleInput>({
     resolver: zodResolver(vehicleSchema),
     defaultValues: empty(),
   });
   const { errors, isSubmitting } = formState;
+  const unit = useWatch({ control, name: "odometerUnit" });
 
   useEffect(() => {
     if (!open) return;
@@ -59,7 +61,8 @@ export function VehicleFormDialog({
         make: vehicle.make === CARWASH_VEHICLE_PENDING ? "" : vehicle.make,
         model: vehicle.model === CARWASH_VEHICLE_PENDING ? "" : vehicle.model,
         year: vehicle.year, color: vehicle.color,
-        plate: formatPlate(vehicle.plate), vin: vehicle.vin, mileage: vehicle.mileage, fuelType: vehicle.fuelType,
+        plate: formatPlate(vehicle.plate), vin: vehicle.vin, mileage: vehicle.mileage,
+        odometerUnit: normalizeUnit(vehicle.odometerUnit), fuelType: vehicle.fuelType,
         engine: vehicle.engine, transmission: vehicle.transmission, notes: vehicle.notes ?? "",
       });
       getDoc(customerRef(vehicle.customerId)).then((s) => s.exists() && setOwner({ id: s.id, ...s.data() } as Customer));
@@ -80,7 +83,7 @@ export function VehicleFormDialog({
         }
       }
       if (editing) {
-        await updateVehicle(vehicle.id, values, owner, vehicle.mileage, user.uid, byName);
+        await updateVehicle(vehicle.id, values, owner, vehicle.mileage, user.uid, byName, vehicle.odometerUnit);
         toast.success("Vehículo actualizado");
         onSaved?.(vehicle.id);
       } else {
@@ -149,8 +152,20 @@ export function VehicleFormDialog({
         <Field label="Color" error={errors.color?.message}>
           <Input {...register("color")} />
         </Field>
-        <Field label="Kilometraje actual" required error={errors.mileage?.message}>
-          <Input type="number" inputMode="numeric" {...register("mileage", { valueAsNumber: true })} invalid={!!errors.mileage} />
+        <Field
+          label={`${odometerNoun(unit)} actual (${unit === "mi" ? "mi" : "km"})`}
+          required
+          error={errors.mileage?.message}
+          hint={unit === "mi" ? "Carro que marca millas (ej. traído de EE. UU.). Escriba lo que marca el tablero." : undefined}
+        >
+          <div className="flex gap-2">
+            <Input type="number" inputMode="numeric" {...register("mileage", { valueAsNumber: true })} invalid={!!errors.mileage} />
+            <Controller
+              control={control}
+              name="odometerUnit"
+              render={({ field }) => <OdometerUnitSelect value={field.value} onChange={field.onChange} />}
+            />
+          </div>
         </Field>
         <Field label="VIN / número de chasis" error={errors.vin?.message} className="sm:col-span-2">
           <Input {...register("vin")} className="uppercase" maxLength={17} invalid={!!errors.vin} />

@@ -11,8 +11,8 @@ const FIELD_LABELS: Record<string, string> = {
   firstName: "nombre", lastName: "apellido", fullName: "nombre completo", phone: "teléfono", whatsapp: "WhatsApp",
   email: "correo", idNumber: "identidad", rtn: "RTN", address: "dirección", city: "ciudad", notes: "notas", status: "estado",
   customerId: "propietario", make: "marca", model: "modelo", year: "año", color: "color", plate: "placa", vin: "VIN",
-  mileage: "kilometraje", fuelType: "combustible", engine: "motor", transmission: "transmisión", archived: "archivado",
-  coverPhotoUrl: "foto principal", mileageUpdatedAt: "fecha de kilometraje", customer: "datos del propietario",
+  mileage: "kilometraje / millaje", odometerUnit: "unidad del odómetro (km / millas)", fuelType: "combustible", engine: "motor", transmission: "transmisión", archived: "archivado",
+  coverPhotoUrl: "foto principal", mileageUpdatedAt: "fecha de kilometraje / millaje", customer: "datos del propietario",
 };
 const ACTIONS = { create: "creó el registro", update: "modificó", delete: "eliminó el registro" } as const;
 

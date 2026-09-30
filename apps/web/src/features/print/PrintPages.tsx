@@ -1,10 +1,10 @@
 import { useParams } from "react-router-dom";
 import { Printer } from "lucide-react";
 import {
-  formatMoney, formatPhone, FUEL_LABELS, PAYMENT_METHOD_LABELS, PRIORITY_LABELS, QUOTE_ITEM_LABELS, QUOTE_STATUS_META, RECEPTION_CHECKLIST, STATUS_META, WORK_TYPE_LABELS,
+  formatMoney, formatOdometer, formatPhone, odometerNoun, FUEL_LABELS, PAYMENT_METHOD_LABELS, PRIORITY_LABELS, QUOTE_ITEM_LABELS, QUOTE_STATUS_META, RECEPTION_CHECKLIST, STATUS_META, WORK_TYPE_LABELS,
   type WorkshopSettings,
 } from "@rapifix/shared";
-import { formatDate, formatKm, formatPlate } from "@/lib/format";
+import { formatDate, formatPlate } from "@/lib/format";
 import { PageLoader, ErrorState } from "@/components/ui/Feedback";
 import { LogoMark } from "@/components/common/Logo";
 import { useSettings } from "@/features/settings/api";
@@ -83,7 +83,7 @@ export function PrintOrderPage() {
         <p className="mt-2"><span className="text-slate-500">Motivo de ingreso:</span> {o.reason}</p>
       </Box>
       <Box title="Recepción">
-        <KV rows={[["Kilometraje", formatKm(r?.mileageIn ?? 0)], ["Combustible", FUEL[r?.fuelLevel ?? 0]], ["Km salida", o.mileageOut != null ? formatKm(o.mileageOut) : ""]]} />
+        <KV rows={[[odometerNoun(o.mileageUnit), formatOdometer(r?.mileageIn ?? 0, o.mileageUnit)], ["Combustible", FUEL[r?.fuelLevel ?? 0]], [`${odometerNoun(o.mileageUnit)} salida`, o.mileageOut != null ? formatOdometer(o.mileageOut, o.mileageUnit) : ""]]} />
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
           {RECEPTION_CHECKLIST.map((c) => <span key={c.key}>{r?.checklist?.[c.key] ? "☑" : "☐"} {c.label}</span>)}
         </div>

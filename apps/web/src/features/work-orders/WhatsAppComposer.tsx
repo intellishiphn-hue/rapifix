@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Copy, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { normalizePhone, opsCol, whatsappLink, type WorkOrder } from "@rapifix/shared";
+import { formatPhoneIntl, normalizePhone, opsCol, whatsappLink, type WorkOrder } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { useAuth, useDisplayName } from "@/lib/auth/useAuth";
 import { Button } from "@/components/ui/Button";
@@ -77,7 +77,11 @@ export function WhatsAppComposer({
         </Button>
         <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => void copy()} disabled={!text.trim()}>Copiar</Button>
       </div>
-      <p className="text-xs text-slate-500">Se abre WhatsApp con el mensaje listo para {name}. Solo toque enviar.</p>
+      <p className="text-xs text-slate-500">
+        {phone
+          ? <>Se abre WhatsApp con el mensaje listo para {name} al <span className="tabular whitespace-nowrap font-medium text-slate-700">{formatPhoneIntl(phone)}</span>. Solo toque enviar.</>
+          : <>No hay un número de WhatsApp para {name}.</>}
+      </p>
     </div>
   );
 }

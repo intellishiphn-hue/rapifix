@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { ShieldCheck, UserPlus } from "lucide-react";
@@ -13,11 +13,12 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input, Select } from "@/components/ui/Field";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { createStaffUser, updateStaffUser, useStaffUsers } from "./api";
 
 function CreateUserDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { register, handleSubmit, reset, watch, formState } = useForm<CreateStaffUserInput>({
+  const { register, control, handleSubmit, reset, watch, formState } = useForm<CreateStaffUserInput>({
     resolver: zodResolver(createStaffUserSchema),
     defaultValues: { displayName: "", email: "", password: "", role: "reception", phone: "" },
   });
@@ -46,7 +47,7 @@ function CreateUserDialog({ open, onClose }: { open: boolean; onClose: () => voi
       <form onSubmit={handleSubmit(submit)} className="grid gap-4 sm:grid-cols-2" noValidate>
         <Field label="Nombre completo" required error={errors.displayName?.message} className="sm:col-span-2"><Input {...register("displayName")} autoFocus /></Field>
         <Field label="Correo" required error={errors.email?.message}><Input type="email" {...register("email")} autoComplete="off" /></Field>
-        <Field label="Teléfono" error={errors.phone?.message}><Input {...register("phone")} inputMode="tel" /></Field>
+        <Field label="Teléfono" error={errors.phone?.message}><Controller control={control} name="phone" render={({ field }) => <PhoneInput {...field} invalid={!!errors.phone} />} /></Field>
         <Field label="Contraseña temporal" required error={errors.password?.message} hint="Mínimo 8 caracteres"><Input type="text" {...register("password")} autoComplete="new-password" /></Field>
         <Field label="Rol" required>
           <Select {...register("role")}>{ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</Select>

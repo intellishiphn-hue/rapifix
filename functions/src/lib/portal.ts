@@ -81,6 +81,7 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
       ? {
           receivedAt: o.reception.receivedAt ?? o.createdAt ?? null,
           mileageIn: Number(o.reception.mileageIn ?? 0),
+          mileageUnit: o.mileageUnit === "mi" ? "mi" : "km",
           fuelLevel: Number(o.reception.fuelLevel ?? 0),
           items: RECEPTION_CHECKLIST.filter((c) => o.reception.checklist?.[c.key]).map((c) => c.label),
           exteriorNotes: o.reception.exteriorNotes ?? "",

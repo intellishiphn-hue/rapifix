@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowRight } from "lucide-react";
-import { STATUS_META, type WorkOrder, type WorkOrderStatus } from "@rapifix/shared";
+import {
+  formatOdometer, isOdometerLower, normalizeUnit, odometerFieldLabel, STATUS_META,
+  type OdometerUnit, type WorkOrder, type WorkOrderStatus,
+} from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
-import { formatKm } from "@/lib/format";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Textarea } from "@/components/ui/Field";
+import { OdometerUnitSelect } from "@/components/common/OdometerUnitSelect";
 import { useSettings } from "@/features/settings/api";
 import { changeWorkOrderStatus } from "./api";
 import { StatusBadge } from "./StatusBadge";
@@ -17,6 +20,8 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
   const { settings } = useSettings();
   const [note, setNote] = useState("");
   const [km, setKm] = useState("");
+  const orderUnit = normalizeUnit(order.mileageUnit);
+  const [unit, setUnit] = useState<OdometerUnit>(orderUnit);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -24,9 +29,10 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
     if (to) {
       setNote("");
       setKm(String(order.reception?.mileageIn ?? ""));
+      setUnit(orderUnit);
       setMessage(null);
     }
-  }, [to, order.reception?.mileageIn]);
+  }, [to, order.reception?.mileageIn, orderUnit]);
 
   if (!to) return null;
   const cancelling = to === "CANCELLED";
@@ -38,6 +44,7 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
 
   const kmNum = Number(km);
   const kmInvalid = delivering && km !== "" && (!Number.isInteger(kmNum) || kmNum < 0);
+  const kmLower = delivering && km !== "" && !kmInvalid && isOdometerLower(kmNum, unit, order.reception?.mileageIn ?? 0, orderUnit);
 
   const submit = async () => {
     if (cancelling && !note.trim()) {
@@ -51,7 +58,7 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
         orderId: order.id,
         toStatus: to,
         ...(note.trim() ? { note: note.trim() } : {}),
-        ...(delivering && km !== "" && !kmInvalid ? { mileageOut: kmNum } : {}),
+        ...(delivering && km !== "" && !kmInvalid ? { mileageOut: kmNum, mileageUnit: unit } : {}),
       });
       toast.success(`Orden ${order.code}: ${STATUS_META[to].label}`);
       const msg = cancelling ? null : messageForStatus(order, to, settings);
@@ -100,8 +107,15 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
           </div>
         ))}
         {delivering && (
-          <Field label="Kilometraje de salida" hint={`Ingreso: ${formatKm(order.reception?.mileageIn ?? 0)}`} error={kmInvalid ? "Kilometraje no válido" : undefined}>
-            <Input type="number" inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} />
+          <Field
+            label={odometerFieldLabel(unit, "de salida")}
+            hint={kmLower ? "Es menor que el de ingreso. Revise la lectura." : `Ingreso: ${formatOdometer(order.reception?.mileageIn ?? 0, orderUnit)}`}
+            error={kmInvalid ? "Lectura no válida" : undefined}
+          >
+            <div className="flex gap-2">
+              <Input type="number" inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} />
+              <OdometerUnitSelect value={unit} onChange={setUnit} />
+            </div>
           </Field>
         )}
         <Field label={cancelling ? "Motivo de la cancelación" : "Nota (opcional)"} required={cancelling}>

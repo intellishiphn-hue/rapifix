@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input } from "@/components/ui/Field";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { useStaffDirectory } from "@/features/work-orders/api";
 import { StatusBadge } from "@/features/work-orders/StatusBadge";
@@ -289,7 +290,7 @@ function EditForm({ row, onClose }: { row: Row; onClose: () => void }) {
     >
       <form id="employee-form" onSubmit={submit} className="space-y-4">
         <Field label="Teléfono" error={errors.phone}>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="9999-9999" invalid={!!errors.phone} />
+          <PhoneInput value={phone} onChange={setPhone} invalid={!!errors.phone} />
         </Field>
         <Field label="Especialidad" error={errors.specialty} hint="Ej.: Motor y transmisión, electricidad, frenos">
           <Input value={specialty} onChange={(e) => setSpecialty(e.target.value)} invalid={!!errors.specialty} />

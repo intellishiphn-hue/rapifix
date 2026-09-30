@@ -29,6 +29,7 @@ export function formatRelative(value: TimestampLike | Date | null | undefined): 
   return formatDate(d);
 }
 
+/** Solo para valores en km (intervalos, configuración). Para lecturas de un vehículo use formatOdometer(valor, unidad) de @rapifix/shared. */
 export const formatKm = (km: number) => `${new Intl.NumberFormat("es-HN").format(km)} km`;
 
 /** ABC123 -> ABC-123 para mostrar */

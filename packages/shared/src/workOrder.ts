@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { BaseDoc, TimestampLike } from "./types";
 import { WORK_ORDER_STATUSES, type WorkOrderStatus } from "./workOrderStatus";
+import { odometerUnitSchema, type OdometerUnit } from "./odometer";
 
 export const WORK_TYPES = ["repair", "maintenance", "warranty", "diagnosis", "other"] as const;
 export type WorkType = (typeof WORK_TYPES)[number];
@@ -118,6 +119,8 @@ export interface WorkOrder extends BaseDoc {
   promisedAt: TimestampLike | null;
   deliveredAt: TimestampLike | null;
   mileageOut: number | null;
+  /** Unidad de mileageIn / mileageOut ("km" si no existe: órdenes viejas) */
+  mileageUnit?: OdometerUnit | null;
   cancelReason: string;
   photoCount: number;
   /** Repuestos ya descontados del inventario: clave `${quoteId}_${itemId}` */
@@ -167,6 +170,8 @@ const text = (max: number) => z.string().trim().max(max, `Máximo ${max} caracte
 
 export const receptionSchema = z.object({
   mileageIn: z.number({ error: "Kilometraje no válido" }).int().min(0, "Kilometraje no válido").max(2_000_000),
+  /** Unidad de la lectura (se guarda en la orden como mileageUnit; si falta, la del vehículo) */
+  mileageUnit: odometerUnitSchema.nullish(),
   fuelLevel: z.number().int().min(0).max(8),
   exteriorNotes: text(1000),
   interiorNotes: text(1000),
@@ -240,6 +245,8 @@ export const changeStatusSchema = z.object({
   // nullish: Firebase envía como null los campos que el navegador deja en undefined
   note: text(500).nullish(),
   mileageOut: z.number().int().min(0).max(2_000_000).nullish(),
+  /** Unidad del kilometraje de salida (si falta, la de la orden) */
+  mileageUnit: odometerUnitSchema.nullish(),
 });
 export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;
 

@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, ClipboardCheck, Pencil, ShieldCheck, X } from "lucide-react";
 import {
-  PRIORITY_LABELS, QC_CHECKLIST, RECEPTION_CHECKLIST, WORK_TYPE_LABELS, receptionSchema,
+  formatOdometer, normalizeUnit, odometerNoun, PRIORITY_LABELS, QC_CHECKLIST, RECEPTION_CHECKLIST, WORK_TYPE_LABELS, receptionSchema,
   type ReceptionInput, type WorkOrder,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
-import { formatDate, formatKm } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Dialog } from "@/components/ui/Dialog";
@@ -27,12 +27,13 @@ function Item({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function ReceptionDialog({ order, open, onClose }: { order: WorkOrder; open: boolean; onClose: () => void }) {
-  const [value, setValue] = useState<ReceptionInput>(order.reception);
+  const unit = normalizeUnit(order.mileageUnit);
+  const [value, setValue] = useState<ReceptionInput>({ ...order.reception, mileageUnit: unit });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    if (open) setValue({ ...order.reception });
-  }, [open, order.reception]);
+    if (open) setValue({ ...order.reception, mileageUnit: unit });
+  }, [open, order.reception, unit]);
 
   const save = async () => {
     const parsed = receptionSchema.safeParse(value);
@@ -140,8 +141,8 @@ export function OrderSummary({ order }: { order: WorkOrder }) {
         <CardHeader title="Recepción" action={canEdit && <Button size="sm" variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditingReception(true)}>Editar</Button>} />
         <div className="space-y-4 p-5">
           <div className="grid grid-cols-2 gap-4">
-            <Item label="Kilometraje ingreso" value={<span className="tabular">{formatKm(r?.mileageIn ?? 0)}</span>} />
-            {order.mileageOut != null && <Item label="Kilometraje salida" value={<span className="tabular">{formatKm(order.mileageOut)}</span>} />}
+            <Item label={`${odometerNoun(order.mileageUnit)} ingreso`} value={<span className="tabular">{formatOdometer(r?.mileageIn ?? 0, order.mileageUnit)}</span>} />
+            {order.mileageOut != null && <Item label={`${odometerNoun(order.mileageUnit)} salida`} value={<span className="tabular">{formatOdometer(order.mileageOut, order.mileageUnit)}</span>} />}
           </div>
           <div>
             <div className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Combustible</div>

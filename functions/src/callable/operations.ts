@@ -2,7 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
   appointmentStatusSchema, col, hnDayKey, maintenanceActionSchema, opsCol, orderCol, saveAppointmentSchema,
-  saveEmployeeSchema, saveMaintenanceSchema, type Role,
+  normalizePhone, normalizeUnit, saveEmployeeSchema, saveMaintenanceSchema, type Role,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
@@ -41,7 +41,7 @@ export const saveAppointment = onCall({ region: REGION }, async (request) => {
     durationMin: input.durationMin,
     dayKey: hnDayKey(start),
     customerId, customerName,
-    phone: input.phone || (customer?.get("whatsapp") as string) || (customer?.get("phone") as string) || "",
+    phone: (input.phone ? normalizePhone(input.phone) : "") || (customer?.get("whatsapp") as string) || (customer?.get("phone") as string) || "",
     vehicleId: input.vehicleId ?? (order?.get("vehicleId") as string | undefined) ?? null,
     vehicleLabel: v ? `${v.make ?? ""} ${v.model ?? ""} ${v.year ?? ""}`.trim() : "",
     plate: v?.plate ?? "",
@@ -92,15 +92,17 @@ export const saveMaintenance = onCall({ region: REGION }, async (request) => {
   const v = vehicle.data()!;
   const customer = await db.doc(`${col.customers(tid)}/${v.customerId}`).get();
   const lastMs = input.lastDate ?? Date.now();
-  const next = nextFrom(lastMs, input.lastMileage, input.intervalDays, input.intervalKm);
-  const calc = await computeFields(tid, vehicle.id, v, { lastMs, lastMileage: input.lastMileage, ...next }, await maintenanceDefaults(tid));
+  // La lectura va en la unidad que indicó el formulario (si no, la del vehículo); el intervalo en km
+  const unit = normalizeUnit(input.odometerUnit ?? v.odometerUnit);
+  const next = nextFrom(lastMs, input.lastMileage, input.intervalDays, input.intervalKm, unit);
+  const calc = await computeFields(tid, vehicle.id, v, { lastMs, lastMileage: input.lastMileage, unit, ...next }, await maintenanceDefaults(tid));
   const data = {
     vehicleId: vehicle.id, customerId: v.customerId,
     customerName: customer.exists ? `${customer.get("firstName")} ${customer.get("lastName")}` : (v.ownerName ?? ""),
     phone: customer.exists ? ((customer.get("whatsapp") as string) || (customer.get("phone") as string) || "") : "",
     vehicleLabel: `${v.make} ${v.model} ${v.year ?? ""}`.trim(), plate: v.plate,
     serviceId: input.serviceId ?? null, serviceName: input.serviceName,
-    lastDate: Timestamp.fromMillis(lastMs), lastMileage: input.lastMileage,
+    lastDate: Timestamp.fromMillis(lastMs), lastMileage: input.lastMileage, odometerUnit: unit,
     intervalDays: input.intervalDays, intervalKm: input.intervalKm, ...next, ...calc,
     notes: input.notes, doneAt: null,
     updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
@@ -129,7 +131,7 @@ export const maintenanceAction = onCall({ region: REGION }, async (request) => {
     const v = await db.doc(`${col.vehicles(tid)}/${m.get("vehicleId")}`).get();
     const calc = await computeFields(tid, m.get("vehicleId"), v.data(), {
       lastMs: (m.get("lastDate") as Timestamp | null)?.toMillis() ?? null, lastMileage: Number(m.get("lastMileage") ?? 0),
-      nextDate: (m.get("nextDate") as Timestamp | null) ?? null, nextMileage: m.get("nextMileage") ?? null,
+      nextDate: (m.get("nextDate") as Timestamp | null) ?? null, nextMileage: m.get("nextMileage") ?? null, unit: normalizeUnit(m.get("odometerUnit")),
     }, await maintenanceDefaults(tid));
     await ref.update({ ...base, ...calc, doneAt: null });
   }
@@ -143,7 +145,7 @@ export const saveEmployeeProfile = onCall({ region: REGION }, async (request) =>
   const staff = await db.doc(`${orderCol.staff(caller.tid)}/${input.uid}`).get();
   if (!staff.exists) throw new HttpsError("not-found", "El usuario no existe.");
   await db.doc(`${opsCol.employees(caller.tid)}/${input.uid}`).set({
-    phone: input.phone, specialty: input.specialty, color: input.color,
+    phone: input.phone ? normalizePhone(input.phone) : "", specialty: input.specialty, color: input.color,
     updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
   }, { merge: true });
   return { ok: true };

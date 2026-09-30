@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  catalogCol, col, DEFAULT_SETTINGS, MAINTENANCE_DUE_DAYS, opsCol, orderCol, quoteCol, type MaintenanceStatus,
+  catalogCol, col, DEFAULT_SETTINGS, evaluateMaintenanceReading, nextServiceReading, normalizeUnit, opsCol, orderCol, quoteCol,
+  toKm, type OdometerUnit,
 } from "@rapifix/shared";
 import { db } from "./admin";
 
@@ -23,11 +24,17 @@ export async function maintenanceDefaults(tid: string): Promise<MaintenanceDefau
 /**
  * Cuántos km maneja el vehículo al día, calculado con su historial de kilometraje
  * (recepciones y entregas). Si no hay suficiente historial, usa el promedio configurado.
+ * Las lecturas en millas se convierten a km; las viejas sin unidad se toman en la unidad del vehículo.
  */
-export async function vehicleKmPerDay(tid: string, vehicleId: string, fallback: number): Promise<{ kmPerDay: number; source: "history" | "default" }> {
+export async function vehicleKmPerDay(
+  tid: string, vehicleId: string, fallback: number, vehicleUnit?: OdometerUnit | null,
+): Promise<{ kmPerDay: number; source: "history" | "default" }> {
   const log = await db.collection(col.mileageLog(tid, vehicleId)).orderBy("at", "desc").limit(20).get();
   const pts = log.docs
-    .map((d) => ({ km: Number(d.get("mileage") ?? 0), at: (d.get("at") as Timestamp | null)?.toMillis() ?? 0 }))
+    .map((d) => ({
+      km: toKm(Number(d.get("mileage") ?? 0), normalizeUnit(d.get("unit") ?? vehicleUnit)),
+      at: (d.get("at") as Timestamp | null)?.toMillis() ?? 0,
+    }))
     .filter((p) => p.km > 0 && p.at > 0);
   if (pts.length >= 2) {
     const newest = pts[0]!;
@@ -41,44 +48,41 @@ export async function vehicleKmPerDay(tid: string, vehicleId: string, fallback: 
 
 export interface VehicleReading {
   mileage: number;
+  unit: OdometerUnit;
   atMs: number;
 }
 
 /**
- * Estado del mantenimiento: toca por fecha o por kilómetros, lo que llegue primero.
- * Los km de hoy se estiman con lo que maneja el cliente desde la última lectura conocida.
+ * Estado del mantenimiento: toca por fecha o por distancia, lo que llegue primero.
+ * Los cálculos van en km; `nextMileage` y el resultado `estimatedMileage` en la unidad del mantenimiento.
  */
 export function evaluateMaintenance(
-  m: { nextDateMs: number | null; nextMileage: number | null },
+  m: { nextDateMs: number | null; nextMileage: number | null; unit?: OdometerUnit | null },
   reading: VehicleReading,
   kmPerDay: number,
   now = Date.now(),
 ) {
-  const estimatedMileage = Math.round(reading.mileage + kmPerDay * Math.max(0, (now - reading.atMs) / DAY));
-  const kmDueMs = m.nextMileage != null && kmPerDay > 0
-    ? reading.atMs + ((m.nextMileage - reading.mileage) / kmPerDay) * DAY
-    : null;
-  const candidates = [m.nextDateMs, kmDueMs].filter((x): x is number => x != null);
-  const dueMs = candidates.length ? Math.min(...candidates) : null;
-  let status: MaintenanceStatus = "upcoming";
-  if (dueMs != null && dueMs < now) status = "overdue";
-  else if (dueMs != null && dueMs - now <= MAINTENANCE_DUE_DAYS * DAY) status = "due";
-  return { status, estimatedMileage, dueDate: dueMs != null ? Timestamp.fromMillis(Math.round(dueMs)) : null };
+  const r = evaluateMaintenanceReading(m, reading, kmPerDay, now);
+  return { status: r.status, estimatedMileage: r.estimatedMileage, dueDate: r.dueMs != null ? Timestamp.fromMillis(Math.round(r.dueMs)) : null };
 }
 
-export function nextFrom(lastMs: number | null, lastMileage: number, intervalDays: number, intervalKm: number) {
+/** Próxima fecha y lectura. `lastMileage` y `nextMileage` en la unidad del vehículo; `intervalKm` en km. */
+export function nextFrom(lastMs: number | null, lastMileage: number, intervalDays: number, intervalKm: number, unit?: OdometerUnit | null) {
   return {
     nextDate: intervalDays > 0 && lastMs != null ? Timestamp.fromMillis(lastMs + intervalDays * DAY) : null,
-    nextMileage: intervalKm > 0 ? lastMileage + intervalKm : null,
+    nextMileage: nextServiceReading(lastMileage, unit, intervalKm),
   };
 }
 
-/** Última lectura conocida del vehículo (la mayor entre el vehículo y el último servicio). */
-export function readingOf(vehicle: FirebaseFirestore.DocumentData | undefined, lastMileage: number, lastMs: number | null): VehicleReading {
+/** Última lectura conocida del vehículo (la mayor entre el vehículo y el último servicio, comparada en km). */
+export function readingOf(
+  vehicle: FirebaseFirestore.DocumentData | undefined, lastMileage: number, lastMs: number | null, lastUnit?: OdometerUnit | null,
+): VehicleReading {
+  const vUnit = normalizeUnit(vehicle?.odometerUnit);
   const vKm = Number(vehicle?.mileage ?? 0);
   const vAt = (vehicle?.mileageUpdatedAt as Timestamp | null | undefined)?.toMillis() ?? 0;
-  if (vKm >= lastMileage && vAt) return { mileage: vKm, atMs: vAt };
-  return { mileage: lastMileage, atMs: lastMs ?? Date.now() };
+  if (toKm(vKm, vUnit) >= toKm(lastMileage, lastUnit) - 0.5 && vAt) return { mileage: vKm, unit: vUnit, atMs: vAt };
+  return { mileage: lastMileage, unit: normalizeUnit(lastUnit), atMs: lastMs ?? Date.now() };
 }
 
 /** Campos calculados que se guardan en el mantenimiento. */
@@ -86,18 +90,18 @@ export async function computeFields(
   tid: string,
   vehicleId: string,
   vehicle: FirebaseFirestore.DocumentData | undefined,
-  m: { lastMs: number | null; lastMileage: number; nextDate: Timestamp | null; nextMileage: number | null },
+  m: { lastMs: number | null; lastMileage: number; nextDate: Timestamp | null; nextMileage: number | null; unit?: OdometerUnit | null },
   defaults: MaintenanceDefaults,
   rateCache?: Map<string, { kmPerDay: number; source: "history" | "default" }>,
 ) {
   let rate = rateCache?.get(vehicleId);
   if (!rate) {
-    rate = await vehicleKmPerDay(tid, vehicleId, defaults.kmPerDay);
+    rate = await vehicleKmPerDay(tid, vehicleId, defaults.kmPerDay, normalizeUnit(vehicle?.odometerUnit));
     rateCache?.set(vehicleId, rate);
   }
   const ev = evaluateMaintenance(
-    { nextDateMs: m.nextDate?.toMillis() ?? null, nextMileage: m.nextMileage },
-    readingOf(vehicle, m.lastMileage, m.lastMs),
+    { nextDateMs: m.nextDate?.toMillis() ?? null, nextMileage: m.nextMileage, unit: m.unit },
+    readingOf(vehicle, m.lastMileage, m.lastMs, m.unit),
     rate.kmPerDay,
   );
   return { ...ev, kmPerDay: Math.round(rate.kmPerDay * 10) / 10, kmSource: rate.source };
@@ -138,7 +142,10 @@ export async function generateMaintenanceFromOrder(tid: string, orderId: string,
   if (!plans.length) return 0;
 
   const deliveredMs = (o.deliveredAt as Timestamp | null)?.toMillis() ?? Date.now();
-  const mileage = Number(o.mileageOut ?? o.reception?.mileageIn ?? vehicle.get("mileage") ?? 0);
+  // La lectura de la orden va en la unidad de la orden (órdenes viejas: km); si no hay, la del vehículo
+  const fromOrder = o.mileageOut ?? o.reception?.mileageIn;
+  const mileage = Number(fromOrder ?? vehicle.get("mileage") ?? 0);
+  const unit: OdometerUnit = normalizeUnit(fromOrder != null ? o.mileageUnit : vehicle.get("odometerUnit"));
   const batch = db.batch();
   let n = 0;
   for (const p of plans) {
@@ -147,14 +154,14 @@ export async function generateMaintenanceFromOrder(tid: string, orderId: string,
     // No retroceder: si ya hay un registro de un servicio más reciente, se deja
     const prevLast = (existing.get("lastDate") as Timestamp | null)?.toMillis() ?? 0;
     if (existing.exists && prevLast > deliveredMs) continue;
-    const next = nextFrom(deliveredMs, mileage, p.intervalDays, p.intervalKm);
-    const calc = await computeFields(tid, o.vehicleId, vehicle.data(), { lastMs: deliveredMs, lastMileage: mileage, ...next }, cfg);
+    const next = nextFrom(deliveredMs, mileage, p.intervalDays, p.intervalKm, unit);
+    const calc = await computeFields(tid, o.vehicleId, vehicle.data(), { lastMs: deliveredMs, lastMileage: mileage, unit, ...next }, cfg);
     batch.set(ref, {
       vehicleId: o.vehicleId, customerId: o.customerId,
       customerName: o.customer?.fullName ?? "", phone: o.customer?.whatsapp || o.customer?.phone || "",
       vehicleLabel: `${o.vehicle?.make ?? ""} ${o.vehicle?.model ?? ""} ${o.vehicle?.year ?? ""}`.trim(), plate: o.vehicle?.plate ?? "",
       serviceId: p.serviceId, serviceName: p.name,
-      lastDate: Timestamp.fromMillis(deliveredMs), lastMileage: mileage, intervalDays: p.intervalDays, intervalKm: p.intervalKm,
+      lastDate: Timestamp.fromMillis(deliveredMs), lastMileage: mileage, odometerUnit: unit, intervalDays: p.intervalDays, intervalKm: p.intervalKm,
       ...next, ...calc,
       source: "order", workOrderId: orderId, workOrderCode: o.code,
       reminderSentAt: null, appointmentId: null, notes: "", doneAt: null,

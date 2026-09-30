@@ -1,7 +1,8 @@
 import { Check, Fuel } from "lucide-react";
-import { RECEPTION_CHECKLIST, type ReceptionInput } from "@rapifix/shared";
+import { odometerFieldLabel, RECEPTION_CHECKLIST, type ReceptionInput } from "@rapifix/shared";
 import { cn } from "@/lib/cn";
 import { Field, Input, Textarea } from "@/components/ui/Field";
+import { OdometerUnitSelect } from "@/components/common/OdometerUnitSelect";
 
 const FUEL_LABELS = ["Vacío", "1/8", "1/4", "3/8", "1/2", "5/8", "3/4", "7/8", "Lleno"];
 
@@ -45,14 +46,22 @@ export function ReceptionForm({
   const set = <K extends keyof ReceptionInput>(k: K, v: ReceptionInput[K]) => onChange({ ...value, [k]: v });
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Kilometraje de ingreso" required error={errors.mileageIn}>
-        <Input
-          type="number"
-          inputMode="numeric"
-          value={Number.isNaN(value.mileageIn) ? "" : value.mileageIn}
-          onChange={(e) => set("mileageIn", e.target.value === "" ? Number.NaN : Number(e.target.value))}
-          invalid={!!errors.mileageIn}
-        />
+      <Field
+        label={odometerFieldLabel(value.mileageUnit, "de ingreso")}
+        required
+        error={errors.mileageIn}
+        hint={value.mileageUnit === "mi" ? "Tal como lo marca el tablero (millas). El vehículo queda en millas." : undefined}
+      >
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            inputMode="numeric"
+            value={Number.isNaN(value.mileageIn) ? "" : value.mileageIn}
+            onChange={(e) => set("mileageIn", e.target.value === "" ? Number.NaN : Number(e.target.value))}
+            invalid={!!errors.mileageIn}
+          />
+          <OdometerUnitSelect value={value.mileageUnit} onChange={(u) => set("mileageUnit", u)} />
+        </div>
       </Field>
       <Field label="Nivel de combustible">
         <FuelGauge value={value.fuelLevel} onChange={(v) => set("fuelLevel", v)} />

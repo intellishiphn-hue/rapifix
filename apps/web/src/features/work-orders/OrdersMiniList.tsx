@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { ClipboardList } from "lucide-react";
-import type { WorkOrder } from "@rapifix/shared";
+import { formatOdometer, type WorkOrder } from "@rapifix/shared";
 import { formatDate } from "@/lib/format";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
@@ -29,7 +29,7 @@ export function OrdersMiniList({ orders, loading, error, showVehicle, action }: 
                 <p className="mt-1 text-xs text-slate-500">
                   {formatDate(o.createdAt)}
                   {showVehicle && ` · ${o.vehicle.make} ${o.vehicle.model}`}
-                  {o.reception?.mileageIn ? ` · ${new Intl.NumberFormat("es-HN").format(o.reception.mileageIn)} km` : ""}
+                  {o.reception?.mileageIn ? ` · ${formatOdometer(o.reception.mileageIn, o.mileageUnit)}` : ""}
                   {o.technicians?.length ? ` · ${o.technicians.map((t) => t.name).join(", ")}` : ""}
                 </p>
               </Link>

@@ -4,7 +4,7 @@ import { getDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { Car, ClipboardCheck, UserPlus } from "lucide-react";
 import {
-  createWorkOrderSchema, EMPTY_RECEPTION, PRIORITIES, PRIORITY_LABELS, WORK_TYPES, WORK_TYPE_LABELS,
+  createWorkOrderSchema, EMPTY_RECEPTION, normalizeUnit, PRIORITIES, PRIORITY_LABELS, WORK_TYPES, WORK_TYPE_LABELS,
   type Customer, type Priority, type ReceptionInput, type Vehicle, type WorkType,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
@@ -47,7 +47,7 @@ export function NewWorkOrderPage() {
   }, [params]);
 
   useEffect(() => {
-    if (vehicle) setReception((r) => ({ ...r, mileageIn: vehicle.mileage }));
+    if (vehicle) setReception((r) => ({ ...r, mileageIn: vehicle.mileage, mileageUnit: normalizeUnit(vehicle.odometerUnit) }));
   }, [vehicle]);
 
   const submit = async () => {

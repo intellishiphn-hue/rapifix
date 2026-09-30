@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  buildSearchKeywords, catalogCol, createPurchaseSchema, financeCol, formatMoney, paySupplierSchema, saveExpenseSchema,
+  buildSearchKeywords, phoneSearchTerms, catalogCol, createPurchaseSchema, financeCol, formatMoney, paySupplierSchema, saveExpenseSchema,
   saveSupplierSchema, voidExpenseSchema, voidPurchaseSchema, type Role,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
@@ -19,7 +19,7 @@ export const saveSupplier = onCall({ region: REGION }, async (request) => {
   const tid = caller.tid;
   const data = {
     ...input,
-    searchKeywords: buildSearchKeywords([input.name, input.contactName, input.rtn, input.phone]),
+    searchKeywords: buildSearchKeywords([input.name, input.contactName, input.rtn, input.phone, ...phoneSearchTerms(input.phone)]),
     updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
   };
   if (supplierId) {

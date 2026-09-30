@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Database, ImagePlus, Save } from "lucide-react";
-import { formatPhone, settingsSchema, type SettingsInput } from "@rapifix/shared";
+import { settingsSchema, type SettingsInput } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -11,6 +11,7 @@ import { LogoMark } from "@/components/common/Logo";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Field";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { seedDemoData } from "@/features/users/api";
@@ -54,14 +55,14 @@ export function SettingsPage() {
   };
   const logoInput = useRef<HTMLInputElement>(null);
 
-  const { register, handleSubmit, reset, formState } = useForm<SettingsInput>({ resolver: zodResolver(settingsSchema) });
+  const { register, control, handleSubmit, reset, formState } = useForm<SettingsInput>({ resolver: zodResolver(settingsSchema) });
   const { errors, isSubmitting, isDirty } = formState;
 
   useEffect(() => {
     if (loading) return;
     reset({
       name: settings.name, subtitle: settings.subtitle, legalName: settings.legalName, rtn: settings.rtn, address: settings.address,
-      city: settings.city, phone: formatPhone(settings.phone), whatsapp: formatPhone(settings.whatsapp), email: settings.email,
+      city: settings.city, phone: settings.phone ?? "", whatsapp: settings.whatsapp ?? "", email: settings.email,
       website: settings.website, hours: settings.hours, currency: settings.currency, taxRate: settings.taxRate,
       workOrderPrefix: settings.workOrderPrefix, quotePrefix: settings.quotePrefix,
       avgKmPerMonth: settings.avgKmPerMonth, oilChangeKm: settings.oilChangeKm, customDomain: settings.customDomain ?? "",
@@ -135,8 +136,8 @@ export function SettingsPage() {
             <Card>
               <CardHeader title="Contacto" description="El WhatsApp se usa en el botón 'Contactar a RAPIFIX' del portal del cliente." />
               <div className="grid gap-4 p-5 sm:grid-cols-2">
-                <Field label="Teléfono" error={errors.phone?.message}><Input {...register("phone")} inputMode="tel" /></Field>
-                <Field label="WhatsApp del taller" error={errors.whatsapp?.message}><Input {...register("whatsapp")} inputMode="tel" /></Field>
+                <Field label="Teléfono" error={errors.phone?.message}><Controller control={control} name="phone" render={({ field }) => <PhoneInput {...field} invalid={!!errors.phone} />} /></Field>
+                <Field label="WhatsApp del taller" error={errors.whatsapp?.message}><Controller control={control} name="whatsapp" render={({ field }) => <PhoneInput {...field} invalid={!!errors.whatsapp} />} /></Field>
                 <Field label="Correo" error={errors.email?.message}><Input {...register("email")} type="email" /></Field>
                 <Field label="Sitio web" error={errors.website?.message}><Input {...register("website")} placeholder="rapifix.com" /></Field>
                 <Field label="Dominio propio del sistema" error={errors.customDomain?.message} hint="Solo cuando se conecte en Firebase Hosting (ej. app.rapifix.hn). Permite los pagos en línea desde ese dominio.">
@@ -165,7 +166,7 @@ export function SettingsPage() {
                   <Input type="number" step={500} min={1000} {...register("oilChangeKm", { valueAsNumber: true })} />
                 </Field>
               </div>
-              <p className="px-5 pb-5 text-xs text-slate-500">Si el carro ya vino antes al taller, el sistema usa lo que realmente maneja ese cliente (según los kilometrajes de sus visitas).</p>
+              <p className="px-5 pb-5 text-xs text-slate-500">Si el carro ya vino antes al taller, el sistema usa lo que realmente maneja ese cliente (según los kilometrajes de sus visitas). Los valores van en km; en carros que marcan millas el sistema convierte solo y le muestra el resultado en millas.</p>
             </Card>
           </fieldset>
           <button type="submit" className="hidden" />

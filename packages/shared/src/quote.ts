@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { BaseDoc, TimestampLike } from "./types";
 import type { WorkOrderStatus } from "./workOrderStatus";
 import type { PublicProof } from "./catalog";
+import type { OdometerUnit } from "./odometer";
 
 export const QUOTE_ITEM_TYPES = ["labor", "part", "service", "other"] as const;
 export type QuoteItemType = (typeof QUOTE_ITEM_TYPES)[number];
@@ -193,6 +194,8 @@ export interface PublicPortal {
   reception?: {
     receivedAt: TimestampLike | null;
     mileageIn: number;
+    /** "km" si no existe (portales viejos) */
+    mileageUnit?: OdometerUnit | null;
     fuelLevel: number;
     items: string[];
     exteriorNotes: string;

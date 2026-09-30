@@ -1,7 +1,7 @@
 import {
   addDoc, collection, doc, getDocs, limit, orderBy, query, serverTimestamp, updateDoc, where, type QueryConstraint,
 } from "firebase/firestore";
-import { buildSearchKeywords, col, normalizePhone, searchToken, type Customer, type CustomerInput } from "@rapifix/shared";
+import { buildSearchKeywords, col, normalizePhone, phoneSearchTerms, searchToken, type Customer, type CustomerInput } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { useDocData, useQueryData } from "@/lib/firestore/hooks";
 
@@ -22,7 +22,7 @@ function toDoc(input: CustomerInput) {
     phone,
     whatsapp,
     email: input.email.trim().toLowerCase(),
-    searchKeywords: buildSearchKeywords([fullName, input.phone, phone, whatsapp, input.email, input.idNumber, input.rtn, input.city]),
+    searchKeywords: buildSearchKeywords([fullName, ...phoneSearchTerms(phone), ...(whatsapp !== phone ? phoneSearchTerms(whatsapp) : []), phone, whatsapp, input.email, input.idNumber, input.rtn, input.city]),
   };
 }
 

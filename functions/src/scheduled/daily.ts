@@ -2,7 +2,7 @@ import { logger } from "firebase-functions/v2";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { col, opsCol, quoteCol } from "@rapifix/shared";
+import { col, normalizeUnit, opsCol, quoteCol } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { computeFields, generateMaintenanceFromOrder, maintenanceDefaults } from "../lib/maintenance";
@@ -55,7 +55,7 @@ export async function refreshTenantMaintenance(tid: string): Promise<number> {
       const vehicleId = m.get("vehicleId") as string;
       const calc = await computeFields(tid, vehicleId, vehicles.get(vehicleId), {
         lastMs: (m.get("lastDate") as Timestamp | null)?.toMillis() ?? null, lastMileage: Number(m.get("lastMileage") ?? 0),
-        nextDate: (m.get("nextDate") as Timestamp | null) ?? null, nextMileage: m.get("nextMileage") ?? null,
+        nextDate: (m.get("nextDate") as Timestamp | null) ?? null, nextMileage: m.get("nextMileage") ?? null, unit: normalizeUnit(m.get("odometerUnit")),
       }, defaults, rates);
       batch.update(m.ref, { ...calc, updatedAt: FieldValue.serverTimestamp(), updatedBy: "system" });
       if (calc.status !== m.get("status")) changed++;

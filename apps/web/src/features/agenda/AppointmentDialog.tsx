@@ -3,13 +3,14 @@ import { getDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { CalendarPlus, UserPlus, X } from "lucide-react";
 import {
-  APPOINTMENT_TYPE_LABELS, APPOINTMENT_TYPES, formatPhone, isValidPhone, normalizePhone, saveAppointmentSchema,
+  APPOINTMENT_TYPE_LABELS, APPOINTMENT_TYPES, formatPhone, isValidPhone, normalizePhone, PHONE_ERROR, saveAppointmentSchema,
   type Appointment, type AppointmentType, type Customer, type SaveAppointmentInput, type Vehicle,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { customerRef } from "@/features/customers/api";
 import { useCustomerVehicles, vehicleRef } from "@/features/vehicles/api";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
@@ -161,7 +162,7 @@ export function AppointmentDialog({
   const submit = async () => {
     if (!day || !time) return toast.error("Indique la fecha y la hora");
     if (!client || (!client.customerId && !client.customerName.trim())) return toast.error("Indique el cliente");
-    if (manual && client.phone && !isValidPhone(client.phone)) return toast.error("El teléfono no es válido");
+    if (manual && client.phone && !isValidPhone(client.phone)) return toast.error(PHONE_ERROR);
     const input: SaveAppointmentInput = {
       type,
       start: combine(day, time),
@@ -242,7 +243,7 @@ export function AppointmentDialog({
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input placeholder="Nombre" value={client.customerName} onChange={(e) => setClient({ ...client, customerName: e.target.value })} />
-                <Input placeholder="Teléfono (WhatsApp)" inputMode="tel" value={client.phone} onChange={(e) => setClient({ ...client, phone: e.target.value })} />
+                <PhoneInput aria-label="Teléfono (WhatsApp)" value={client.phone} onChange={(phone) => setClient({ ...client, phone })} />
               </div>
             </div>
           ) : client ? (

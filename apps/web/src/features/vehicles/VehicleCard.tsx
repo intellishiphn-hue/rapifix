@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Car, Gauge } from "lucide-react";
-import { isPendingVehicle, type Vehicle } from "@rapifix/shared";
-import { formatKm, formatPlate } from "@/lib/format";
+import { formatOdometer, isPendingVehicle, type Vehicle } from "@rapifix/shared";
+import { formatPlate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 export function PlateTag({ plate, className }: { plate: string; className?: string }) {
@@ -30,7 +30,7 @@ export function VehicleCard({ vehicle, showOwner = true }: { vehicle: Vehicle; s
           <PlateTag plate={vehicle.plate} />
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1"><Gauge className="h-3 w-3" />{formatKm(vehicle.mileage)}</span>
+          <span className="inline-flex items-center gap-1"><Gauge className="h-3 w-3" />{formatOdometer(vehicle.mileage, vehicle.odometerUnit)}</span>
           {vehicle.color && <span>{vehicle.color}</span>}
           {showOwner && <span className="truncate">{vehicle.customer?.fullName}</span>}
         </div>

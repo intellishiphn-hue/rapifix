@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { BaseDoc, TimestampLike } from "./types";
+import { isValidPhone, PHONE_ERROR } from "./phone";
+import { fromKm, odometerUnitSchema, toKm, type OdometerUnit } from "./odometer";
 
 const text = (max: number) => z.string().trim().max(max, `Máximo ${max} caracteres`);
 const id = z.string().min(1).max(128);
@@ -103,6 +105,8 @@ export interface Maintenance extends BaseDoc {
   intervalKm: number; // 0 = no aplica
   nextDate: TimestampLike | null;
   nextMileage: number | null;
+  /** Unidad de lastMileage / nextMileage / estimatedMileage ("km" si no existe). intervalKm siempre en km */
+  odometerUnit?: OdometerUnit | null;
   /** Fecha estimada en que le toca (la primera entre la fecha y los km estimados). La recalcula el servidor cada día */
   dueDate?: TimestampLike | null;
   /** Kilometraje estimado hoy según lo que maneja el cliente */
@@ -127,6 +131,8 @@ export const saveMaintenanceSchema = z.object({
   /** epoch ms, fecha del último servicio */
   lastDate: z.number().int().min(0).nullish(),
   lastMileage: z.number().int().min(0).max(5_000_000),
+  /** Unidad de lastMileage (si falta, la del vehículo) */
+  odometerUnit: odometerUnitSchema.nullish(),
   intervalDays: z.number().int().min(0).max(3650),
   intervalKm: z.number().int().min(0).max(500_000),
   notes: text(500),
@@ -154,7 +160,7 @@ export const EMPLOYEE_COLORS = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea
 
 export const saveEmployeeSchema = z.object({
   uid: id,
-  phone: text(30),
+  phone: text(30).refine((v) => v === "" || isValidPhone(v), PHONE_ERROR),
   specialty: text(80),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color no válido"),
 });
@@ -180,4 +186,31 @@ export interface MessageLog {
   createdBy: string;
   createdByName: string;
   at: TimestampLike;
+}
+
+// ---------------- Cálculo de mantenimiento (km / millas) ----------------
+const MS_DAY = 86_400_000;
+
+/**
+ * Estado de un mantenimiento: toca por fecha o por distancia, lo que llegue primero.
+ * `nextMileage` está en la unidad del mantenimiento (`unit`); la lectura puede venir en otra
+ * unidad. La distancia de hoy se estima con los km por día del cliente. El resultado
+ * `estimatedMileage` sale en la unidad del mantenimiento.
+ */
+export function evaluateMaintenanceReading(
+  m: { nextDateMs: number | null; nextMileage: number | null; unit?: OdometerUnit | null },
+  reading: { mileage: number; unit?: OdometerUnit | null; atMs: number },
+  kmPerDay: number,
+  now = Date.now(),
+): { status: MaintenanceStatus; estimatedMileage: number; dueMs: number | null } {
+  const readingKm = toKm(reading.mileage, reading.unit);
+  const estimatedKm = readingKm + kmPerDay * Math.max(0, (now - reading.atMs) / MS_DAY);
+  const nextKm = m.nextMileage != null ? toKm(m.nextMileage, m.unit) : null;
+  const kmDueMs = nextKm != null && kmPerDay > 0 ? reading.atMs + ((nextKm - readingKm) / kmPerDay) * MS_DAY : null;
+  const candidates = [m.nextDateMs, kmDueMs].filter((x): x is number => x != null);
+  const dueMs = candidates.length ? Math.min(...candidates) : null;
+  let status: MaintenanceStatus = "upcoming";
+  if (dueMs != null && dueMs < now) status = "overdue";
+  else if (dueMs != null && dueMs - now <= MAINTENANCE_DUE_DAYS * MS_DAY) status = "due";
+  return { status, estimatedMileage: Math.round(fromKm(estimatedKm, m.unit)), dueMs };
 }

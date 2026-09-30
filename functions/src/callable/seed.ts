@@ -16,7 +16,7 @@ const VEHICLES = [
   { owner: "maria", make: "Ford", model: "Explorer", year: 2019, color: "Negro", plate: "HCD-5678", vin: "1FM5K8GT4KGA12345", mileage: 72300, fuelType: "gasolina", engine: "3.5L V6", transmission: "automatica" },
   { owner: "carlos", make: "Hyundai", model: "Tucson", year: 2021, color: "Gris", plate: "HEF-9012", vin: "KM8J33A46MU123456", mileage: 45100, fuelType: "gasolina", engine: "2.0L", transmission: "automatica" },
   { owner: "juan", make: "Kia", model: "Sportage", year: 2020, color: "Rojo", plate: "HGH-3456", vin: "KNDPM3AC4L7123456", mileage: 61800, fuelType: "diesel", engine: "2.0L CRDi", transmission: "automatica" },
-  { owner: "maria", make: "BMW", model: "X3", year: 2023, color: "Azul", plate: "HIJ-7890", vin: "5UX53DP06P9123456", mileage: 18900, fuelType: "gasolina", engine: "2.0L Turbo", transmission: "automatica" },
+  { owner: "maria", make: "BMW", model: "X3", year: 2023, color: "Azul", plate: "HIJ-7890", vin: "5UX53DP06P9123456", mileage: 18900, odometerUnit: "mi", fuelType: "gasolina", engine: "2.0L Turbo", transmission: "automatica" },
 ] as const;
 
 /** Carga datos de demostración (una sola vez). Solo administradores. */
@@ -74,6 +74,8 @@ export const seedDemoData = onCall({ region: REGION }, async (request) => {
       plate,
       vin: v.vin,
       mileage: v.mileage,
+      // Los traídos de EE. UU. marcan millas
+      odometerUnit: (v as { odometerUnit?: string }).odometerUnit ?? "km",
       mileageUpdatedAt: now,
       fuelType: v.fuelType,
       engine: v.engine,
@@ -86,7 +88,7 @@ export const seedDemoData = onCall({ region: REGION }, async (request) => {
       ...meta,
     });
     batch.set(ref.collection("mileageLog").doc(), {
-      mileage: v.mileage, source: "manual", note: "Registro inicial (demo)", at: now, by: caller.uid, byName: "Sistema",
+      mileage: v.mileage, unit: (v as { odometerUnit?: string }).odometerUnit ?? "km", source: "manual", note: "Registro inicial (demo)", at: now, by: caller.uid, byName: "Sistema",
     });
   }
 

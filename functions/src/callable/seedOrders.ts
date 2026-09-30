@@ -55,7 +55,7 @@ export const seedDemoOrders = onCall({ region: REGION }, async (request) => {
         diagnosis: { reportedProblem: demo.reason, technicianDiagnosis: demo.diag ?? "", recommendations: "", observations: "", testsPerformed: "", obdCodes: demo.obd ?? [], completedAt: demo.diag ? when : null, completedBy: demo.diag ? caller.uid : null },
         qc: demo.status === "READY" ? { checklist: {}, notes: "", passedAt: when, passedBy: caller.uid } : null,
         totals: { subtotal: 0, discount: 0, tax: 0, total: 0 }, paid: 0, balance: 0,
-        portalToken: secureToken(), portalEnabled: true, promisedAt: null, deliveredAt: null, mileageOut: null, cancelReason: "", photoCount: 0,
+        portalToken: secureToken(), portalEnabled: true, promisedAt: null, deliveredAt: null, mileageOut: null, mileageUnit: v.odometerUnit === "mi" ? "mi" : "km", cancelReason: "", photoCount: 0,
         searchKeywords: buildSearchKeywords([code, String(number), v.plate, v.make, v.model, c.fullName, c.phone]),
         createdAt: when, createdBy: caller.uid, updatedAt: when, updatedBy: caller.uid,
       });

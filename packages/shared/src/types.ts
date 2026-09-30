@@ -1,4 +1,5 @@
 import type { Role } from "./roles";
+import type { OdometerUnit } from "./odometer";
 
 /**
  * Timestamp genérico: en el cliente es firebase/firestore Timestamp y en Functions es
@@ -81,6 +82,8 @@ export interface Vehicle extends BaseDoc {
   plate: string; // normalizada ABC123
   vin: string;
   mileage: number;
+  /** Unidad del odómetro ("km" si no existe: vehículos viejos) */
+  odometerUnit?: OdometerUnit | null;
   mileageUpdatedAt?: TimestampLike | null;
   fuelType: FuelType;
   engine: string;
@@ -95,6 +98,8 @@ export interface Vehicle extends BaseDoc {
 export interface MileageEntry {
   id: string;
   mileage: number;
+  /** Unidad de la lectura ("km" si no existe) */
+  unit?: OdometerUnit | null;
   source: "manual" | "reception" | "delivery";
   note: string;
   at: TimestampLike;

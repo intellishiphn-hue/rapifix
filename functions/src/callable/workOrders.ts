@@ -2,8 +2,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
   addOrderEventSchema, canTransition, changeStatusSchema, col, createWorkOrderSchema,
-  isOpenStatus, orderCol, saveSectionSchema, STATUS_META, updateWorkOrderSchema,
-  type OrderEventType, type Role, type WorkOrderStatus,
+  isOpenStatus, normalizeUnit, orderCol, saveSectionSchema, STATUS_META, updateWorkOrderSchema,
+  type OdometerUnit, type OrderEventType, type Role, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
@@ -56,6 +56,7 @@ export const changeWorkOrderStatus = onCall({ region: REGION }, async (request) 
   const name = await actorName(caller.uid, caller.email);
   const ref = orderRef(tid, input.orderId);
   let vehicleId = "";
+  let mileageUnit: OdometerUnit = "km";
 
   const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -81,7 +82,12 @@ export const changeWorkOrderStatus = onCall({ region: REGION }, async (request) 
     };
     if (to === "DELIVERED") {
       update.deliveredAt = FieldValue.serverTimestamp();
-      if (input.mileageOut != null) update.mileageOut = input.mileageOut;
+      if (input.mileageOut != null) {
+        update.mileageOut = input.mileageOut;
+        // La salida se registra en la unidad indicada (o la de la orden; órdenes viejas: km)
+        mileageUnit = normalizeUnit(input.mileageUnit ?? order.mileageUnit);
+        update.mileageUnit = mileageUnit;
+      }
     }
     if (to === "CANCELLED") update.cancelReason = input.note!.trim();
     if (from === "CANCELLED") update.cancelReason = "";
@@ -95,7 +101,7 @@ export const changeWorkOrderStatus = onCall({ region: REGION }, async (request) 
   });
 
   if (result.to === "DELIVERED" && input.mileageOut != null && vehicleId) {
-    await logMileage(db.doc(`${col.vehicles(tid)}/${vehicleId}`), input.mileageOut, "delivery", caller, name, "Entrega");
+    await logMileage(db.doc(`${col.vehicles(tid)}/${vehicleId}`), input.mileageOut, "delivery", caller, name, "Entrega", mileageUnit);
   }
   return result;
 });
@@ -153,9 +159,16 @@ export const saveWorkOrderSection = onCall({ region: REGION }, async (request) =
 
   if (input.section === "reception") {
     if (caller.role === "technician") throw new HttpsError("permission-denied", "Solo recepción puede editar la recepción.");
-    batch.update(ref, { ...base, reception: { ...order.reception, ...input.data } });
+    const { mileageUnit: receptionUnit, ...receptionData } = input.data;
+    batch.update(ref, {
+      ...base, reception: { ...order.reception, ...receptionData },
+      ...(receptionUnit ? { mileageUnit: receptionUnit } : {}),
+    });
     batch.set(ref.collection("events").doc(), eventData(caller, name, "section", "Se actualizó la recepción del vehículo"));
   }
+  // Si en la recepción corrigieron la unidad (km / millas), el vehículo también pasa a esa unidad
+  const newUnit = input.section === "reception" ? input.data.mileageUnit : null;
+  const unitCorrected = !!newUnit && newUnit !== normalizeUnit(order.mileageUnit);
 
   if (input.section === "diagnosis") {
     const wasComplete = !!order.diagnosis?.completedAt;
@@ -190,6 +203,9 @@ export const saveWorkOrderSection = onCall({ region: REGION }, async (request) =
   }
 
   await batch.commit();
+  if (unitCorrected && input.section === "reception" && order.vehicleId) {
+    await logMileage(db.doc(`${col.vehicles(tid)}/${order.vehicleId}`), input.data.mileageIn, "reception", caller, name, `Recepción ${order.code} (unidad corregida)`, newUnit);
+  }
   return { ok: true };
 });
 

@@ -4,7 +4,7 @@ import { getDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { Car, ClipboardCheck, ClipboardList, Copy, ExternalLink, FilePlus2, FileText, Printer, Save, Send, UserPlus } from "lucide-react";
 import {
-  computeQuote, convertQuoteSchema, templateBody, EMPTY_RECEPTION, formatMoney, PRIORITIES, PRIORITY_LABELS, renderTemplate, WORK_TYPES, WORK_TYPE_LABELS,
+  computeQuote, convertQuoteSchema, templateBody, EMPTY_RECEPTION, normalizeUnit, formatMoney, PRIORITIES, PRIORITY_LABELS, renderTemplate, WORK_TYPES, WORK_TYPE_LABELS,
   type Customer, type Priority, type Quote, type QuoteItemInput, type ReceptionInput, type Vehicle, type WorkType,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -59,7 +59,7 @@ function ConvertDialog({ quote, open, onClose }: { quote: Quote; open: boolean; 
     if (!open) return;
     setReason(`Cotización ${quote.code} aprobada: ${quote.items.map((i) => i.description).join(", ")}`.slice(0, 900));
     if (quote.vehicleId) {
-      getDoc(vehicleRef(quote.vehicleId)).then((s) => s.exists() && setReception((r) => ({ ...r, mileageIn: (s.data() as Vehicle).mileage })));
+      getDoc(vehicleRef(quote.vehicleId)).then((s) => s.exists() && setReception((r) => ({ ...r, mileageIn: (s.data() as Vehicle).mileage, mileageUnit: normalizeUnit((s.data() as Vehicle).odometerUnit) })));
     }
   }, [open, quote]);
 

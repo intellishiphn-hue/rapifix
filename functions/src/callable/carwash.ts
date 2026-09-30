@@ -3,7 +3,7 @@ import { FieldValue, Timestamp, type DocumentSnapshot } from "firebase-admin/fir
 import {
   adjustLoyaltyStamps as adjustStamps, adjustLoyaltyStampsSchema, buildSearchKeywords, catalogCol, formatMoney, getWashPayLinkSchema, PUBLIC_WASHES, buildWashItems, cancelMembershipSchema, cancelWashSchema, carwashCol, carwashLookupSchema,
   chargeWashSchema, col, computeWashCharge, extendMembership, isValidPhone, membershipCanUse, membershipWindow, monthsLabel,
-  normalizePhone, normalizeText, opsCol, orderCol, reorderCarwashServicesSchema, rewardCap, SAMPLE_CARWASH_MENU,
+  normalizePhone, normalizeText, opsCol, phoneSearchTerms, orderCol, reorderCarwashServicesSchema, rewardCap, SAMPLE_CARWASH_MENU,
   saveCarwashPlanSchema, saveCarwashServiceSchema, saveWashSchema, sellMembershipSchema, setWashStatusSchema,
   type AdjustLoyaltyStampsResult, type LoyaltyAdjustment, type WashPayLinkResult,
   washCommissionTotal, assignWasherSchema, carwashVehicleData, hnDayKey, isPendingVehicle, isPlaceholderPlate, applyLoyaltyWash, loyaltyWelcomeFor, fixWashPlateSchema, VEHICLE_SIZE_SHORT, type FixWashPlateResult, linkWashCustomerSchema, pickVehicleForPlate, washPlate,
@@ -239,7 +239,7 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
   let customerInfo: { fullName: string; phone: string } | null = null;
   let customerName = input.customerName.trim();
   let phone = input.phone.trim() ? normalizePhone(input.phone) : "";
-  if (phone && !isValidPhone(phone)) throw new HttpsError("invalid-argument", "El teléfono no es válido.");
+  if (phone && !isValidPhone(phone)) throw new HttpsError("invalid-argument", "Número no válido para el país seleccionado.");
   if (customerId) {
     const c = await db.doc(`${col.customers(tid)}/${customerId}`).get();
     if (!c.exists) throw new HttpsError("not-found", "El cliente no existe.");
@@ -390,7 +390,7 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
         firstName: (firstName ?? customerName).slice(0, 60), lastName: (rest.join(" ") || "-").slice(0, 60), fullName: customerName.slice(0, 130),
         phone, whatsapp: phone, email: "", idNumber: "", rtn: "", address: "", city: "Tegucigalpa", notes: "Registrado desde el carwash",
         status: "active", vehicleCount: 0, openOrders: 0, balanceDue: 0,
-        searchKeywords: buildSearchKeywords([customerName, phone.replace(/^\+504/, "")]),
+        searchKeywords: buildSearchKeywords([customerName, ...phoneSearchTerms(phone), phone]),
         createdAt: FieldValue.serverTimestamp(), createdBy: caller.uid, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
       });
     }

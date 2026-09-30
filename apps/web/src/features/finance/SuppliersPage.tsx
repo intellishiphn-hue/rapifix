@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight, Pencil, Plus, Search, Truck } from "lucide-react";
-import { formatMoney, type Supplier } from "@rapifix/shared";
+import { formatMoney, formatPhone, type Supplier } from "@rapifix/shared";
 import { useDebounced } from "@/lib/firestore/hooks";
 import { cn } from "@/lib/cn";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -55,7 +55,7 @@ export function SuppliersPage() {
                       <span className="truncate font-semibold text-slate-900">{s.name}</span>
                       {!s.active && <Badge>Inactivo</Badge>}
                     </div>
-                    <div className="truncate text-xs text-slate-500">{[s.contactName, s.phone, s.categories, s.creditDays ? `Crédito ${s.creditDays} días` : "Contado"].filter(Boolean).join(" · ")}</div>
+                    <div className="truncate text-xs text-slate-500">{[s.contactName, formatPhone(s.phone), s.categories, s.creditDays ? `Crédito ${s.creditDays} días` : "Contado"].filter(Boolean).join(" · ")}</div>
                   </div>
                   <div className="sm:w-40 sm:text-right">
                     {(s.balanceDue ?? 0) > 0 ? (

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FileText, Mail, MapPin, Pencil, Phone, Plus, Receipt } from "lucide-react";
-import { formatMoney, PAYMENT_METHOD_LABELS, type Purchase } from "@rapifix/shared";
+import { formatMoney, formatPhone, PAYMENT_METHOD_LABELS, type Purchase } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -61,7 +61,7 @@ export function SupplierDetailPage() {
           <CardHeader title="Datos del proveedor" />
           <dl className="space-y-3 p-5 text-sm">
             {s.contactName && <Row label="Contacto">{s.contactName}</Row>}
-            {s.phone && <Row label="Teléfono"><a href={`tel:${s.phone}`} className="inline-flex items-center gap-1.5 text-brand-700"><Phone className="h-3.5 w-3.5" />{s.phone}</a></Row>}
+            {s.phone && <Row label="Teléfono"><a href={`tel:${s.phone}`} className="inline-flex items-center gap-1.5 text-brand-700"><Phone className="h-3.5 w-3.5" />{formatPhone(s.phone)}</a></Row>}
             {s.email && <Row label="Correo"><a href={`mailto:${s.email}`} className="inline-flex items-center gap-1.5 break-all text-brand-700"><Mail className="h-3.5 w-3.5" />{s.email}</a></Row>}
             {s.rtn && <Row label="RTN">{s.rtn}</Row>}
             {s.address && <Row label="Dirección"><span className="inline-flex gap-1.5"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />{s.address}</span></Row>}

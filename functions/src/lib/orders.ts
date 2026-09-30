@@ -1,6 +1,9 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp, type DocumentReference } from "firebase-admin/firestore";
-import { buildSearchKeywords, col, orderCol, type ReceptionInput, type Totals, type WorkOrderStatus } from "@rapifix/shared";
+import {
+  buildSearchKeywords, col, normalizeUnit, orderCol,
+  type OdometerUnit, type ReceptionInput, type Totals, type WorkOrderStatus,
+} from "@rapifix/shared";
 import { db } from "./admin";
 import type { Caller } from "./guards";
 import { secureToken } from "./token";
@@ -14,12 +17,28 @@ export async function resolveTechnicians(tid: string, ids: string[]) {
   });
 }
 
-export async function logMileage(vehicleRef: DocumentReference, mileage: number, source: "reception" | "delivery", caller: Caller, name: string, note: string) {
+/**
+ * Registra la lectura del odómetro en el vehículo si es mayor que la actual.
+ * `unit` es la unidad de la lectura; si es distinta a la del vehículo, se compara en km y
+ * el vehículo pasa a esa unidad (la corrigieron en la recepción).
+ */
+export async function logMileage(
+  vehicleRef: DocumentReference, mileage: number, source: "reception" | "delivery", caller: Caller, name: string, note: string,
+  unit?: OdometerUnit | null,
+) {
   const v = await vehicleRef.get();
-  if (!v.exists || mileage <= ((v.get("mileage") as number) ?? 0)) return;
+  if (!v.exists) return;
+  const vUnit = normalizeUnit(v.get("odometerUnit"));
+  const u = normalizeUnit(unit ?? vUnit);
+  const current = (v.get("mileage") as number) ?? 0;
+  const unitChanged = u !== vUnit;
+  // Misma unidad: solo si sube. Cambió la unidad: es una corrección, se toma la lectura nueva
+  // (salvo 0) aunque convertida a km sea menor, porque la anterior estaba en la unidad equivocada.
+  if (!unitChanged && mileage <= current) return;
+  if (unitChanged && mileage <= 0) return;
   const batch = db.batch();
-  batch.update(vehicleRef, { mileage, mileageUpdatedAt: FieldValue.serverTimestamp() });
-  batch.set(vehicleRef.collection("mileageLog").doc(), { mileage, source, note, at: FieldValue.serverTimestamp(), by: caller.uid, byName: name });
+  batch.update(vehicleRef, { mileage, odometerUnit: u, mileageUpdatedAt: FieldValue.serverTimestamp() });
+  batch.set(vehicleRef.collection("mileageLog").doc(), { mileage, unit: u, source, note, at: FieldValue.serverTimestamp(), by: caller.uid, byName: name });
   await batch.commit();
 }
 
@@ -59,6 +78,9 @@ export async function insertWorkOrder(caller: Caller, name: string, p: NewOrderP
   const c = customer.data()!;
   const status = p.status ?? "RECEIVED";
   const totals = p.fromQuote?.totals ?? { subtotal: 0, discount: 0, tax: 0, total: 0 };
+  // Unidad de la lectura: la que indicó la recepción o, si no, la del vehículo. No se guarda dentro de reception
+  const { mileageUnit: receptionUnit, ...reception } = p.reception;
+  const mileageUnit = normalizeUnit(receptionUnit ?? v.odometerUnit);
   let code = "";
 
   await db.runTransaction(async (tx) => {
@@ -73,14 +95,14 @@ export async function insertWorkOrder(caller: Caller, name: string, p: NewOrderP
       customerId, customer: { fullName: c.fullName, phone: c.phone, whatsapp: c.whatsapp || c.phone },
       vehicleId: p.vehicleId, vehicle: { make: v.make, model: v.model, year: v.year, color: v.color ?? "", plate: v.plate },
       technicianIds: technicians.map((t) => t.id), technicians,
-      reception: { ...p.reception, receivedAt: now, receivedBy: caller.uid },
+      reception: { ...reception, receivedAt: now, receivedBy: caller.uid },
       diagnosis: { reportedProblem: p.reason, technicianDiagnosis: "", recommendations: "", observations: "", testsPerformed: "", obdCodes: [], completedAt: null, completedBy: null },
       qc: null,
       totals, paid: 0, balance: totals.total,
       activeQuoteId: p.fromQuote?.id ?? null,
       portalToken: p.portalToken ?? secureToken(), portalEnabled: true,
       promisedAt: p.promisedAt ? Timestamp.fromDate(new Date(p.promisedAt)) : null,
-      deliveredAt: null, mileageOut: null, cancelReason: "", photoCount: 0,
+      deliveredAt: null, mileageOut: null, mileageUnit, cancelReason: "", photoCount: 0,
       searchKeywords: buildSearchKeywords([code, String(number), v.plate, v.make, v.model, c.fullName, c.phone]),
       createdAt: now, createdBy: caller.uid, updatedAt: now, updatedBy: caller.uid,
     });
@@ -92,6 +114,6 @@ export async function insertWorkOrder(caller: Caller, name: string, p: NewOrderP
     });
   });
 
-  await logMileage(vehicleRef, p.reception.mileageIn, "reception", caller, name, `Recepción ${code}`);
+  await logMileage(vehicleRef, p.reception.mileageIn, "reception", caller, name, `Recepción ${code}`, mileageUnit);
   return { orderId: ref.id, code };
 }

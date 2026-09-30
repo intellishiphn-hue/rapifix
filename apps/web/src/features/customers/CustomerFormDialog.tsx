@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { customerSchema, formatPhone, type Customer, type CustomerInput } from "@rapifix/shared";
+import { customerSchema, type Customer, type CustomerInput } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { createCustomer, findByPhone, updateCustomer } from "./api";
 
 const EMPTY: CustomerInput = {
@@ -17,7 +18,7 @@ const EMPTY: CustomerInput = {
 
 function fromCustomer(c: Customer): CustomerInput {
   return {
-    firstName: c.firstName, lastName: c.lastName, phone: formatPhone(c.phone), whatsapp: c.whatsapp === c.phone ? "" : formatPhone(c.whatsapp),
+    firstName: c.firstName, lastName: c.lastName, phone: c.phone, whatsapp: c.whatsapp === c.phone ? "" : c.whatsapp,
     email: c.email, idNumber: c.idNumber, rtn: c.rtn, address: c.address, city: c.city, notes: c.notes, status: c.status,
   };
 }
@@ -36,7 +37,7 @@ export function CustomerFormDialog({
   const { user } = useAuth();
   const [duplicate, setDuplicate] = useState<Customer | null>(null);
   const editing = !!customer;
-  const { register, handleSubmit, reset, formState } = useForm<CustomerInput>({
+  const { register, control, handleSubmit, reset, formState } = useForm<CustomerInput>({
     resolver: zodResolver(customerSchema),
     defaultValues: EMPTY,
   });
@@ -103,10 +104,12 @@ export function CustomerFormDialog({
           <Input {...register("lastName")} invalid={!!errors.lastName} />
         </Field>
         <Field label="Teléfono" required error={errors.phone?.message}>
-          <Input {...register("phone", { onChange: () => setDuplicate(null) })} inputMode="tel" placeholder="9999-8888" invalid={!!errors.phone} />
+          <Controller control={control} name="phone" render={({ field }) => (
+            <PhoneInput {...field} onChange={(v) => { setDuplicate(null); field.onChange(v); }} invalid={!!errors.phone} />
+          )} />
         </Field>
         <Field label="WhatsApp" error={errors.whatsapp?.message} hint="Vacío = mismo que el teléfono">
-          <Input {...register("whatsapp")} inputMode="tel" placeholder="9999-8888" invalid={!!errors.whatsapp} />
+          <Controller control={control} name="whatsapp" render={({ field }) => <PhoneInput {...field} invalid={!!errors.whatsapp} />} />
         </Field>
         <Field label="Correo electrónico" error={errors.email?.message}>
           <Input {...register("email")} type="email" invalid={!!errors.email} />

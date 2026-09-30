@@ -61,8 +61,10 @@ export function MileageDialog({ open, onClose, vehicle }: { open: boolean; onClo
     >
       <div className="space-y-4">
         <Field label={`Nuevo ${noun} (${unit})`} required error={value !== "" && invalid ? `${odometerNoun(unit)} no válido` : undefined}>
-          <div className="flex gap-2">
-            <Input type="number" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Input type="number" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
+            </div>
             <OdometerUnitSelect value={unit} onChange={setUnit} />
           </div>
         </Field>

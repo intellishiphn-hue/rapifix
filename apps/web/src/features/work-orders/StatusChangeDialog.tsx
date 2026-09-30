@@ -112,8 +112,10 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
             hint={kmLower ? "Es menor que el de ingreso. Revise la lectura." : `Ingreso: ${formatOdometer(order.reception?.mileageIn ?? 0, orderUnit)}`}
             error={kmInvalid ? "Lectura no válida" : undefined}
           >
-            <div className="flex gap-2">
-              <Input type="number" inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} />
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <Input type="number" inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} />
+              </div>
               <OdometerUnitSelect value={unit} onChange={setUnit} />
             </div>
           </Field>

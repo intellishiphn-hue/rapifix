@@ -132,8 +132,10 @@ export function MaintenanceFormDialog({ open, onClose, maintenance }: { open: bo
             <Input type="date" value={lastDate} onChange={(e) => setLastDate(e.target.value)} />
           </Field>
           <Field label={odometerFieldLabel(unit, "del último servicio")}>
-            <div className="flex gap-2">
-              <Input inputMode="numeric" value={lastKm} onChange={(e) => setLastKm(e.target.value)} placeholder="0" />
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <Input inputMode="numeric" value={lastKm} onChange={(e) => setLastKm(e.target.value)} placeholder="0" />
+              </div>
               <OdometerUnitSelect value={unit} onChange={setUnit} />
             </div>
           </Field>

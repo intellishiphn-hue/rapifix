@@ -52,14 +52,16 @@ export function ReceptionForm({
         error={errors.mileageIn}
         hint={value.mileageUnit === "mi" ? "Tal como lo marca el tablero (millas). El vehículo queda en millas." : undefined}
       >
-        <div className="flex gap-2">
-          <Input
-            type="number"
-            inputMode="numeric"
-            value={Number.isNaN(value.mileageIn) ? "" : value.mileageIn}
-            onChange={(e) => set("mileageIn", e.target.value === "" ? Number.NaN : Number(e.target.value))}
-            invalid={!!errors.mileageIn}
-          />
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <Input
+              type="number"
+              inputMode="numeric"
+              value={Number.isNaN(value.mileageIn) ? "" : value.mileageIn}
+              onChange={(e) => set("mileageIn", e.target.value === "" ? Number.NaN : Number(e.target.value))}
+              invalid={!!errors.mileageIn}
+            />
+          </div>
           <OdometerUnitSelect value={value.mileageUnit} onChange={(u) => set("mileageUnit", u)} />
         </div>
       </Field>

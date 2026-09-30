@@ -158,8 +158,10 @@ export function VehicleFormDialog({
           error={errors.mileage?.message}
           hint={unit === "mi" ? "Carro que marca millas (ej. traído de EE. UU.). Escriba lo que marca el tablero." : undefined}
         >
-          <div className="flex gap-2">
-            <Input type="number" inputMode="numeric" {...register("mileage", { valueAsNumber: true })} invalid={!!errors.mileage} />
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <Input type="number" inputMode="numeric" {...register("mileage", { valueAsNumber: true })} invalid={!!errors.mileage} />
+            </div>
             <Controller
               control={control}
               name="odometerUnit"

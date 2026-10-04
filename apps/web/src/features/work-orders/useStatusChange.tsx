@@ -10,6 +10,7 @@ import { changeWorkOrderStatus } from "./api";
 import { StatusChangeDialog } from "./StatusChangeDialog";
 import { WhatsAppComposer } from "./WhatsAppComposer";
 import { messageForStatus } from "./whatsapp";
+import { useWaSilentSend } from "@/features/whatsapp/auto";
 
 const NEEDS_FORM: WorkOrderStatus[] = ["DELIVERED", "CANCELLED"];
 
@@ -24,6 +25,7 @@ export function useStatusChange() {
   const [form, setForm] = useState<{ order: WorkOrder; to: WorkOrderStatus } | null>(null);
   const [message, setMessage] = useState<{ order: WorkOrder; text: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const silentSend = useWaSilentSend();
   const desk = role === "admin" || role === "manager" || role === "reception";
 
   const change = async (order: WorkOrder, to: WorkOrderStatus) => {
@@ -37,7 +39,11 @@ export function useStatusChange() {
       await changeWorkOrderStatus({ orderId: order.id, toStatus: to });
       toast.success(`${order.code}: ${STATUS_META[to].label}`);
       const text = desk ? messageForStatus(order, to, settings) : null;
-      if (text) setMessage({ order, text });
+      // Con "Enviar sin preguntar" el aviso sale solo; si no se puede, se abre el mensaje como siempre.
+      const phone = order.customer.whatsapp || order.customer.phone || "";
+      if (text && !(await silentSend({ phone, name: order.customer.fullName, body: text, context: "orden", orderId: order.id, orderCode: order.code }))) {
+        setMessage({ order, text });
+      }
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {

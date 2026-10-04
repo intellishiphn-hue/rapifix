@@ -329,6 +329,20 @@ service cloud.firestore {
           && incoming().at == request.time;
         allow update, delete: if false;
       }
+      // WhatsApp automático: cola de envío y estado de la computadora del taller.
+      // Todo lo escribe el servidor (queueWhatsApp, waWorker). Los mensajes "auto" del historial
+      // también los escribe el servidor: desde el panel solo se puede crear mode == 'manual'.
+      // La clave del worker vive en tenants/{tid}/private/whatsapp y waWorkerTokens (cerrados por la regla final).
+      match /waOutbox/{id} {
+        allow get: if hasRole(tid, ['admin', 'manager', 'reception', 'seller'])
+          || (inTenant(tid) && resource.data.createdBy == request.auth.uid);
+        allow list: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
+      match /waStatus/{docId} {
+        allow read: if inTenant(tid);
+        allow write: if false;
+      }
       match /employees/{uid} {
         allow read: if inTenant(tid);
         allow write: if false;

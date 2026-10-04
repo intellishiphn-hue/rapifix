@@ -15,9 +15,11 @@ import { changeWorkOrderStatus } from "./api";
 import { StatusBadge } from "./StatusBadge";
 import { WhatsAppComposer } from "./WhatsAppComposer";
 import { messageForStatus } from "./whatsapp";
+import { useWaSilentSend } from "@/features/whatsapp/auto";
 
 export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; to: WorkOrderStatus | null; onClose: () => void }) {
   const { settings } = useSettings();
+  const silentSend = useWaSilentSend();
   const [note, setNote] = useState("");
   const [km, setKm] = useState("");
   const orderUnit = normalizeUnit(order.mileageUnit);
@@ -62,7 +64,8 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
       });
       toast.success(`Orden ${order.code}: ${STATUS_META[to].label}`);
       const msg = cancelling ? null : messageForStatus(order, to, settings);
-      if (msg) setMessage(msg);
+      const phone = order.customer.whatsapp || order.customer.phone || "";
+      if (msg && !(await silentSend({ phone, name: order.customer.fullName, body: msg, context: "orden", orderId: order.id, orderCode: order.code }))) setMessage(msg);
       else onClose();
     } catch (err) {
       toast.error(errorMessage(err));

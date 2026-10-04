@@ -33,3 +33,6 @@ emulator-data/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Worker de WhatsApp automático (la clave vive solo en la computadora del taller)
+tools/wa-worker/.wa-worker-state.json

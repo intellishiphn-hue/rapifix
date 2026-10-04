@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Eye, History, Info, MessageCircle, RotateCcw, Save, Search } from "lucide-react";
+import { Eye, History, Info, MessageCircle, RotateCcw, Save, Search, X } from "lucide-react";
 import {
   DEFAULT_TEMPLATES, formatMoney, formatPhone, normalizeText, renderTemplate, TEMPLATE_VARIABLE_LABELS, TEMPLATE_VARIABLES,
-  type DefaultTemplate,
+  WA_AVAILABILITY_LABELS, WA_OUTBOX_STATUS_LABELS, type DefaultTemplate, type WaOutbox, type WaOutboxStatus,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
@@ -18,8 +18,13 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { Tabs } from "@/components/ui/Tabs";
 import { useSettings } from "@/features/settings/api";
 import { saveTemplate, useMessageLog, useTemplateOverrides } from "./api";
+import { cancelWhatsApp, retryWhatsApp, useOutbox, useWaAuto } from "./auto";
 
-type Tab = "history" | "templates";
+type Tab = "history" | "queue" | "templates";
+
+const STATUS_TONE: Record<WaOutboxStatus, "gray" | "blue" | "green" | "red" | "amber"> = {
+  queued: "amber", sending: "blue", sent: "green", failed: "red", cancelled: "gray",
+};
 
 const SAMPLE = (taller: string) => ({
   cliente: "Juan",
@@ -156,7 +161,7 @@ function HistoryTab() {
 
   return (
     <Card>
-      <CardHeader title="Mensajes enviados" description="Cada vez que alguien abre WhatsApp con un mensaje del sistema. Últimos 300." />
+      <CardHeader title="Mensajes enviados" description="Mensajes automáticos y los que se abrieron en WhatsApp a mano. Últimos 300." />
       <div className="border-b border-slate-100 p-3 sm:px-5">
         <div className="relative max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -177,11 +182,16 @@ function HistoryTab() {
                   <span className="font-semibold text-slate-900">{m.name || formatPhone(m.to)}</span>
                   <span className="text-xs text-slate-500">{formatPhone(m.to)}</span>
                   <Badge tone="gray">{m.context}</Badge>
+                  <Badge tone={m.mode === "auto" ? "blue" : "gray"}>{m.mode === "auto" ? "Automático" : "Manual"}</Badge>
+                  {m.mode === "auto" && m.status && <Badge tone={STATUS_TONE[m.status]}>{WA_OUTBOX_STATUS_LABELS[m.status]}</Badge>}
                   {m.orderId && m.orderCode && <Link to={`/ordenes/${m.orderId}`} className="text-xs font-semibold text-brand-700 hover:underline" onClick={(e) => e.stopPropagation()}>{m.orderCode}</Link>}
                   <span className="ml-auto text-xs text-slate-500">{formatDate(m.at, true)} · {m.createdByName}</span>
                   <span className="w-full truncate text-sm text-slate-600">{m.body.replace(/\n+/g, " ")}</span>
                 </summary>
-                <div className="mt-3 max-w-xl"><WhatsAppPreview text={m.body} /></div>
+                <div className="mt-3 max-w-xl">
+                  {m.mode === "auto" && m.error && m.status !== "sent" && <p className="mb-2 text-xs text-red-700">Motivo: {m.error}</p>}
+                  <WhatsAppPreview text={m.body} />
+                </div>
               </details>
             </li>
           ))}
@@ -191,17 +201,75 @@ function HistoryTab() {
   );
 }
 
+function QueueRow({ m }: { m: WaOutbox }) {
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: (d: { id: string }) => Promise<unknown>, ok: string) => {
+    setBusy(true);
+    try {
+      await fn({ id: m.id });
+      toast.success(ok);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="px-5 py-3.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="font-semibold text-slate-900">{m.name || formatPhone(m.to)}</span>
+        <span className="text-xs text-slate-500">{formatPhone(m.to)}</span>
+        <Badge tone={STATUS_TONE[m.status]}>{WA_OUTBOX_STATUS_LABELS[m.status]}</Badge>
+        <Badge tone="gray">{m.context}</Badge>
+        {m.orderId && m.orderCode && <Link to={`/ordenes/${m.orderId}`} className="text-xs font-semibold text-brand-700 hover:underline">{m.orderCode}</Link>}
+        <span className="ml-auto text-xs text-slate-500">{formatDate(m.createdAt, true)} · {m.createdByName}</span>
+      </div>
+      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{m.body.replace(/\n+/g, " ")}</p>
+      {m.error && <p className="mt-1 text-xs text-red-700">Motivo: {m.error}</p>}
+      {m.status === "queued" && <p className="mt-1 text-xs text-slate-500">Si no sale, se cancela solo el {formatDate(m.expiresAt, true)}.</p>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {(m.status === "failed" || m.status === "cancelled") && <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} loading={busy} onClick={() => void run(retryWhatsApp, "Mensaje puesto en cola otra vez")}>Reintentar</Button>}
+        {m.status === "queued" && <Button size="sm" variant="ghost" icon={<X className="h-4 w-4" />} loading={busy} onClick={() => void run(cancelWhatsApp, "Mensaje cancelado")}>Cancelar</Button>}
+      </div>
+    </li>
+  );
+}
+
+function QueueTab() {
+  const { data, loading, error } = useOutbox(100);
+  const rows = useMemo(() => data.filter((m) => m.status !== "sent"), [data]);
+  return (
+    <Card>
+      <CardHeader title="En cola y fallidos" description="Mensajes automáticos que todavía no salen o que no se pudieron enviar. Entre los últimos 100." />
+      {error ? <ErrorState message={error} /> : loading ? (
+        <div className="space-y-3 p-5"><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
+      ) : !rows.length ? (
+        <EmptyState icon={<History className="h-7 w-7" />} title="Nada pendiente" description="Todos los mensajes automáticos recientes se enviaron." />
+      ) : (
+        <ul className="divide-y divide-slate-100">{rows.map((m) => <QueueRow key={m.id} m={m} />)}</ul>
+      )}
+    </Card>
+  );
+}
+
 export function WhatsAppPage() {
   const [tab, setTab] = useState<Tab>("history");
+  const { settings, availability } = useWaAuto();
   return (
     <>
       <PageHeader title="WhatsApp" description="Historial de mensajes y plantillas." />
       <div className="mb-5 flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
         <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#1faa53]" />
-        <p>Por ahora los mensajes se envían en modo semiautomático: el sistema abre WhatsApp con el texto listo y la persona toca enviar, sin riesgo de bloqueo del número. El envío 100% automático queda para más adelante.</p>
+        {!settings.waAuto ? (
+          <p>Los mensajes se envían a mano: el sistema abre WhatsApp con el texto listo y la persona toca enviar. El envío automático se enciende en Configuración → WhatsApp automático.</p>
+        ) : availability === "ready" ? (
+          <p>WhatsApp automático <b className="text-emerald-700">conectado</b>: los mensajes salen solos desde la computadora del taller, de 7:00 a.m. a 8:00 p.m.</p>
+        ) : (
+          <p>WhatsApp automático <b className="text-amber-700">no disponible</b> ({WA_AVAILABILITY_LABELS[availability].toLowerCase()}). Mientras tanto los mensajes se envían a mano, como siempre.</p>
+        )}
       </div>
-      <div className="mb-4"><Tabs tabs={[{ value: "history", label: "Mensajes enviados" }, { value: "templates", label: "Plantillas" }]} value={tab} onChange={setTab} /></div>
-      {tab === "history" ? <HistoryTab /> : <TemplatesTab />}
+      <div className="mb-4"><Tabs tabs={[{ value: "history", label: "Mensajes enviados" }, { value: "queue", label: "En cola / fallidos" }, { value: "templates", label: "Plantillas" }]} value={tab} onChange={setTab} /></div>
+      {tab === "history" ? <HistoryTab /> : tab === "queue" ? <QueueTab /> : <TemplatesTab />}
     </>
   );
 }

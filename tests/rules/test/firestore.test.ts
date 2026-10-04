@@ -91,6 +91,13 @@ beforeEach(async () => {
     await s.doc(`${T}/settings/general`).set({ name: "RAPIFIX", updatedBy: "admin1", updatedAt: fixedTs() });
     await s.doc(`${T}/private/roki`).set({ secretKey: "sk_test_no_real" });
     await s.doc(`${T}/rokiEvents/ev1`).set({ type: "payment" });
+    // WhatsApp automático
+    await s.doc(`${T}/private/whatsapp`).set({ tokenHash: "abc123" });
+    await s.doc("waWorkerTokens/abc123").set({ tid: "rapifix" });
+    await s.doc(`${T}/waOutbox/m-washer`).set({ to: "+50499998888", body: "Su carro está listo", status: "queued", createdBy: "washer1" });
+    await s.doc(`${T}/waOutbox/m-recep`).set({ to: "+50499998888", body: "Orden recibida", status: "sent", createdBy: "reception1" });
+    await s.doc(`${T}/waStatus/current`).set({ sessionStatus: "connected", lastSeenAt: fixedTs() });
+    await s.doc(`${T}/waDedupe/h1`).set({ at: fixedTs() });
 
     for (const c of SERVER_ONLY) {
       if (c === "workOrders") continue; // ya sembradas arriba
@@ -536,6 +543,76 @@ describe("carwash", () => {
       context: "carwash", mode: "manual", createdBy: "washer1", createdByName: "Lavador", at: serverTs(),
     }));
     await assertFails(db("washer").doc(`${T}/messages/x1`).get());
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("WhatsApp automático (cola, estado y clave del worker)", () => {
+  const DESK = ["admin", "manager", "reception", "seller"] as const;
+  const REST = ["technician", "warehouse", "washer"] as const;
+
+  it("administración, gerencia, recepción y ventas leen y listan la cola", async () => {
+    for (const r of DESK) {
+      await assertSucceeds(db(r).doc(`${T}/waOutbox/m-washer`).get());
+      await assertSucceeds(db(r).collection(`${T}/waOutbox`).orderBy("createdAt", "desc").limit(10).get());
+    }
+  });
+
+  it("los demás roles no listan la cola y solo ven el mensaje que ellos mismos mandaron", async () => {
+    for (const r of REST) await assertFails(db(r).collection(`${T}/waOutbox`).limit(10).get());
+    await assertSucceeds(db("washer").doc(`${T}/waOutbox/m-washer`).get());
+    await assertFails(db("washer").doc(`${T}/waOutbox/m-recep`).get());
+    await assertFails(db("technician").doc(`${T}/waOutbox/m-washer`).get());
+  });
+
+  it("nadie escribe en la cola desde el panel", async () => {
+    for (const r of ROLES) {
+      await assertFails(db(r).doc(`${T}/waOutbox/nuevo`).set({ to: "+50499998888", body: "Hola", status: "queued", createdBy: uidOf(r) }));
+    }
+    await assertFails(db("admin").doc(`${T}/waOutbox/m-washer`).update({ status: "sent" }));
+    await assertFails(db("admin").doc(`${T}/waOutbox/m-washer`).delete());
+    await assertFails(db("washer").doc(`${T}/waOutbox/m-washer`).update({ status: "cancelled" }));
+  });
+
+  it("todo el taller lee el estado del worker, nadie lo escribe", async () => {
+    for (const r of ROLES) {
+      await assertSucceeds(db(r).doc(`${T}/waStatus/current`).get());
+      await assertFails(db(r).doc(`${T}/waStatus/current`).set({ sessionStatus: "connected", lastSeenAt: serverTs() }, { merge: true }));
+    }
+  });
+
+  it("la clave del worker y sus datos internos no se leen ni se escriben desde el panel", async () => {
+    for (const r of ROLES) {
+      await assertFails(db(r).doc(`${T}/private/whatsapp`).get());
+      await assertFails(db(r).doc("waWorkerTokens/abc123").get());
+      await assertFails(db(r).collection("waWorkerTokens").limit(1).get());
+      await assertFails(db(r).doc(`${T}/waDedupe/h1`).get());
+    }
+    await assertFails(db("admin").doc(`${T}/private/whatsapp`).set({ tokenHash: "mio" }));
+    await assertFails(db("admin").doc("waWorkerTokens/mio").set({ tid: "rapifix" }));
+  });
+
+  it("otro taller no lee la cola ni el estado", async () => {
+    const otro = ctxAs(env, "admin", "otro1", "otro").firestore();
+    await assertFails(otro.doc(`${T}/waOutbox/m-washer`).get());
+    await assertFails(otro.doc(`${T}/waStatus/current`).get());
+  });
+
+  it("desde el panel no se puede registrar un mensaje como automático", async () => {
+    const msg = (mode: string) => ({
+      to: "+50499998888", name: "Juan", body: "Hola", orderId: null, orderCode: null,
+      context: "orden", mode, createdBy: "reception1", createdByName: "Recepción", at: serverTs(),
+    });
+    await assertSucceeds(db("reception").collection(`${T}/messages`).add(msg("manual")));
+    await assertFails(db("reception").collection(`${T}/messages`).add(msg("auto")));
+    await assertFails(db("reception").collection(`${T}/messages`).add({ ...msg("manual"), status: "sent" }));
+  });
+
+  it("administración y gerencia guardan el interruptor del WhatsApp automático; recepción no", async () => {
+    const cfg = (uid: string) => ({ waAuto: true, waAutoSilent: false, dailyLimit: 200, updatedBy: uid, updatedAt: serverTs() });
+    await assertSucceeds(db("manager").doc(`${T}/settings/whatsapp`).set(cfg("manager1"), { merge: true }));
+    await assertFails(db("reception").doc(`${T}/settings/whatsapp`).set(cfg("reception1"), { merge: true }));
+    await assertSucceeds(db("washer").doc(`${T}/settings/whatsapp`).get());
   });
 });
 

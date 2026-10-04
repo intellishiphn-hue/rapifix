@@ -1,0 +1,13 @@
+{
+  "name": "rapifix-wa-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RAPIFIX: envía por OpenWA los mensajes de WhatsApp que el panel pone en cola. Corre en la computadora del taller.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node wa-worker.mjs",
+    "test-send": "node wa-worker.mjs test-send",
+    "check": "node wa-worker.mjs check"
+  }
+}

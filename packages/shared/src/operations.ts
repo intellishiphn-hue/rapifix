@@ -182,7 +182,11 @@ export interface MessageLog {
   /** de dónde salió: orden, cotización, mantenimiento, cobro, cita... */
   context: string;
   /** manual = se abrió WhatsApp con el mensaje listo (el envío lo confirma la persona) */
-  mode: "manual";
+  /** auto = lo envía solo la computadora del taller (cola waOutbox, mismo id) */
+  mode: "manual" | "auto";
+  /** solo en modo auto: queued, sending, sent, failed, cancelled */
+  status?: "queued" | "sending" | "sent" | "failed" | "cancelled";
+  error?: string | null;
   createdBy: string;
   createdByName: string;
   at: TimestampLike;

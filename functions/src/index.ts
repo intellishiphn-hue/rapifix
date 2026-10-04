@@ -45,3 +45,6 @@ export { onCarwashWashWritten, onCarwashPhotoWritten } from "./triggers/carwash"
 export { submitPaymentProof } from "./public/paymentProofs";
 export { reviewPaymentProof } from "./callable/paymentProofs";
 export { carwashDaily } from "./scheduled/carwash";
+// WhatsApp automático (OpenWA en la computadora del taller): cola, clave del worker y su punto de conexión
+export { queueWhatsApp, retryWhatsApp, cancelWhatsApp, createWaWorkerToken, revokeWaWorkerToken } from "./callable/whatsapp";
+export { waWorker } from "./public/waWorker";

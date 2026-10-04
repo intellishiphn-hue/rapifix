@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Mac: arranque automático del worker al iniciar sesión.
+  1. Cambie las DOS rutas de abajo (node y la carpeta wa-worker). Vea la ruta de node con:  which node
+  2. Copie este archivo a  ~/Library/LaunchAgents/
+  3. En Terminal:  launchctl load ~/Library/LaunchAgents/com.rapifix.wa-worker.plist
+  Para apagarlo:   launchctl unload ~/Library/LaunchAgents/com.rapifix.wa-worker.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.rapifix.wa-worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/TALLER/rapifix-wa-worker/wa-worker.mjs</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/TALLER/rapifix-wa-worker</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>15</integer>
+  <key>StandardOutPath</key><string>/tmp/rapifix-wa-worker.log</string>
+  <key>StandardErrorPath</key><string>/tmp/rapifix-wa-worker.log</string>
+</dict>
+</plist>

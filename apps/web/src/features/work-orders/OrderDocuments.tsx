@@ -47,7 +47,7 @@ export function OrderDocuments({ order }: { order: WorkOrder }) {
       {quotes.filter((q) => q.status !== "draft").map((q) => (
         <li key={q.id} className="flex items-center gap-3 px-5 py-4">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><FileText className="h-5 w-5" /></span>
-          <div className="flex-1"><div className="flex items-center gap-2 font-semibold">Cotización {q.code}{q.version > 1 && ` v${q.version}`} <QuoteStatusBadge status={q.status} /></div><div className="text-xs text-slate-500">{formatDate(q.sentAt ?? q.createdAt)}</div></div>
+          <div className="flex-1"><div className="flex items-center gap-2 font-semibold">Cotización {q.code}{q.version > 1 && ` v${q.version}`} <QuoteStatusBadge status={q.status} discarded={!!q.discardedAt} /></div><div className="text-xs text-slate-500">{formatDate(q.sentAt ?? q.createdAt)}</div></div>
           <Link to={`/imprimir/cotizacion/${q.id}`} target="_blank"><Button size="sm" variant="secondary" icon={<Printer className="h-4 w-4" />}>Imprimir / PDF</Button></Link>
         </li>
       ))}

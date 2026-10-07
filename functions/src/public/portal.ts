@@ -12,7 +12,10 @@ import { applyDecision } from "../lib/quoteDecision";
 async function loadByToken(token: string) {
   const portal = await db.doc(`${quoteCol.portal}/${token}`).get();
   if (!portal.exists || portal.get("active") === false) throw new HttpsError("not-found", "Este link no es válido o ya expiró.");
-  return { tid: portal.get("tid") as string, orderId: (portal.get("orderId") as string | null) ?? null, quoteId: (portal.get("quote.id") as string | undefined) ?? null };
+  return { tid: portal.get("tid") as string, orderId: (portal.get("orderId") as string | null) ?? null, 
+    // Si hay una actualización pendiente de la cotización aprobada, la respuesta del cliente es sobre ella
+    quoteId: (portal.get("quoteUpdate.id") as string | undefined) ?? (portal.get("quote.id") as string | undefined) ?? null,
+  };
 }
 
 function clientIp(raw: { headers: Record<string, unknown>; ip?: string }): string | null {

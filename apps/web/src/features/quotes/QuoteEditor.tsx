@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ClipboardCheck, Copy, FilePlus2, FileText, Plus, Printer, Save, Send } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, Copy, FilePlus2, FileText, PencilLine, Plus, Printer, Save, Send, Trash2 } from "lucide-react";
 import {
-  computeQuote, templateBody, formatMoney, QUOTE_ITEM_LABELS, renderTemplate,
-  type QuoteItemInput, type QuoteItemType, type WorkOrder,
+  computeQuote, templateBody, formatMoney, OPEN_QUOTE_STATUSES, QUOTE_ITEM_LABELS, renderTemplate,
+  type Quote, type QuoteItemInput, type QuoteItemType, type WorkOrder,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
@@ -19,15 +19,22 @@ import { orderVars } from "@/features/work-orders/whatsapp";
 import { newQuoteVersion, saveQuote, sendQuote, useOrderQuotes } from "./api";
 import { consumeOrderPart } from "@/features/catalog/api";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
-import { blankLine, DecisionInfo, QuoteLinesEditor, QuoteView, RecordDecisionDialog } from "./parts";
+import { blankLine, DecisionInfo, DiscardRevisionDialog, ModifyQuoteDialog, QuoteHistory, QuoteLinesEditor, QuoteView, RecordDecisionDialog, RevisionChanges, versionLabel } from "./parts";
+
+const REVISION_STATE: Record<string, string> = { draft: "Borrador", sent: "Enviada al cliente", viewed: "Vista por el cliente" };
 
 /** Pestaña Cotización de una orden. */
 export function QuoteEditor({ order }: { order: WorkOrder }) {
-  const { can } = useAuth();
+  const { can, role } = useAuth();
   const { settings } = useSettings();
   const { data: quotes, loading, error } = useOrderQuotes(order.id);
-  const current = quotes[0] ?? null;
-  const manage = can("quotes.manage") && order.isOpen;
+  // Cotización aprobada vigente (una sola por orden) y su modificación abierta, si la hay
+  const approved = quotes.find((q) => q.status === "approved") ?? null;
+  const revision = approved ? quotes.find((q) => q.revisionOf === approved.id && OPEN_QUOTE_STATUSES.includes(q.status)) ?? null : null;
+  const current = revision ?? approved ?? quotes[0] ?? null;
+  // Orden entregada: solo gerencia o administración pueden modificar la cotización aprobada
+  const closedOk = !order.isOpen && order.status !== "CANCELLED" && !!approved && (role === "admin" || role === "manager");
+  const manage = can("quotes.manage") && (order.isOpen || closedOk);
   const showCost = can("dashboard.financials");
 
   const [lines, setLines] = useState<QuoteItemInput[] | null>(null);
@@ -37,6 +44,8 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
+  const [modifying, setModifying] = useState<Quote | null>(null);
+  const [discarding, setDiscarding] = useState(false);
 
   useEffect(() => {
     if (dirty) return;
@@ -93,12 +102,32 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
     );
   }
 
+  const isRevision = !!revision;
+  const sendCurrent = async () => {
+    const id = await persist();
+    if (!id) return null;
+    await sendQuote({ quoteId: id });
+    return id;
+  };
+
   return (
     <div className="space-y-5 p-5">
+      {/* Aviso: hay una modificación abierta de la cotización aprobada */}
+      {revision && approved && (
+        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Modificación en curso: {versionLabel(revision)} · {REVISION_STATE[revision.status]}</p>
+            <p className="mt-0.5">La cotización aprobada ({versionLabel(approved)}, {formatMoney(approved.totals.total)}) sigue vigente hasta que el cliente apruebe los cambios. Los cobros siguen usando ese total.</p>
+            {revision.revisionReason && <p className="mt-1 text-xs">Motivo: {revision.revisionReason}{revision.revisionByName ? ` · ${revision.revisionByName}` : ""}</p>}
+          </div>
+        </div>
+      )}
+
       {lines && manage && (
         <Card>
           <CardHeader
-            title={<span className="flex items-center gap-2">{current?.status === "draft" ? `${current.code}${current.version > 1 ? ` · v${current.version}` : ""}` : "Nueva cotización"} <QuoteStatusBadge status="draft" /></span>}
+            title={<span className="flex items-center gap-2">{current?.status === "draft" ? `${isRevision ? "Modificación " : ""}${versionLabel(current)}` : "Nueva cotización"} <QuoteStatusBadge status="draft" /></span>}
             description={`ISV ${settings.taxRate}% · los totales finales los calcula el sistema al guardar`}
           />
           <div className="p-5">
@@ -106,13 +135,20 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
               lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost}
               notes={notes} onNotes={(v) => { setNotes(v); setDirty(true); }} validDays={validDays} onValidDays={(v) => { setValidDays(v); setDirty(true); }} taxRate={settings.taxRate}
             />
+            {isRevision && approved && preview && (
+              <div className="mt-4"><RevisionChanges base={approved} next={preview} paid={order.paid ?? 0} consumed={order.consumed} /></div>
+            )}
             <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+              {isRevision && revision && <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} disabled={saving} onClick={() => setDiscarding(true)} className="mr-auto text-red-600">Descartar modificación</Button>}
               <Button variant="secondary" icon={<Save className="h-4 w-4" />} loading={saving} disabled={!lines.length} onClick={() => void run(async () => { if (await persist()) toast.success("Borrador guardado"); })}>Guardar borrador</Button>
+              {isRevision && (
+                <Button variant="secondary" icon={<ClipboardCheck className="h-4 w-4" />} loading={saving} disabled={!lines.length} title="Para cuando el cliente ya aprobó por teléfono, en persona o por WhatsApp" onClick={() => void run(async () => {
+                  if (await sendCurrent()) setRecording(true);
+                })}>Registrar aprobación</Button>
+              )}
               <Button icon={<Send className="h-4 w-4" />} loading={saving} disabled={!lines.length} onClick={() => void run(async () => {
-                const id = await persist();
-                if (!id) return;
-                await sendQuote({ quoteId: id });
-                toast.success("Cotización enviada. Ya está en el portal del cliente.");
+                if (!(await sendCurrent())) return;
+                toast.success(isRevision ? "Cambios enviados. El cliente los ve en su link para aprobarlos." : "Cotización enviada. Ya está en el portal del cliente.");
                 setMessage(quoteMessage(preview?.totals.total ?? 0));
               })}>Enviar al cliente</Button>
             </div>
@@ -123,48 +159,56 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
       {current && current.status !== "draft" && (
         <Card>
           <CardHeader
-            title={<span className="flex flex-wrap items-center gap-2">{current.code}{current.version > 1 && <span className="text-slate-400">v{current.version}</span>} <QuoteStatusBadge status={current.status} /></span>}
+            title={<span className="flex flex-wrap items-center gap-2">{isRevision && "Modificación "}{current.code}{current.version > 1 && <span className="text-slate-400">v{current.version}</span>} <QuoteStatusBadge status={current.status} discarded={!!current.discardedAt} /></span>}
             description={[current.sentAt && `Enviada ${formatDate(current.sentAt, true)}`, current.viewedAt && `vista ${formatDate(current.viewedAt, true)}`, current.validUntil && `vence ${formatDate(current.validUntil)}`].filter(Boolean).join(" · ")}
             action={
-              <div className="flex gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Link to={`/imprimir/cotizacion/${current.id}`} target="_blank"><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
-                {manage && current.status !== "approved" && <Button size="sm" variant="secondary" icon={<FilePlus2 className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => { await newQuoteVersion({ quoteId: current.id }); toast.success("Nueva versión creada. Edítela y vuelva a enviarla."); })}>Nueva versión</Button>}
+                {manage && current.status === "approved" && <Button size="sm" variant="secondary" icon={<PencilLine className="h-4 w-4" />} onClick={() => setModifying(current)}>Modificar cotización</Button>}
+                {manage && current.status !== "approved" && <Button size="sm" variant="secondary" icon={<FilePlus2 className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => { await newQuoteVersion({ quoteId: current.id }); toast.success(isRevision ? "Ya puede seguir editando los cambios." : "Nueva versión creada. Edítela y vuelva a enviarla."); })}>{isRevision ? "Continuar edición" : "Nueva versión"}</Button>}
               </div>
             }
           />
           <div className="space-y-4 p-5">
+            {manage && current.status === "approved" && <p className="text-xs text-slate-500">Si aparece trabajo adicional o hay que cambiar un repuesto, use "Modificar cotización". La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.</p>}
             <DecisionInfo quote={current} />
+            {isRevision && approved && <RevisionChanges base={approved} next={current} paid={order.paid ?? 0} consumed={order.consumed} />}
             <QuoteView quote={current} showCost={showCost} />
             {manage && ["sent", "viewed"].includes(current.status) && (
               <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                <Button icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => setRecording(true)}>Registrar respuesta del cliente</Button>
-                <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => setMessage(quoteMessage(current.totals.total))}>Reenviar por WhatsApp</Button>
+                <Button icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => setRecording(true)}>{isRevision ? "Registrar aprobación" : "Registrar respuesta del cliente"}</Button>
+                <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => setMessage(quoteMessage(current.totals.total))}>{isRevision ? "Enviar al cliente por WhatsApp" : "Reenviar por WhatsApp"}</Button>
+                {isRevision && <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => setDiscarding(true)} className="ml-auto text-red-600">Descartar modificación</Button>}
               </div>
             )}
           </div>
         </Card>
       )}
 
-      {quotes.length > 1 && (
+      {/* Mientras hay una modificación abierta, la aprobada vigente se sigue viendo */}
+      {revision && approved && (
         <details className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
-          <summary className="cursor-pointer font-medium text-slate-600">Versiones anteriores ({quotes.length - 1})</summary>
-          <ul className="mt-3 divide-y divide-slate-100">
-            {quotes.slice(1).map((q) => (
-              <li key={q.id} className="flex items-center justify-between py-2">
-                <span>{q.code} v{q.version} · {formatDate(q.createdAt)}</span>
-                <span className="flex items-center gap-3"><span className="tabular">{formatMoney(q.totals.total)}</span><QuoteStatusBadge status={q.status} /></span>
-              </li>
-            ))}
-          </ul>
+          <summary className="flex cursor-pointer flex-wrap items-center gap-2 font-medium text-slate-700">
+            Cotización vigente: {versionLabel(approved)} <QuoteStatusBadge status="approved" /> <span className="tabular ml-auto font-semibold">{formatMoney(approved.totals.total)}</span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            <DecisionInfo quote={approved} />
+            <QuoteView quote={approved} showCost={showCost} />
+            <Link to={`/imprimir/cotizacion/${approved.id}`} target="_blank"><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
+          </div>
         </details>
       )}
+
+      <QuoteHistory quotes={quotes} currentId={current?.id} onResume={manage && approved && !revision ? (q) => setModifying(q) : undefined} />
 
       {message !== null && (
         <Dialog open onClose={() => setMessage(null)} title="Enviar cotización por WhatsApp" description="El mensaje incluye el link donde el cliente la revisa y aprueba." footer={<Button variant="ghost" onClick={() => setMessage(null)}>Cerrar</Button>}>
           <WhatsAppComposer context="cotización" order={order} initial={message} onSent={() => setMessage(null)} />
         </Dialog>
       )}
-      {current && recording && <RecordDecisionDialog quote={current} open onClose={() => setRecording(false)} />}
+      {current && recording && ["sent", "viewed"].includes(current.status) && <RecordDecisionDialog quote={current} open onClose={() => setRecording(false)} />}
+      {modifying && <ModifyQuoteDialog quote={modifying} open onClose={() => setModifying(null)} onOpened={() => setDirty(false)} />}
+      {revision && discarding && <DiscardRevisionDialog quote={revision} open onClose={() => setDiscarding(false)} onDone={() => setDirty(false)} />}
     </div>
   );
 }

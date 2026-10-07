@@ -1,6 +1,6 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  catalogCol, col, orderCol, PORTAL_STEPS, quoteCol, RECEPTION_CHECKLIST, STATUS_META,
+  catalogCol, col, diffQuotes, orderCol, PORTAL_STEPS, publicDiff, quoteCol, RECEPTION_CHECKLIST, STATUS_META,
   type PublicPortal, type Quote, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "./admin";
@@ -10,6 +10,28 @@ const PERCENT: Record<WorkOrderStatus, number> = {
   RECEIVED: 10, INSPECTION: 20, DIAGNOSIS: 35, AWAITING_QUOTE: 40, QUOTE_SENT: 50, AWAITING_APPROVAL: 50,
   APPROVED: 60, IN_REPAIR: 65, WAITING_PARTS: 65, QUALITY_CONTROL: 85, READY: 100, DELIVERED: 100, CANCELLED: 0,
 };
+
+const publicQuote = (q: Quote): NonNullable<PublicPortal["quote"]> => ({
+  id: q.id,
+  code: q.code,
+  status: q.status,
+  items: q.items.map((it) => ({ type: it.type, description: it.description, qty: it.qty, unitPrice: it.unitPrice, discount: it.discount, lineTotal: it.lineTotal })),
+  totals: q.totals,
+  taxRate: q.taxRate,
+  notes: q.notes,
+  validUntil: q.validUntil,
+  decidedAt: q.decision?.at ?? null,
+});
+
+/**
+ * Actualización pendiente de una cotización aprobada (si el taller ya la envió al cliente).
+ * Mientras no la apruebe, la vigente sigue siendo `approved`.
+ */
+function publicUpdate(approved: Quote, rev: Quote | null): PublicPortal["quoteUpdate"] {
+  if (!rev || approved.status !== "approved" || !["sent", "viewed"].includes(rev.status)) return null;
+  return { ...publicQuote(rev), changes: publicDiff(diffQuotes(approved, rev)) };
+}
+const asQuote = (snap: FirebaseFirestore.DocumentSnapshot | null) => (snap && snap.exists ? ({ id: snap.id, ...snap.data() } as Quote) : null);
 
 /**
  * Construye la copia pública y sanitizada de la orden en publicPortal/{token}.
@@ -48,7 +70,8 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
   const nextIdx = Math.min(step + 1, PORTAL_STEPS.length - 1);
   const nextStep = status === "READY" ? "Retiro del vehículo" : status === "DELIVERED" || status === "CANCELLED" ? "" : PORTAL_STEPS[nextIdx]!;
 
-  const q = quoteSnap && quoteSnap.exists ? ({ id: quoteSnap.id, ...quoteSnap.data() } as Quote) : null;
+  const q = asQuote(quoteSnap);
+  const rev = q?.status === "approved" && q.openRevisionId ? asQuote(await tx.get(db.doc(`${quoteCol.quotes(tid)}/${q.openRevisionId}`))) : null;
   const deliveredAt = o.deliveredAt as Timestamp | null;
   const expired = !!deliveredAt && Date.now() - deliveredAt.toMillis() > 30 * 86400000;
 
@@ -93,19 +116,8 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
     diagnosis: o.diagnosis?.completedAt
       ? { summary: o.diagnosis.technicianDiagnosis ?? "", recommendations: o.diagnosis.recommendations ?? "" }
       : null,
-    quote: q && q.status !== "draft"
-      ? {
-          id: q.id,
-          code: q.code,
-          status: q.status,
-          items: q.items.map((it) => ({ type: it.type, description: it.description, qty: it.qty, unitPrice: it.unitPrice, discount: it.discount, lineTotal: it.lineTotal })),
-          totals: q.totals,
-          taxRate: q.taxRate,
-          notes: q.notes,
-          validUntil: q.validUntil,
-          decidedAt: q.decision?.at ?? null,
-        }
-      : null,
+    quote: q && q.status !== "draft" ? publicQuote(q) : null,
+    quoteUpdate: q ? publicUpdate(q, rev) : null,
     active: o.portalEnabled !== false && !expired,
     onlinePayment: {
       enabled: onlineEnabled && status !== "CANCELLED",
@@ -134,8 +146,22 @@ export async function buildQuotePortal(tid: string, quoteId: string): Promise<st
   return db.runTransaction(async (tx) => {
   const snap = await tx.get(db.doc(`${quoteCol.quotes(tid)}/${quoteId}`));
   if (!snap.exists) return null;
-  const q = { id: snap.id, ...snap.data() } as Quote;
-  if (!q.publicToken || q.orderId) return q.publicToken ?? null;
+  const asked = { id: snap.id, ...snap.data() } as Quote;
+  if (!asked.publicToken || asked.orderId) return asked.publicToken ?? null;
+  // Todas las versiones comparten el link. Si hay una aprobada vigente, esa es la que se muestra;
+  // su modificación (si ya se envió) va aparte como "actualización pendiente".
+  const quoteDoc = (id: string) => tx.get(db.doc(`${quoteCol.quotes(tid)}/${id}`));
+  let q = asked;
+  let rev: Quote | null = null;
+  if (asked.status === "approved") {
+    rev = asked.openRevisionId ? asQuote(await quoteDoc(asked.openRevisionId)) : null;
+  } else if (asked.revisionOf) {
+    const base = asQuote(await quoteDoc(asked.revisionOf));
+    if (base?.status === "approved") {
+      q = base;
+      rev = asked;
+    }
+  }
   const [settings, vehicle] = await Promise.all([
     tx.get(db.doc(`${col.settings(tid)}/general`)),
     q.vehicleId ? tx.get(db.doc(`${col.vehicles(tid)}/${q.vehicleId}`)) : Promise.resolve(null),
@@ -160,15 +186,12 @@ export async function buildQuotePortal(tid: string, quoteId: string): Promise<st
     photos: [],
     diagnosis: null,
     reception: null,
-    quote: q.status === "draft" ? null : {
-      id: q.id, code: q.code, status: q.status,
-      items: q.items.map((it) => ({ type: it.type, description: it.description, qty: it.qty, unitPrice: it.unitPrice, discount: it.discount, lineTotal: it.lineTotal })),
-      totals: q.totals, taxRate: q.taxRate, notes: q.notes, validUntil: q.validUntil, decidedAt: q.decision?.at ?? null,
-    },
+    quote: q.status === "draft" ? null : publicQuote(q),
+    quoteUpdate: publicUpdate(q, rev),
     active: true,
     updatedAt: FieldValue.serverTimestamp(),
   };
   tx.set(db.doc(`${quoteCol.portal}/${q.publicToken}`), portal);
-  return q.publicToken;
+  return q.publicToken ?? null;
   });
 }

@@ -8,7 +8,9 @@ const quotesCol = () => collection(db, quoteCol.quotes(TENANT_ID));
 
 export const saveQuote = callable<SaveQuoteInput, { quoteId: string }>("saveQuote");
 export const sendQuote = callable<{ quoteId: string }, { orderId: string | null; token: string | null }>("sendQuote");
-export const newQuoteVersion = callable<{ quoteId: string }, { quoteId: string }>("newQuoteVersion");
+/** Con `reason` sobre una cotización aprobada abre una modificación (o devuelve la que ya está abierta: `existing`). */
+export const newQuoteVersion = callable<{ quoteId: string; reason?: string }, { quoteId: string; existing?: boolean }>("newQuoteVersion");
+export const discardQuoteRevision = callable<{ quoteId: string; reason?: string }, { ok: boolean }>("discardQuoteRevision");
 export const ensurePortal = callable<{ orderId: string }, { token: string }>("ensurePortal");
 
 function scope(role: string | null, uid: string | undefined): QueryConstraint[] {
@@ -39,4 +41,13 @@ export const convertQuoteToOrder = callable<import("@rapifix/shared").ConvertQuo
 /** Cotizaciones directas aprobadas que todavía no tienen orden (el carro no ha llegado). */
 export function usePendingIntakeQuotes(enabled = true) {
   return useQueryData<Quote>(enabled ? query(quotesCol(), where("status", "==", "approved"), where("orderId", "==", null), limit(20)) : null, `quotes-pending-intake|${enabled}`);
+}
+
+/** Todas las versiones de una misma cotización (comparten número). */
+export function useQuoteVersions(number: number | undefined) {
+  const { role, user } = useAuth();
+  return useQueryData<Quote>(
+    number != null ? query(quotesCol(), ...scope(role, user?.uid), where("number", "==", number), limit(30)) : null,
+    `quote-versions-${number}-${role}`,
+  );
 }

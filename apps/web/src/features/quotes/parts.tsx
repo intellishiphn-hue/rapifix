@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, HelpCircle, Plus, Search, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HelpCircle, Minus, PencilLine, Plus, Search, Trash2, XCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { CatalogPicker, type CatalogPick } from "@/features/catalog/CatalogPicker";
 import { fetchCost } from "@/features/catalog/api";
 import {
-  DECISION_CHANNEL_LABELS, formatMoney, QUOTE_ITEM_LABELS, QUOTE_ITEM_TYPES,
-  type Quote, type QuoteItemInput, type QuoteItemType, type Totals,
+  balanceAfter, consumedByItem, DECISION_CHANNEL_LABELS, diffQuotes, formatMoney, QUOTE_ITEM_LABELS, QUOTE_ITEM_TYPES, stockImpact, stockNoticeText,
+  type DiffItem, type Quote, type QuoteItemInput, type QuoteItemType, type Totals,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
@@ -14,7 +15,8 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
-import { recordQuoteDecision } from "./api";
+import { discardQuoteRevision, newQuoteVersion, recordQuoteDecision } from "./api";
+import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { MoneyInput } from "./MoneyInput";
 
 export const blankLine = (type: QuoteItemType = "labor"): QuoteItemInput => ({ id: newId(), type, description: "", qty: 1, unitCost: 0, unitPrice: 0, discount: 0, taxable: true });
@@ -190,7 +192,7 @@ export function RecordDecisionDialog({ quote, open, onClose }: { quote: Quote; o
       onClose={onClose}
       size="sm"
       title="Registrar respuesta del cliente"
-      description={`${quote.code} · ${formatMoney(quote.totals.total)}`}
+      description={`${quote.revisionOf ? "Modificación de " : ""}${quote.code}${quote.version > 1 ? ` v${quote.version}` : ""} · ${formatMoney(quote.totals.total)}`}
       footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button variant={action === "reject" ? "danger" : "primary"} onClick={() => void save()} loading={saving}>{action === "approve" ? "Registrar aprobación" : "Registrar rechazo"}</Button></>}
     >
       <div className="space-y-4">
@@ -210,8 +212,202 @@ export function RecordDecisionDialog({ quote, open, onClose }: { quote: Quote; o
         </Field>
         <Field label="Nombre de quien respondió"><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></Field>
         <Field label="Comentario (opcional)"><Textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={1000} /></Field>
+        {quote.revisionOf && <p className="rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600">{action === "approve" ? "Al aprobar, esta versión reemplaza a la cotización aprobada anterior y la orden toma el total nuevo. Los pagos ya registrados se conservan." : "Si la rechaza, sigue vigente la cotización aprobada anterior."}</p>}
         <p className="text-xs text-slate-500">Quedará registrado que usted anotó la respuesta, con fecha y hora.</p>
       </div>
     </Dialog>
+  );
+}
+
+export const versionLabel = (q: Pick<Quote, "code" | "version">) => `${q.code}${q.version > 1 ? ` v${q.version}` : ""}`;
+const signed = (cents: number) => `${cents > 0 ? "+" : cents < 0 ? "−" : ""} ${formatMoney(Math.abs(cents))}`.trim();
+const lineDetail = (it: DiffItem) => `${QUOTE_ITEM_LABELS[it.type]} · ${it.qty} × ${formatMoney(it.unitPrice)}${it.discount ? ` · desc. ${formatMoney(it.discount)}` : ""}`;
+
+/**
+ * Panel "Cambios respecto a la cotización aprobada": qué se agregó, quitó o modificó,
+ * total anterior → nuevo, y cómo quedaría el saldo con lo ya pagado.
+ */
+export function RevisionChanges({
+  base, next, paid, consumed,
+}: {
+  base: Pick<Quote, "id" | "code" | "version" | "items" | "totals">;
+  next: { items: DiffItem[]; totals: Totals };
+  /** lo ya pagado en la orden (si aplica) */
+  paid?: number;
+  /** order.consumed: repuestos que ya salieron del inventario */
+  consumed?: Record<string, { qty: number }> | null;
+}) {
+  const d = diffQuotes(base, next);
+  const stock = stockImpact(base.items, next.items, consumedByItem(consumed, base.id)).notices;
+  const after = paid !== undefined ? balanceAfter(d.newTotal, paid) : null;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4" data-testid="revision-changes">
+      <h3 className="text-sm font-semibold text-slate-900">Cambios respecto a la cotización aprobada <span className="font-normal text-slate-500">({versionLabel(base)})</span></h3>
+      {!d.hasChanges ? (
+        <p className="mt-2 text-sm text-slate-500">Todavía no hay cambios. Agregue, quite o modifique líneas.</p>
+      ) : (
+        <ul className="mt-3 space-y-1.5 text-sm">
+          {d.added.map((it) => (
+            <li key={`a-${it.id}`} className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">
+              <Plus className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1"><div className="font-medium">Se agrega: {it.description || "(sin descripción)"}</div><div className="text-xs opacity-80">{lineDetail(it)}</div></div>
+              <span className="tabular shrink-0 font-semibold">+ {formatMoney(it.lineTotal)}</span>
+            </li>
+          ))}
+          {d.removed.map((it) => (
+            <li key={`r-${it.id}`} className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-red-900">
+              <Minus className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1"><div className="font-medium">Se quita: <span className="line-through">{it.description}</span></div><div className="text-xs opacity-80">{lineDetail(it)}</div></div>
+              <span className="tabular shrink-0 font-semibold">− {formatMoney(it.lineTotal)}</span>
+            </li>
+          ))}
+          {d.changed.map(({ before, after: a, fields }) => (
+            <li key={`c-${before.id}`} className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-amber-900">
+              <PencilLine className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">Cambia: {a.description || before.description}</div>
+                <div className="text-xs opacity-80">
+                  {[
+                    fields.includes("description") && `antes "${before.description}"`,
+                    fields.includes("qty") && `cantidad ${before.qty} → ${a.qty}`,
+                    fields.includes("unitPrice") && `precio ${formatMoney(before.unitPrice)} → ${formatMoney(a.unitPrice)}`,
+                    fields.includes("discount") && `descuento ${formatMoney(before.discount)} → ${formatMoney(a.discount)}`,
+                    fields.includes("type") && `tipo ${QUOTE_ITEM_LABELS[before.type]} → ${QUOTE_ITEM_LABELS[a.type]}`,
+                    fields.includes("taxable") && (a.taxable ? "ahora aplica ISV" : "ahora exento de ISV"),
+                  ].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+              <span className="tabular shrink-0 text-right font-semibold">{formatMoney(a.lineTotal)}<span className="block text-xs font-normal opacity-80">antes {formatMoney(before.lineTotal)}</span></span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-slate-200 pt-3 text-sm sm:grid-cols-3">
+        <div><dt className="text-xs text-slate-500">Total anterior</dt><dd className="tabular font-medium">{formatMoney(d.previousTotal)}</dd></div>
+        <div><dt className="text-xs text-slate-500">Total nuevo</dt><dd className="tabular font-bold">{formatMoney(d.newTotal)}</dd></div>
+        <div><dt className="text-xs text-slate-500">Diferencia</dt><dd className={cn("tabular font-bold", d.difference > 0 ? "text-amber-700" : d.difference < 0 ? "text-emerald-700" : "text-slate-700")}>{d.difference === 0 ? "Sin cambio" : signed(d.difference)}</dd></div>
+        {after && (
+          <>
+            <div><dt className="text-xs text-slate-500">Ya pagado</dt><dd className="tabular font-medium">{formatMoney(paid ?? 0)}</dd></div>
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-slate-500">{after.credit > 0 ? "Saldo a favor del cliente" : "Saldo que quedaría"}</dt>
+              <dd className={cn("tabular font-bold", after.credit > 0 && "text-red-700")}>{formatMoney(after.credit > 0 ? after.credit : after.balance)}{after.credit > 0 && <span className="ml-2 text-xs font-normal">El cliente ya pagó más que el total nuevo: revise la devolución.</span>}</dd>
+            </div>
+          </>
+        )}
+      </dl>
+      {stock.length > 0 && (
+        <div className="mt-3 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-semibold">Repuestos que ya salieron del inventario</p>
+            {stock.map((n, i) => <p key={i}>{stockNoticeText(n)}</p>)}
+            <p className="text-xs opacity-80">El sistema no devuelve inventario solo.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Pide el motivo y abre la modificación de una cotización aprobada (o retoma una rechazada/descartada). */
+export function ModifyQuoteDialog({ quote, open, onClose, onOpened }: { quote: Quote; open: boolean; onClose: () => void; onOpened: (quoteId: string) => void }) {
+  const [reason, setReason] = useState(quote.status === "approved" ? "" : quote.revisionReason ?? "");
+  const [saving, setSaving] = useState(false);
+  const ok = reason.trim().length >= 3;
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await newQuoteVersion({ quoteId: quote.id, reason: reason.trim() });
+      toast.success(r.existing ? "Ya había una modificación abierta: continúe con esa." : "Modificación abierta. Haga los cambios y envíelos al cliente.");
+      onClose();
+      onOpened(r.quoteId);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Dialog
+      open={open} onClose={onClose} size="sm" title="Modificar cotización" description={`${versionLabel(quote)} · ${formatMoney(quote.totals.total)}`}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={() => void save()} loading={saving} disabled={!ok}>Abrir modificación</Button></>}
+    >
+      <div className="space-y-3">
+        <Field label="Motivo del cambio" required hint="Queda en el historial de la orden. El cliente no lo ve.">
+          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={300} placeholder="Ej. Al desarmar se encontró el disco rayado" autoFocus />
+        </Field>
+        <p className="text-xs text-slate-500">La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.</p>
+      </div>
+    </Dialog>
+  );
+}
+
+export function DiscardRevisionDialog({ quote, open, onClose, onDone }: { quote: Quote; open: boolean; onClose: () => void; onDone?: () => void }) {
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await discardQuoteRevision({ quoteId: quote.id, ...(reason.trim() ? { reason: reason.trim() } : {}) });
+      toast.success("Modificación descartada. Sigue vigente la cotización aprobada.");
+      onClose();
+      onDone?.();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Dialog
+      open={open} onClose={onClose} size="sm" title="Descartar modificación" description={versionLabel(quote)}
+      footer={<><Button variant="secondary" onClick={onClose}>Volver</Button><Button variant="danger" onClick={() => void save()} loading={saving}>Descartar modificación</Button></>}
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-slate-600">Los cambios de esta modificación no se aplican{quote.status !== "draft" ? " y el cliente deja de verla en su link" : ""}. La cotización aprobada sigue vigente.</p>
+        <Field label="Motivo (opcional)"><Input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} /></Field>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Historial de versiones: v1 Reemplazada, v2 Aprobada... con quién y por qué. */
+export function QuoteHistory({ quotes, currentId, linkTo, onResume }: { quotes: Quote[]; currentId?: string; linkTo?: (q: Quote) => string; onResume?: (q: Quote) => void }) {
+  const list = [...quotes].sort((a, b) => b.version - a.version);
+  if (list.length < 2) return null;
+  return (
+    <details className="rounded-xl border border-slate-200 bg-white p-4 text-sm" open>
+      <summary className="cursor-pointer font-medium text-slate-600">Historial de versiones ({list.length})</summary>
+      <ul className="mt-3 divide-y divide-slate-100">
+        {list.map((q) => {
+          const notes = [
+            q.revisionOf && `Modificación${q.revisionByName ? ` abierta por ${q.revisionByName}` : ""}${q.revisionReason ? `: ${q.revisionReason}` : ""}`,
+            q.decision && `${q.decision.result === "approved" ? "Aprobada" : "Rechazada"} por ${q.decision.name} el ${formatDate(q.decision.at, true)}${q.decision.recordedByName ? ` (registrada por ${q.decision.recordedByName})` : ""}`,
+            q.status === "superseded" && `Reemplazada${q.supersededAt ? ` el ${formatDate(q.supersededAt, true)}` : ""} por una versión más reciente`,
+            q.discardedAt && `Descartada${q.discardedByName ? ` por ${q.discardedByName}` : ""}${q.discardReason ? `: ${q.discardReason}` : ""}`,
+          ].filter(Boolean) as string[];
+          const name = <>v{q.version}{q.id === currentId && <span className="ml-1 font-normal text-slate-400">(esta)</span>}</>;
+          return (
+            <li key={q.id} className="py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <span className="font-semibold">
+                  {q.code} {linkTo && q.id !== currentId ? <Link to={linkTo(q)} className="text-brand-700 hover:underline">{name}</Link> : name}
+                  <span className="ml-2 font-normal text-slate-500">{formatDate(q.createdAt)}</span>
+                </span>
+                <span className="flex items-center gap-3">
+                  <span className="tabular">{formatMoney(q.totals.total)}</span>
+                  <QuoteStatusBadge status={q.status} discarded={!!q.discardedAt} />
+                </span>
+              </div>
+              {notes.map((n, i) => <p key={i} className="mt-0.5 text-xs text-slate-500">{n}</p>)}
+              {onResume && q.revisionOf && ["rejected", "expired"].includes(q.status) && (
+                <button type="button" onClick={() => onResume(q)} className="mt-1 text-xs font-semibold text-brand-700 hover:underline">Retomar estos cambios en una nueva modificación</button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }

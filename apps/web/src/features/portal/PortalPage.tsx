@@ -201,18 +201,21 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
   const quoteRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (portal.quote?.status === "sent" && !viewed.current) {
+    if ((portal.quoteUpdate ?? portal.quote)?.status === "sent" && !viewed.current) {
       viewed.current = true;
       markQuoteViewed({ token }).catch(() => undefined);
     }
     if (portal.quote && window.location.pathname.endsWith("/cotizacion")) {
       setTimeout(() => quoteRef.current?.scrollIntoView({ behavior: "smooth" }), 300);
     }
-  }, [portal.quote, token]);
+  }, [portal.quote, portal.quoteUpdate, token]);
 
   const p = portal;
   const q = p.quote;
-  const pending = q && (q.status === "sent" || q.status === "viewed") && answered !== q.id;
+  // Actualización pendiente de una cotización ya aprobada: la respuesta del cliente es sobre ella
+  const u = p.quoteUpdate ?? null;
+  const target = u ?? q;
+  const pending = target && (target.status === "sent" || target.status === "viewed") && answered !== target.id;
   // WhatsApp y teléfono del taller (Configuración); si aún no están puestos, los de RAPIFIX
   const waNumber = p.workshop.whatsapp || p.workshop.phone || RAPIFIX_PHONE;
   const callNumber = normalizePhone(p.workshop.phone || p.workshop.whatsapp || RAPIFIX_PHONE);
@@ -220,7 +223,7 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
   const contact = whatsappLink(waNumber, `Hola, les escribo por la orden ${p.orderCode} de mi ${vehicleText}.`);
   const last = p.updates[0];
   // "Tengo una pregunta" abre el WhatsApp del taller con el mensaje listo
-  const questionLink = q ? whatsappLink(waNumber, `Hola, tengo una pregunta sobre la cotización ${q.code} de mi ${vehicleText}.`) : null;
+  const questionLink = q ? whatsappLink(waNumber, `Hola, tengo una pregunta sobre la ${u ? "actualización de la " : ""}cotización ${q.code} de mi ${vehicleText}.`) : null;
 
   const submit = async () => {
     if (!action) return;
@@ -231,11 +234,11 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
     setBusy(true);
     setNotice(null);
     try {
-      if (q && action !== "question") setAnswered(q.id);
+      if (target && action !== "question") setAnswered(target.id);
       await respondToQuote({ token, action, ...(comment.trim() ? { comment: comment.trim() } : {}) });
       setNotice({
         tone: "ok",
-        text: action === "approve" ? "¡Gracias! Su aprobación quedó registrada. Iniciaremos el trabajo." : action === "reject" ? "Registramos su respuesta. El taller se comunicará con usted." : "Enviamos su pregunta al taller. Le responderemos pronto.",
+        text: action === "approve" ? (u ? "¡Gracias! Aprobó la actualización de su cotización. Continuamos con el trabajo." : "¡Gracias! Su aprobación quedó registrada. Iniciaremos el trabajo.") : action === "reject" ? (u ? "Registramos su respuesta. Sigue vigente su cotización aprobada anterior; el taller se comunicará con usted." : "Registramos su respuesta. El taller se comunicará con usted.") : "Enviamos su pregunta al taller. Le responderemos pronto.",
       });
       setAction(null);
       setComment("");
@@ -248,6 +251,41 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
       setBusy(false);
     }
   };
+
+  const responseBlock = (
+    <>
+          {pending && !action && (
+            <div className="mt-5 grid gap-2">
+              <button onClick={() => setAction("approve")} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700"><CheckCircle2 className="h-5 w-5" /> {u ? "APROBAR ACTUALIZACIÓN" : "APROBAR COTIZACIÓN"}</button>
+              <div className="grid grid-cols-2 gap-2">
+                {questionLink ? (
+                  <a href={questionLink} target="_blank" rel="noreferrer" className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><HelpCircle className="h-4 w-4" /> Tengo una pregunta</a>
+                ) : (
+                  <button onClick={() => setAction("question")} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><HelpCircle className="h-4 w-4" /> Tengo una pregunta</button>
+                )}
+                <button onClick={() => setAction("reject")} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-red-600 hover:bg-red-50"><XCircle className="h-4 w-4" /> Rechazar</button>
+              </div>
+              <a href={`tel:${callNumber}`} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Phone className="h-4 w-4" /> Llamar a {p.workshop.name}</a>
+            </div>
+          )}
+
+          {action && target && (
+            <div className="mt-5 space-y-3 rounded-xl bg-slate-50 p-4">
+              <p className="font-semibold">{action === "approve" ? `Confirmar aprobación por ${formatMoney(target.totals.total)}` : action === "reject" ? (u ? "Rechazar actualización" : "Rechazar cotización") : "Enviar una pregunta al taller"}</p>
+              <textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1000} rows={3} placeholder={action === "approve" ? "Comentario (opcional)" : action === "reject" ? "Motivo" : "Su pregunta"} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm focus:border-brand-500 focus:outline-none" />
+              {action === "reject" && u && <p className="text-xs text-slate-500">Si la rechaza, sigue vigente su cotización aprobada por {formatMoney(q?.totals.total ?? 0)}.</p>}
+              {action === "approve" && <p className="text-xs text-slate-500">Al confirmar, autoriza a {p.workshop.name} a realizar los trabajos cotizados. Se guardará la fecha y hora de su aprobación.</p>}
+              <div className="flex gap-2">
+                <button onClick={() => setAction(null)} className="h-11 flex-1 rounded-xl border border-slate-200 bg-white text-sm font-semibold">Volver</button>
+                <button onClick={() => void submit()} disabled={busy} className={cn("flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white disabled:opacity-60", action === "reject" ? "bg-red-600" : action === "approve" ? "bg-emerald-600" : "bg-brand-600")}>
+                  {busy && <Loader2 className="h-4 w-4 animate-spin" />} Confirmar
+                </button>
+              </div>
+            </div>
+          )}
+    </>
+  );
+  const diffSign = (cents: number) => `${cents > 0 ? "+" : cents < 0 ? "−" : ""} ${formatMoney(Math.abs(cents))}`.trim();
 
   return (
     <Shell portal={p}>
@@ -323,13 +361,61 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
         </section>
       )}
 
+      {/* Actualización pendiente de una cotización ya aprobada */}
+      {u && q && (
+        <section id="actualizacion" ref={quoteRef} className={cn(card, pending && "ring-2 ring-brand-500")}>
+          <h2 className="font-bold">Actualización de su cotización</h2>
+          <p className="mt-1 text-sm text-slate-600">Durante el trabajo encontramos cambios respecto a lo que usted aprobó. Revíselos y díganos si está de acuerdo.{u.validUntil && pending ? ` Válida hasta ${formatDate(u.validUntil)}.` : ""}</p>
+          <ul className="mt-4 space-y-2 text-sm">
+            {u.changes.added.map((it, i) => (
+              <li key={`a${i}`} className="flex items-start justify-between gap-3 rounded-xl bg-emerald-50 p-3 text-emerald-900">
+                <div><div className="text-xs font-bold uppercase tracking-wide">Se agrega</div><div className="font-medium">{it.description}</div><div className="text-xs opacity-80">{QUOTE_ITEM_LABELS[it.type]} · {it.qty} × {formatMoney(it.unitPrice)}</div></div>
+                <div className="tabular shrink-0 font-semibold">+ {formatMoney(it.lineTotal)}</div>
+              </li>
+            ))}
+            {u.changes.removed.map((it, i) => (
+              <li key={`r${i}`} className="flex items-start justify-between gap-3 rounded-xl bg-red-50 p-3 text-red-900">
+                <div><div className="text-xs font-bold uppercase tracking-wide">Se quita</div><div className="font-medium line-through">{it.description}</div><div className="text-xs opacity-80">{QUOTE_ITEM_LABELS[it.type]} · {it.qty} × {formatMoney(it.unitPrice)}</div></div>
+                <div className="tabular shrink-0 font-semibold">− {formatMoney(it.lineTotal)}</div>
+              </li>
+            ))}
+            {u.changes.changed.map((c, i) => (
+              <li key={`c${i}`} className="flex items-start justify-between gap-3 rounded-xl bg-amber-50 p-3 text-amber-900">
+                <div><div className="text-xs font-bold uppercase tracking-wide">Cambia</div><div className="font-medium">{c.after.description}</div><div className="text-xs opacity-80">Antes: {c.before.qty} × {formatMoney(c.before.unitPrice)} · Ahora: {c.after.qty} × {formatMoney(c.after.unitPrice)}</div></div>
+                <div className="tabular shrink-0 text-right font-semibold">{formatMoney(c.after.lineTotal)}<div className="text-xs font-normal opacity-80">antes {formatMoney(c.before.lineTotal)}</div></div>
+              </li>
+            ))}
+          </ul>
+          <dl className="mt-4 space-y-1 border-t border-slate-200 pt-3 text-sm">
+            <div className="flex justify-between text-slate-600"><dt>Total anterior (aprobado)</dt><dd className="tabular">{formatMoney(u.changes.previousTotal)}</dd></div>
+            <div className="flex justify-between text-slate-600"><dt>Diferencia</dt><dd className="tabular font-semibold">{u.changes.difference === 0 ? "Sin cambio" : diffSign(u.changes.difference)}</dd></div>
+            <div className="flex justify-between pt-1 text-lg font-extrabold"><dt>Total nuevo</dt><dd className="tabular">{formatMoney(u.changes.newTotal)}</dd></div>
+          </dl>
+          <details className="mt-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-brand-700">Ver la cotización actualizada completa</summary>
+            <ul className="mt-2 divide-y divide-slate-100">
+              {u.items.map((it, i) => (
+                <li key={i} className="flex items-start justify-between gap-3 py-2">
+                  <div><div className="font-medium text-slate-900">{it.description}</div><div className="text-xs text-slate-500">{QUOTE_ITEM_LABELS[it.type]} · {it.qty} × {formatMoney(it.unitPrice)}{it.discount ? ` · desc. ${formatMoney(it.discount)}` : ""}</div></div>
+                  <div className="tabular shrink-0 font-semibold">{formatMoney(it.lineTotal)}</div>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-slate-500">Incluye ISV ({u.taxRate}%): {formatMoney(u.totals.tax)}</p>
+          </details>
+          {u.notes && <p className="mt-3 whitespace-pre-line rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{u.notes}</p>}
+          <p className="mt-3 text-xs text-slate-500">Mientras no la apruebe, sigue vigente su cotización aprobada por {formatMoney(q.totals.total)}.</p>
+          {responseBlock}
+        </section>
+      )}
+
       {/* Cotización */}
       {q && (
-        <section ref={quoteRef} className={cn(card, pending && "ring-2 ring-brand-500")}>
+        <section ref={u ? undefined : quoteRef} className={cn(card, pending && !u && "ring-2 ring-brand-500")}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="font-bold">Cotización {q.code}</h2>
-              {q.validUntil && pending && <p className="text-xs text-slate-500">Válida hasta {formatDate(q.validUntil)}</p>}
+              {q.validUntil && pending && !u && <p className="text-xs text-slate-500">Válida hasta {formatDate(q.validUntil)}</p>}
             </div>
             {q.status === "approved" && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Aprobada</span>}
             {q.status === "rejected" && <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">Rechazada</span>}
@@ -354,34 +440,9 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
           </dl>
           {q.notes && <p className="mt-3 whitespace-pre-line rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{q.notes}</p>}
 
-          {pending && !action && (
-            <div className="mt-5 grid gap-2">
-              <button onClick={() => setAction("approve")} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700"><CheckCircle2 className="h-5 w-5" /> APROBAR COTIZACIÓN</button>
-              <div className="grid grid-cols-2 gap-2">
-                {questionLink ? (
-                  <a href={questionLink} target="_blank" rel="noreferrer" className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><HelpCircle className="h-4 w-4" /> Tengo una pregunta</a>
-                ) : (
-                  <button onClick={() => setAction("question")} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><HelpCircle className="h-4 w-4" /> Tengo una pregunta</button>
-                )}
-                <button onClick={() => setAction("reject")} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-red-600 hover:bg-red-50"><XCircle className="h-4 w-4" /> Rechazar</button>
-              </div>
-              <a href={`tel:${callNumber}`} className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Phone className="h-4 w-4" /> Llamar a {p.workshop.name}</a>
-            </div>
-          )}
-
-          {action && (
-            <div className="mt-5 space-y-3 rounded-xl bg-slate-50 p-4">
-              <p className="font-semibold">{action === "approve" ? `Confirmar aprobación por ${formatMoney(q.totals.total)}` : action === "reject" ? "Rechazar cotización" : "Enviar una pregunta al taller"}</p>
-              <textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1000} rows={3} placeholder={action === "approve" ? "Comentario (opcional)" : action === "reject" ? "Motivo" : "Su pregunta"} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm focus:border-brand-500 focus:outline-none" />
-              {action === "approve" && <p className="text-xs text-slate-500">Al confirmar, autoriza a {p.workshop.name} a realizar los trabajos cotizados. Se guardará la fecha y hora de su aprobación.</p>}
-              <div className="flex gap-2">
-                <button onClick={() => setAction(null)} className="h-11 flex-1 rounded-xl border border-slate-200 bg-white text-sm font-semibold">Volver</button>
-                <button onClick={() => void submit()} disabled={busy} className={cn("flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white disabled:opacity-60", action === "reject" ? "bg-red-600" : action === "approve" ? "bg-emerald-600" : "bg-brand-600")}>
-                  {busy && <Loader2 className="h-4 w-4 animate-spin" />} Confirmar
-                </button>
-              </div>
-            </div>
-          )}
+          {u ? (
+            <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Esta es su cotización vigente. Hay una actualización pendiente de su aprobación{" "}<a href="#actualizacion" className="font-semibold underline">(ver arriba)</a>.</p>
+          ) : responseBlock}
         </section>
       )}
 

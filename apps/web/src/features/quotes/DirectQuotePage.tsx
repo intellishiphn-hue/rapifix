@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { getDoc } from "firebase/firestore";
 import { toast } from "sonner";
-import { Car, ClipboardCheck, ClipboardList, Copy, ExternalLink, FilePlus2, FileText, Printer, Save, Send, UserPlus } from "lucide-react";
+import { AlertTriangle, Car, ClipboardCheck, ClipboardList, Copy, ExternalLink, FilePlus2, FileText, PencilLine, Printer, Save, Send, Trash2, UserPlus } from "lucide-react";
 import {
-  computeQuote, convertQuoteSchema, templateBody, EMPTY_RECEPTION, normalizeUnit, formatMoney, PRIORITIES, PRIORITY_LABELS, renderTemplate, WORK_TYPES, WORK_TYPE_LABELS,
+  computeQuote, convertQuoteSchema, OPEN_QUOTE_STATUSES, templateBody, EMPTY_RECEPTION, normalizeUnit, formatMoney, PRIORITIES, PRIORITY_LABELS, renderTemplate, WORK_TYPES, WORK_TYPE_LABELS,
   type Customer, type Priority, type Quote, type QuoteItemInput, type ReceptionInput, type Vehicle, type WorkType,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -25,9 +25,9 @@ import { VehiclePicker } from "@/features/work-orders/VehiclePicker";
 import { ReceptionForm } from "@/features/work-orders/ReceptionForm";
 import { TechnicianSelect } from "@/features/work-orders/TechnicianSelect";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
-import { convertQuoteToOrder, newQuoteVersion, saveQuote, sendQuote, useQuote } from "./api";
+import { convertQuoteToOrder, newQuoteVersion, saveQuote, sendQuote, useQuote, useQuoteVersions } from "./api";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
-import { blankLine, DecisionInfo, QuoteLinesEditor, QuoteView, RecordDecisionDialog } from "./parts";
+import { blankLine, DecisionInfo, DiscardRevisionDialog, ModifyQuoteDialog, QuoteHistory, QuoteLinesEditor, QuoteView, RecordDecisionDialog, RevisionChanges, versionLabel } from "./parts";
 
 const quoteLink = (q: Pick<Quote, "publicToken">) => (q.publicToken ? `${window.location.origin}/orden/${q.publicToken}` : "");
 
@@ -108,6 +108,9 @@ export function DirectQuotePage() {
   const { can } = useAuth();
   const { settings } = useSettings();
   const { data: quote, loading, error, exists } = useQuote(id);
+  // Si esta versión modifica una cotización aprobada, esa es la base para comparar
+  const { data: baseQuote } = useQuote(quote?.revisionOf ?? undefined);
+  const { data: versions } = useQuoteVersions(quote?.number);
   const showCost = can("dashboard.financials");
   const manage = can("quotes.manage");
 
@@ -120,6 +123,8 @@ export function DirectQuotePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [modifying, setModifying] = useState<Quote | null>(null);
+  const [discarding, setDiscarding] = useState(false);
   const [newCustomer, setNewCustomer] = useState(false);
   const [vehicleFor, setVehicleFor] = useState<Customer | null | undefined>(undefined);
 
@@ -176,6 +181,12 @@ export function DirectQuotePage() {
     return <Navigate to={`/ordenes/${quote.orderId}?tab=cotizacion`} replace />;
   }
 
+  const base = quote?.revisionOf && baseQuote?.id === quote.revisionOf ? baseQuote : null;
+  // Modificación abierta de una aprobada que sigue vigente
+  const isRevision = !!quote && !!base && base.status === "approved" && OPEN_QUOTE_STATUSES.includes(quote.status);
+  const openRevision = quote?.status === "approved" ? versions.find((v) => v.revisionOf === quote.id && OPEN_QUOTE_STATUSES.includes(v.status)) ?? null : null;
+  const goTo = (qid: string) => { setDirty(false); navigate(`/cotizaciones/${qid}`); };
+
   const to = quote ? { phone: quote.customerPhone ?? "", name: quote.customerName } : undefined;
 
   return (
@@ -188,7 +199,8 @@ export function DirectQuotePage() {
           <>
             <Link to={`/imprimir/cotizacion/${quote.id}`} target="_blank"><Button variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
             {quote.publicToken && <a href={quoteLink(quote)} target="_blank" rel="noreferrer"><Button variant="ghost" icon={<ExternalLink className="h-4 w-4" />}>Ver link</Button></a>}
-            {manage && !["approved"].includes(quote.status) && <Button variant="secondary" icon={<FilePlus2 className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => { const r = await newQuoteVersion({ quoteId: quote.id }); toast.success("Nueva versión creada"); navigate(`/cotizaciones/${r.quoteId}`); })}>Nueva versión</Button>}
+            {manage && quote.status === "approved" && !openRevision && <Button variant="secondary" icon={<PencilLine className="h-4 w-4" />} onClick={() => setModifying(quote)}>Modificar cotización</Button>}
+            {manage && !["approved", "superseded"].includes(quote.status) && (!quote.revisionOf || isRevision) && <Button variant="secondary" icon={<FilePlus2 className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => { const r = await newQuoteVersion({ quoteId: quote.id }); toast.success(isRevision ? "Ya puede seguir editando los cambios" : "Nueva versión creada"); goTo(r.quoteId); })}>{isRevision ? "Continuar edición" : "Nueva versión"}</Button>}
           </>
         )}
       />
@@ -209,6 +221,29 @@ export function DirectQuotePage() {
           </Card>
         )}
 
+        {isRevision && base && (
+          <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Esta es una modificación de la cotización aprobada {versionLabel(base)}</p>
+              <p className="mt-0.5">La aprobada ({formatMoney(base.totals.total)}) sigue vigente hasta que el cliente apruebe los cambios. <Link to={`/cotizaciones/${base.id}`} className="font-semibold underline">Ver la vigente</Link></p>
+              {quote?.revisionReason && <p className="mt-1 text-xs">Motivo: {quote.revisionReason}{quote.revisionByName ? ` · ${quote.revisionByName}` : ""}</p>}
+            </div>
+          </div>
+        )}
+        {quote && openRevision && (
+          <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <div className="flex-1"><b>Modificación en curso: {versionLabel(openRevision)} · {openRevision.status === "draft" ? "Borrador" : openRevision.status === "sent" ? "Enviada al cliente" : "Vista por el cliente"}.</b> Esta cotización sigue vigente hasta que el cliente apruebe los cambios.</div>
+            <Button variant="secondary" onClick={() => goTo(openRevision.id)}>{openRevision.status === "draft" ? "Continuar edición" : "Ver modificación"}</Button>
+          </div>
+        )}
+        {quote?.status === "superseded" && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            Esta versión fue reemplazada por una más reciente que el cliente aprobó.{quote.supersededBy && <> <Link to={`/cotizaciones/${quote.supersededBy}`} className="font-semibold text-brand-700 underline">Ver la cotización vigente</Link></>}
+          </div>
+        )}
+
         {draft && manage && (
           <Card>
             <CardHeader title={isNew ? "2. Cotización" : "Editar borrador"} description={`ISV ${settings.taxRate}% · los totales finales los calcula el sistema al guardar`} />
@@ -217,7 +252,9 @@ export function DirectQuotePage() {
                 lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost}
                 notes={notes} onNotes={(v) => { setNotes(v); setDirty(true); }} validDays={validDays} onValidDays={(v) => { setValidDays(v); setDirty(true); }} taxRate={settings.taxRate}
               />
+              {isRevision && base && <div className="mt-4"><RevisionChanges base={base} next={preview} /></div>}
               <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+                {isRevision && <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => setDiscarding(true)} className="mr-auto text-red-600">Descartar modificación</Button>}
                 <Button variant="secondary" icon={<Save className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => {
                   const qid = await persist();
                   if (qid) { toast.success("Borrador guardado"); if (isNew) navigate(`/cotizaciones/${qid}`, { replace: true }); }
@@ -245,18 +282,30 @@ export function DirectQuotePage() {
                   {manage && <Button onClick={() => setConverting(true)} icon={<ClipboardCheck className="h-4 w-4" />}>Convertir en orden</Button>}
                 </div>
               )}
+              {manage && quote.status === "approved" && !openRevision && <p className="text-xs text-slate-500">Si hay que agregar o cambiar algo, use "Modificar cotización". La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.</p>}
               <DecisionInfo quote={quote} />
+              {isRevision && base && <RevisionChanges base={base} next={quote} />}
               <QuoteView quote={quote} showCost={showCost} />
               {manage && ["sent", "viewed"].includes(quote.status) && (
                 <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                   <Button icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => setRecording(true)}>Registrar respuesta del cliente</Button>
                   <Button variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => setMessage(directMessage(quote, settings.name))}>Enviar por WhatsApp</Button>
+                  {isRevision && <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => setDiscarding(true)} className="ml-auto text-red-600">Descartar modificación</Button>}
                 </div>
               )}
             </div>
           </Card>
         )}
+        {quote && (
+          <QuoteHistory
+            quotes={versions} currentId={quote.id} linkTo={(v) => `/cotizaciones/${v.id}`}
+            onResume={manage && quote.status === "approved" && !openRevision ? (v) => setModifying(v) : undefined}
+          />
+        )}
       </div>
+
+      {quote && modifying && <ModifyQuoteDialog quote={modifying} open onClose={() => setModifying(null)} onOpened={goTo} />}
+      {quote && isRevision && discarding && <DiscardRevisionDialog quote={quote} open onClose={() => setDiscarding(false)} onDone={() => base && goTo(base.id)} />}
 
       {/* Tras enviar, abrir el WhatsApp sugerido */}
       {quote && new URLSearchParams(window.location.search).get("enviar") === "1" && message === null && quote.status === "sent" && (

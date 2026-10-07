@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { BadgeCheck, Droplets, ListChecks, PieChart, SlidersHorizontal } from "lucide-react";
 import {
   BarChart3, Boxes, CalendarDays, Car, ClipboardList, CreditCard, FileText, Globe, LayoutDashboard,
-  MessageCircle, Package, Receipt, Repeat, Settings, ShieldCheck, ShoppingCart, Truck, Users, Wrench, HardHat, CalendarClock, ClipboardPlus, HandCoins, Landmark,
+  History, MessageCircle, Package, Receipt, Repeat, Settings, ShieldCheck, ShoppingCart, Truck, Users, Wrench, HardHat, CalendarClock, ClipboardPlus, HandCoins, Landmark,
 } from "lucide-react";
 import type { Permission } from "@rapifix/shared";
 
@@ -17,6 +17,8 @@ export interface NavItem {
   end?: boolean;
   /** Contador junto al nombre (ej. comprobantes por revisar) */
   counter?: "proofs";
+  /** No se marca activo en estas subrutas (tienen su propio ítem en el menú) */
+  exclude?: string;
 }
 
 export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
@@ -24,7 +26,8 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: "Operación",
     items: [
       { label: "Dashboard", to: "/", icon: LayoutDashboard, permission: "dashboard.view" },
-      { label: "Órdenes de trabajo", to: "/ordenes", icon: ClipboardList, permission: "orders.read" },
+      { label: "Órdenes de trabajo", to: "/ordenes", icon: ClipboardList, permission: "orders.read", exclude: "/ordenes/historial" },
+      { label: "Historial de entregas", to: "/ordenes/historial", icon: History, permission: "orders.read" },
       { label: "Agenda", to: "/agenda", icon: CalendarDays, permission: "agenda.read" },
     ],
   },

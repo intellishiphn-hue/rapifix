@@ -16,3 +16,4 @@ export * from "./fixedCosts";
 export * from "./carwash";
 export * from "./odometer";
 export * from "./waAuto";
+export * from "./orderHistory";

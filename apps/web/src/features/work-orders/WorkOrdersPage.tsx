@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ClipboardList, Columns3, List, Plus, Search } from "lucide-react";
+import { ClipboardList, Columns3, History, List, Plus, Search } from "lucide-react";
 import { STATUS_META, WORK_ORDER_STATUSES } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { useDebounced } from "@/lib/firestore/hooks";
@@ -12,7 +12,9 @@ import { Card } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Field";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { PlateTag } from "@/features/vehicles/VehicleCard";
-import { useOpenOrders, useOrdersList, useRecentDelivered, type ListStatus } from "./api";
+import { useBoardDelivered, useOpenOrders, useOrdersList, type ListStatus } from "./api";
+import { useDeliveredCount } from "./historyApi";
+import { computePeriod } from "@/features/reports/period";
 import { KanbanBoard } from "./KanbanBoard";
 import { StatusBadge } from "./StatusBadge";
 import { daysInShop } from "./OrderCard";
@@ -106,12 +108,14 @@ function OrdersList() {
 
 function Board() {
   const open = useOpenOrders();
-  const delivered = useRecentDelivered();
+  const delivered = useBoardDelivered();
+  const [monthStart] = useState(() => computePeriod("month").start);
+  const monthCount = useDeliveredCount(monthStart, delivered.data.length);
   if (open.error) return <ErrorState message={open.error} />;
   if (open.loading) {
     return <div className="flex gap-3 overflow-hidden">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-96 w-[272px] shrink-0" />)}</div>;
   }
-  return <KanbanBoard open={open.data} delivered={delivered.data} />;
+  return <KanbanBoard open={open.data} delivered={delivered.data} monthCount={monthCount} />;
 }
 
 export function WorkOrdersPage() {
@@ -140,6 +144,7 @@ export function WorkOrdersPage() {
                 </button>
               ))}
             </div>
+            <Link to="/ordenes/historial"><Button variant="secondary" icon={<History className="h-4 w-4" />}>Historial</Button></Link>
             {can("orders.create") && <Link to="/ordenes/nueva"><Button icon={<Plus className="h-4 w-4" />}>Nueva orden</Button></Link>}
           </>
         }

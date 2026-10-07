@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { ChevronsLeft, ChevronsRight, X } from "lucide-react";
 import { NAV_GROUPS } from "@/app/navigation";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -19,6 +19,7 @@ export function Sidebar({
   onCloseMobile: () => void;
 }) {
   const { can } = useAuth();
+  const { pathname } = useLocation();
   const { settings } = useSettings();
   const proofCount = usePendingProofs(can("payments.read")).data.length;
 
@@ -68,7 +69,7 @@ export function Sidebar({
                           cn(
                             "group flex items-center gap-3 rounded-[10px] px-3 py-2 text-[13.5px] font-medium transition-colors",
                             collapsed && "lg:justify-center lg:px-0",
-                            isActive ? "bg-brand-600 text-white shadow-lg shadow-brand-900/40" : "hover:bg-white/5 hover:text-white",
+                            isActive && !(item.exclude && pathname.startsWith(item.exclude)) ? "bg-brand-600 text-white shadow-lg shadow-brand-900/40" : "hover:bg-white/5 hover:text-white",
                           )
                         }
                       >

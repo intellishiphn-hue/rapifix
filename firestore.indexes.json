@@ -297,6 +297,20 @@
       ]
     },
     {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "technicianIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "deliveredAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [

@@ -1,9 +1,10 @@
 import {
-  addDoc, collection, deleteDoc, doc, limit, orderBy, query, serverTimestamp, updateDoc, where, type QueryConstraint,
+  addDoc, collection, deleteDoc, doc, limit, orderBy, query, serverTimestamp, Timestamp, updateDoc, where, type QueryConstraint,
 } from "firebase/firestore";
 import { deleteObject, ref as storageRef } from "firebase/storage";
+import { useEffect, useMemo, useState } from "react";
 import {
-  orderCol, orderStoragePath, searchToken,
+  BOARD_DELIVERED_WINDOW_MS, isRecentlyDelivered, orderCol, orderStoragePath, searchToken,
   type AddOrderEventInput, type ChangeStatusInput, type CreateWorkOrderInput, type OrderEvent, type OrderPhoto,
   type PhotoStage, type SaveSectionInput, type StaffEntry, type UpdateWorkOrderInput, type WorkOrder, type WorkOrderStatus,
 } from "@rapifix/shared";
@@ -12,7 +13,7 @@ import { useDocData, useQueryData } from "@/lib/firestore/hooks";
 import { useAuth } from "@/lib/auth/useAuth";
 import { newId, uploadImage } from "@/lib/storage";
 
-const ordersCol = () => collection(db, orderCol.workOrders(TENANT_ID));
+export const ordersCol = () => collection(db, orderCol.workOrders(TENANT_ID));
 export const orderRef = (id: string) => doc(db, orderCol.workOrders(TENANT_ID), id);
 
 // ---------- Cloud Functions ----------
@@ -28,13 +29,13 @@ export const touchSession = callable<void, { ok: boolean }>("touchSession");
  * Las reglas solo dejan ver al técnico las órdenes donde está asignado,
  * así que todas sus consultas deben incluir ese filtro.
  */
-function useScope(): { constraints: QueryConstraint[]; key: string } {
+export function useScope(): { constraints: QueryConstraint[]; key: string } {
   const { role, user } = useAuth();
   if (role === "technician" && user) return { constraints: [where("technicianIds", "array-contains", user.uid)], key: `tech:${user.uid}` };
   return { constraints: [], key: "all" };
 }
 
-/** Órdenes abiertas (Kanban). Incluye entregadas de los últimos días aparte. */
+/** Órdenes abiertas (Kanban). Las entregadas recientes van aparte: useBoardDelivered. */
 export function useOpenOrders() {
   const scope = useScope();
   return useQueryData<WorkOrder>(
@@ -43,12 +44,36 @@ export function useOpenOrders() {
   );
 }
 
-export function useRecentDelivered(days = 7) {
+/** Cada cuánto se revisa qué entregadas ya cumplieron 24 horas (sin recargar la página). */
+const BOARD_TICK_MS = 2 * 60_000;
+const HOUR_MS = 3_600_000;
+
+/**
+ * Entregadas de las últimas 24 horas para la columna "Entregado" del tablero.
+ * Solo trae las recientes (rango en deliveredAt), no todo el histórico. Un temporizador ligero
+ * vuelve a filtrar cada pocos minutos para que las tarjetas salgan solas al cumplir las 24 horas;
+ * la consulta se renueva una vez por hora.
+ */
+export function useBoardDelivered() {
   const scope = useScope();
-  return useQueryData<WorkOrder>(
-    query(ordersCol(), ...scope.constraints, where("status", "==", "DELIVERED"), orderBy("createdAt", "desc"), limit(40)),
-    `delivered|${scope.key}|${days}`,
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const timer = setInterval(tick, BOARD_TICK_MS);
+    const onVisible = () => document.visibilityState === "visible" && tick();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+  const since = Math.floor((now - BOARD_DELIVERED_WINDOW_MS) / HOUR_MS) * HOUR_MS;
+  const state = useQueryData<WorkOrder>(
+    query(ordersCol(), ...scope.constraints, where("deliveredAt", ">=", Timestamp.fromMillis(since)), orderBy("deliveredAt", "desc"), limit(150)),
+    `board-delivered|${scope.key}|${since}`,
   );
+  const data = useMemo(() => state.data.filter((o) => o.status === "DELIVERED" && isRecentlyDelivered(o, now)), [state.data, now]);
+  return { ...state, data };
 }
 
 export type ListStatus = WorkOrderStatus | "all" | "open";

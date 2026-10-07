@@ -14,6 +14,7 @@ const VehiclesPage = page(() => import("@/features/vehicles/VehiclesPage"), "Veh
 const VehicleDetailPage = page(() => import("@/features/vehicles/VehicleDetailPage"), "VehicleDetailPage");
 const SettingsPage = page(() => import("@/features/settings/SettingsPage"), "SettingsPage");
 const WorkOrdersPage = page(() => import("@/features/work-orders/WorkOrdersPage"), "WorkOrdersPage");
+const OrderHistoryPage = page(() => import("@/features/work-orders/OrderHistoryPage"), "OrderHistoryPage");
 const NewWorkOrderPage = page(() => import("@/features/work-orders/NewWorkOrderPage"), "NewWorkOrderPage");
 const WorkOrderDetailPage = page(() => import("@/features/work-orders/WorkOrderDetailPage"), "WorkOrderDetailPage");
 const QuotesPage = page(() => import("@/features/quotes/QuotesPage"), "QuotesPage");
@@ -100,6 +101,7 @@ export const router = createBrowserRouter([
       { path: "vehiculos", element: <RequirePermission permission="vehicles.read"><S><VehiclesPage /></S></RequirePermission> },
       { path: "vehiculos/:id", element: <RequirePermission permission="vehicles.read"><S><VehicleDetailPage /></S></RequirePermission> },
       { path: "ordenes", element: <RequirePermission permission="orders.read"><S><WorkOrdersPage /></S></RequirePermission> },
+      { path: "ordenes/historial", element: <RequirePermission permission="orders.read"><S><OrderHistoryPage /></S></RequirePermission> },
       { path: "ordenes/nueva", element: <RequirePermission permission="orders.create"><S><NewWorkOrderPage /></S></RequirePermission> },
       { path: "ordenes/:id", element: <RequirePermission permission="orders.read"><S><WorkOrderDetailPage /></S></RequirePermission> },
       { path: "cotizaciones", element: <RequirePermission permission="orders.read"><S><QuotesPage /></S></RequirePermission> },

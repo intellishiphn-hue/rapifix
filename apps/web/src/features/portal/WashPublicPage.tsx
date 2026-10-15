@@ -12,6 +12,7 @@ import { formatDate, formatPlate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { card, PublicShell } from "./PortalPage";
 import { ProofStatus, ProofUpload } from "./ProofUpload";
+import { PublicCouponBox } from "./PublicCoupon";
 
 const createOnlinePayment = callable<{ token: string; origin: string; kind: "wash" }, { checkoutUrl: string }>("createOnlinePayment");
 const checkOnlinePayment = callable<{ token: string; kind: "wash" }, { status: string }>("checkOnlinePayment");
@@ -143,10 +144,12 @@ function WashView({ wash: w, token }: { wash: PublicWash; token: string }) {
           ))}
         </ul>
         <dl className="mt-3 space-y-1 border-t border-slate-200 pt-3 text-sm">
+          {w.coupon && <div className="flex justify-between text-emerald-700"><dt>Cupón {w.coupon.code}</dt><dd className="tabular">- {formatMoney(w.coupon.discount)}</dd></div>}
           {w.discount > 0 && <div className="flex justify-between text-slate-600"><dt>Descuento</dt><dd className="tabular">- {formatMoney(w.discount)}</dd></div>}
           {w.totals.tax > 0 && <div className="flex justify-between text-slate-600"><dt>ISV incluido</dt><dd className="tabular">{formatMoney(w.totals.tax)}</dd></div>}
           <div className="flex justify-between pt-1 text-lg font-extrabold"><dt>Total</dt><dd className="tabular">{formatMoney(w.total)}</dd></div>
         </dl>
+        {!cancelled && <PublicCouponBox token={token} kind="wash" coupon={w.coupon} available={!!w.couponsAvailable} editable={!w.paid && w.balance > 0} />}
       </section>
 
       {!cancelled && <WashPaySection wash={w} token={token} />}

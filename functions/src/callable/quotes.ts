@@ -7,7 +7,9 @@ import {
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput, requireRole } from "../lib/guards";
-import type { DiffItem, QuoteStatus, Totals } from "@rapifix/shared";
+import type { AppliedCoupon, DiffItem, QuoteItem, QuoteStatus, Totals } from "@rapifix/shared";
+import { readRedemption, redemptionDoc, releaseRedemption } from "../lib/coupons";
+import { isInherited, readDraftCoupon, writeDraftCoupon } from "../lib/quoteCoupons";
 import { actorName } from "../lib/actors";
 import { buildPortal, buildQuotePortal } from "../lib/portal";
 import { applyDecision } from "../lib/quoteDecision";
@@ -79,7 +81,26 @@ export const saveQuote = onCall({ region: REGION }, async (request) => {
     const q = existing!;
     if ((q.get("orderId") ?? null) !== (ctx.orderId ?? null)) throw new HttpsError("failed-precondition", "La cotización pertenece a otra orden.");
     if (q.get("status") !== "draft") throw new HttpsError("failed-precondition", "Solo se puede editar un borrador. Cree una nueva versión.");
-    await ref.update({ ...ctx, items, totals, taxRate, notes: input.notes, validDays: input.validDays, updatedAt: now, updatedBy: caller.uid });
+    if (q.get("coupon")) {
+      // Con cupón: se recalcula su descuento con las líneas nuevas (si ya no cumple, se quita y se avisa)
+      const couponNotice = await db.runTransaction(async (tx) => {
+        const cur = await tx.get(ref);
+        if (cur.get("status") !== "draft") throw new HttpsError("failed-precondition", "Solo se puede editar un borrador. Cree una nueva versión.");
+        const read = await readDraftCoupon(tx, tid, cur.get("coupon"));
+        if (!read) {
+          tx.update(ref, { ...ctx, items, totals, taxRate, notes: input.notes, validDays: input.validDays, couponNotice: null, updatedAt: now, updatedBy: caller.uid });
+          return null;
+        }
+        const w = writeDraftCoupon(tx, tid, read, input.items, taxRate, { id: ref.id, code: versionLabel(cur.data()!) });
+        tx.update(ref, {
+          ...ctx, items: w.computed.items, totals: w.computed.totals, coupon: w.coupon, couponNotice: w.notice,
+          taxRate, notes: input.notes, validDays: input.validDays, updatedAt: now, updatedBy: caller.uid,
+        });
+        return w.notice;
+      });
+      return { quoteId: ref.id, couponNotice };
+    }
+    await ref.update({ ...ctx, items, totals, taxRate, notes: input.notes, validDays: input.validDays, couponNotice: null, updatedAt: now, updatedBy: caller.uid });
     return { quoteId: ref.id };
   }
 
@@ -266,6 +287,11 @@ export const newQuoteVersion = onCall({ region: REGION }, async (request) => {
     }
     const siblings = d.number != null ? await tx.get(quotes.where("number", "==", d.number)) : null;
     const version = Math.max(d.version ?? 1, ...(siblings?.docs.map((s) => Number(s.get("version") ?? 1)) ?? [])) + 1;
+    // Cupón: pasa a la versión nueva si su canje sigue vigente (reservado, o usado por la aprobada)
+    const couponRead = await readDraftCoupon(tx, tid, d.coupon as AppliedCoupon | null | undefined);
+    const couponWrite = couponRead
+      ? writeDraftCoupon(tx, tid, couponRead, (d.items as QuoteItem[]) ?? [], Number(d.taxRate ?? 15), { id: newRef.id, code: `${d.code} v${version}` })
+      : null;
 
     const wasOpen = ["sent", "viewed"].includes(d.status);
     if (wasOpen) tx.update(oldRef, { status: "expired", updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
@@ -289,6 +315,7 @@ export const newQuoteVersion = onCall({ region: REGION }, async (request) => {
       discardedAt: null,
       discardedByName: null,
       discardReason: null,
+      ...(couponWrite ? { items: couponWrite.computed.items, totals: couponWrite.computed.totals, coupon: couponWrite.coupon, couponNotice: couponWrite.notice } : {}),
       createdAt: now,
       createdBy: caller.uid,
       updatedAt: now,
@@ -335,7 +362,11 @@ export const discardQuoteRevision = onCall({ region: REGION }, async (request) =
     if (order?.exists && !order.get("isOpen") && caller.role !== "admin" && caller.role !== "manager") {
       throw new HttpsError("permission-denied", "La orden ya fue entregada: solo gerencia o administración pueden cambiar su cotización.");
     }
+    const coupon = d.coupon as AppliedCoupon | null | undefined;
+    const r = await readRedemption(tx, tid, coupon?.redemptionId);
     const reason = input.reason?.trim() ?? "";
+    // El cupón propio de la modificación se libera (el heredado sigue usado por la aprobada)
+    if (!isInherited(r)) releaseRedemption(tx, tid, r, "Se descartó la modificación de la cotización");
     tx.update(ref, {
       status: "expired", discardedAt: FieldValue.serverTimestamp(), discardedBy: caller.uid, discardedByName: name, discardReason: reason,
       updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
@@ -416,6 +447,8 @@ export const convertQuoteToOrder = onCall({ region: REGION }, async (request) =>
     fromQuote: { id: quoteRef.id, code: q.get("code") as string, totals: q.get("totals") },
   });
   await quoteRef.update({ orderId, orderCode: code, source: "direct", updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
+  const coupon = q.get("coupon") as AppliedCoupon | null | undefined;
+  if (coupon?.redemptionId) await redemptionDoc(tid, coupon.redemptionId).update({ orderId, orderCode: code }).catch(() => null);
   // Si tenía una modificación abierta, pasa a la orden junto con la aprobada
   const openId = q.get("openRevisionId") as string | null;
   if (openId) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { BaseDoc, TimestampLike } from "./types";
 import type { Totals } from "./quote";
+import type { AppliedCoupon } from "./coupons";
 
 // ---------------- Catálogo ----------------
 export const PRODUCT_UNITS = ["unidad", "juego", "litro", "galón", "metro", "kit", "caja"] as const;
@@ -206,6 +207,8 @@ export interface SaleItem {
   qty: number;
   unitPrice: number;
   discount: number;
+  /** parte del cupón de esta línea (ya restada de lineTotal; `discount` es el descuento manual) */
+  couponDiscount?: number;
   taxable: boolean;
   lineTotal: number;
 }
@@ -232,6 +235,8 @@ export interface Sale {
   /** Empresa del vehículo (lo pone el servidor al crear la venta) */
   companyId?: string | null;
   companyName?: string;
+  /** cupón usado en la venta (o en el lavado que se cobró con ella) */
+  coupon?: AppliedCoupon | null;
   by: string;
   byName: string;
   at: TimestampLike;
@@ -260,6 +265,8 @@ export const createSaleSchema = z.object({
     .min(1, "Agregue al menos un producto o servicio")
     .max(100),
   payments: z.array(paymentLine).max(5),
+  /** código de cupón (se valida y se usa en la misma venta) */
+  couponCode: z.string().trim().max(40).nullish(),
 });
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;
 

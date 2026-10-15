@@ -12,6 +12,7 @@ import { formatDate, formatPlate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { usePublicLogo } from "@/lib/branding";
 import { ProofStatus, ProofUpload } from "./ProofUpload";
+import { CouponTotalsRows, PublicCouponBox } from "./PublicCoupon";
 
 const respondToQuote = callable<{ token: string; action: "approve" | "reject" | "question"; name?: string; comment?: string }, { result: string; approvalId?: string }>("respondToQuote");
 const markQuoteViewed = callable<{ token: string }, { ok: boolean }>("markQuoteViewed");
@@ -389,8 +390,10 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
           <dl className="mt-4 space-y-1 border-t border-slate-200 pt-3 text-sm">
             <div className="flex justify-between text-slate-600"><dt>Total anterior (aprobado)</dt><dd className="tabular">{formatMoney(u.changes.previousTotal)}</dd></div>
             <div className="flex justify-between text-slate-600"><dt>Diferencia</dt><dd className="tabular font-semibold">{u.changes.difference === 0 ? "Sin cambio" : diffSign(u.changes.difference)}</dd></div>
+            {(u.totals.couponDiscount ?? 0) > 0 && <div className="flex justify-between text-emerald-700"><dt>Incluye cupón{u.coupon ? ` ${u.coupon.code}` : ""}</dt><dd className="tabular">- {formatMoney(u.totals.couponDiscount ?? 0)}</dd></div>}
             <div className="flex justify-between pt-1 text-lg font-extrabold"><dt>Total nuevo</dt><dd className="tabular">{formatMoney(u.changes.newTotal)}</dd></div>
           </dl>
+          <PublicCouponBox token={token} kind="quote" coupon={u.coupon} available={!!p.couponsAvailable} editable={!!pending} />
           <details className="mt-3 text-sm">
             <summary className="cursor-pointer font-semibold text-brand-700">Ver la cotización actualizada completa</summary>
             <ul className="mt-2 divide-y divide-slate-100">
@@ -434,12 +437,13 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
           </ul>
           <dl className="mt-3 space-y-1 border-t border-slate-200 pt-3 text-sm">
             <div className="flex justify-between text-slate-600"><dt>Subtotal</dt><dd className="tabular">{formatMoney(q.totals.subtotal)}</dd></div>
-            {q.totals.discount > 0 && <div className="flex justify-between text-slate-600"><dt>Descuento</dt><dd className="tabular">- {formatMoney(q.totals.discount)}</dd></div>}
+            <CouponTotalsRows discount={q.totals.discount} couponDiscount={q.totals.couponDiscount} code={q.coupon?.code} />
             <div className="flex justify-between text-slate-600"><dt>ISV ({q.taxRate}%)</dt><dd className="tabular">{formatMoney(q.totals.tax)}</dd></div>
             <div className="flex justify-between pt-1 text-lg font-extrabold"><dt>Total</dt><dd className="tabular">{formatMoney(q.totals.total)}</dd></div>
           </dl>
           {q.notes && <p className="mt-3 whitespace-pre-line rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{q.notes}</p>}
 
+          {!u && <PublicCouponBox token={token} kind="quote" coupon={q.coupon} available={!!p.couponsAvailable} editable={!!pending} />}
           {u ? (
             <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Esta es su cotización vigente. Hay una actualización pendiente de su aprobación{" "}<a href="#actualizacion" className="font-semibold underline">(ver arriba)</a>.</p>
           ) : responseBlock}

@@ -7,6 +7,8 @@ import {
   WASH_STATUS_LABELS, type Customer, type QueueStatus, type Wash,
 } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
+import { applyCoupon, removeCoupon } from "@/features/coupons/api";
+import { CouponField } from "@/features/coupons/CouponField";
 import { errorMessage } from "@/lib/errors";
 import { formatDate, formatPlate } from "@/lib/format";
 import { Dialog } from "@/components/ui/Dialog";
@@ -327,6 +329,7 @@ export function WashDetailDialog({
           ))}
           {money && (
             <dl className="mt-2 space-y-0.5 border-t border-slate-200 pt-2">
+              {w.coupon && <div className="flex justify-between text-emerald-700"><dt>Cupón <span className="font-mono text-xs font-semibold">{w.coupon.code}</span></dt><dd className="tabular">- {formatMoney(w.coupon.discount)}</dd></div>}
               {w.discount > 0 && <div className="flex justify-between text-slate-600"><dt>Descuento</dt><dd className="tabular">- {formatMoney(w.discount)}</dd></div>}
               {w.totals && <div className="flex justify-between text-slate-600"><dt>Sin ISV</dt><dd className="tabular">{formatMoney(netOf(w.totals))}</dd></div>}
               {w.totals && <div className="flex justify-between text-slate-600"><dt>ISV</dt><dd className="tabular">{formatMoney(w.totals.tax)}</dd></div>}
@@ -342,6 +345,9 @@ export function WashDetailDialog({
             {w.loyaltyRedeemed && <Badge tone="blue"><Gift className="h-3 w-3" /> Premio de lealtad</Badge>}
           </div>
           {money && w.commission > 0 && <p className="mt-2 text-xs text-slate-500">Comisión del lavador: {formatMoney(w.commission)}</p>}
+          {money && w.status !== "cancelled" && !w.saleId && (w.coupon || w.total > 0) && (
+            <WashCouponField wash={w} className="mt-3 border-t border-slate-200 pt-3" />
+          )}
         </div>
 
         {needsCharge(w) && <PendingProofsPanel washId={w.id} washTotal={w.total} />}
@@ -507,5 +513,24 @@ function FixPlatePanel({ wash, onDone }: { wash: Wash; onDone: () => void }) {
         <Button size="sm" onClick={() => void save()} loading={saving} disabled={normalized.length < 2 || invalid}>Guardar placa</Button>
       </div>
     </div>
+  );
+}
+
+/** Campo de cupón del lavado (antes de cobrar): aplicar o quitar desde el panel. */
+export function WashCouponField({ wash, className }: { wash: Wash; className?: string }) {
+  return (
+    <CouponField
+      className={className}
+      applied={wash.coupon}
+      notice={wash.couponNotice}
+      onApply={async (code) => {
+        const r = await applyCoupon({ kind: "wash", id: wash.id, code });
+        toast.success(`Cupón ${r.code} aplicado: − ${formatMoney(r.discount)}. Nuevo total ${formatMoney(r.total)}.`);
+      }}
+      onRemove={async () => {
+        await removeCoupon({ kind: "wash", id: wash.id });
+        toast.success("Cupón quitado");
+      }}
+    />
   );
 }

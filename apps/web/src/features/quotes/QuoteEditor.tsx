@@ -17,6 +17,8 @@ import { useSettings } from "@/features/settings/api";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
 import { orderVars } from "@/features/work-orders/whatsapp";
 import { newQuoteVersion, saveQuote, sendQuote, useOrderQuotes } from "./api";
+import { applyCoupon, removeCoupon } from "@/features/coupons/api";
+import { CouponField } from "@/features/coupons/CouponField";
 import { consumeOrderPart } from "@/features/catalog/api";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { useCompany } from "@/features/companies/api";
@@ -52,13 +54,14 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
   useEffect(() => {
     if (dirty) return;
     if (current?.status === "draft") {
-      setLines(current.items.map(({ lineTotal: _t, ...rest }) => rest));
+      setLines(current.items.map(({ lineTotal: _t, couponDiscount: _c, ...rest }) => rest));
       setNotes(current.notes);
       setValidDays(current.validDays);
     } else setLines(null);
   }, [current, dirty]);
 
-  const preview = useMemo(() => (lines ? computeQuote(lines, settings.taxRate) : null), [lines, settings.taxRate]);
+  const draftCoupon = current?.status === "draft" ? current.coupon ?? null : null;
+  const preview = useMemo(() => (lines ? computeQuote(lines, settings.taxRate, draftCoupon) : null), [lines, settings.taxRate, draftCoupon]);
   const quoteMessage = (total: number) =>
     renderTemplate(templateBody("cotizacion_enviada"), { ...orderVars(order, settings), total: formatMoney(total) });
 
@@ -68,15 +71,33 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
       toast.error("Cada línea necesita descripción y cantidad");
       return null;
     }
-    const { quoteId } = await saveQuote({
+    const { quoteId, couponNotice } = await saveQuote({
       orderId: order.id,
       quoteId: current?.status === "draft" ? current.id : null,
       items: lines.map((l) => ({ ...l, description: l.description.trim() })),
       notes: notes.trim(),
       validDays,
     });
+    if (couponNotice) toast.warning(couponNotice);
     setDirty(false);
     return quoteId;
+  };
+
+  // Cupón: se aplica sobre la cotización guardada (si hay cambios sin guardar, se guardan antes)
+  const applyQuoteCoupon = async (code: string) => {
+    const id = dirty || current?.status !== "draft" ? await persist() : current.id;
+    if (!id) throw new Error("Revise las líneas antes de aplicar el cupón.");
+    const r = await applyCoupon({ kind: "quote", id, code });
+    toast.success(`Cupón ${r.code} aplicado: − ${formatMoney(r.discount)}`);
+  };
+  const applySentCoupon = async (code: string) => {
+    if (!current) return;
+    const r = await applyCoupon({ kind: "quote", id: current.id, code });
+    toast.success(`Cupón ${r.code} aplicado: − ${formatMoney(r.discount)}. El cliente ya ve el nuevo total.`);
+  };
+  const removeQuoteCoupon = async (id: string) => {
+    await removeCoupon({ kind: "quote", id });
+    toast.success("Cupón quitado");
   };
 
   const run = async (fn: () => Promise<void>) => {
@@ -147,6 +168,15 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
             <QuoteLinesEditor
               lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost}
               notes={notes} onNotes={(v) => { setNotes(v); setDirty(true); }} validDays={validDays} onValidDays={(v) => { setValidDays(v); setDirty(true); }} taxRate={settings.taxRate}
+              couponCode={draftCoupon?.code}
+              couponSlot={
+                <CouponField
+                  applied={draftCoupon ? { ...draftCoupon, discount: preview?.totals.couponDiscount ?? draftCoupon.discount } : null}
+                  notice={current?.status === "draft" ? current.couponNotice : null}
+                  onApply={applyQuoteCoupon}
+                  onRemove={current?.status === "draft" ? () => removeQuoteCoupon(current.id) : undefined}
+                />
+              }
             />
             {isRevision && approved && preview && (
               <div className="mt-4"><RevisionChanges base={approved} next={preview} paid={order.paid ?? 0} consumed={order.consumed} /></div>
@@ -186,7 +216,17 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
             {manage && current.status === "approved" && <p className="text-xs text-slate-500">Si aparece trabajo adicional o hay que cambiar un repuesto, use "Modificar cotización". La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.</p>}
             <DecisionInfo quote={current} />
             {isRevision && approved && <RevisionChanges base={approved} next={current} paid={order.paid ?? 0} consumed={order.consumed} />}
-            <QuoteView quote={current} showCost={showCost} />
+            <QuoteView
+              quote={current} showCost={showCost}
+              couponSlot={(current.coupon || (manage && ["sent", "viewed"].includes(current.status))) && (
+                <CouponField
+                  applied={current.coupon} compact={false}
+                  disabled={!manage || !["sent", "viewed"].includes(current.status)}
+                  onApply={applySentCoupon}
+                  onRemove={() => removeQuoteCoupon(current.id)}
+                />
+              )}
+            />
             {manage && ["sent", "viewed"].includes(current.status) && (
               <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                 <Button icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => setRecording(true)}>{isRevision ? "Registrar aprobación" : "Registrar respuesta del cliente"}</Button>

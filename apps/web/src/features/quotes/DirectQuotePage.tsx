@@ -27,6 +27,8 @@ import { TechnicianSelect } from "@/features/work-orders/TechnicianSelect";
 import { WhatsAppComposer } from "@/features/work-orders/WhatsAppComposer";
 import { convertQuoteToOrder, newQuoteVersion, saveQuote, sendQuote, useQuote, useQuoteVersions } from "./api";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
+import { applyCoupon, removeCoupon } from "@/features/coupons/api";
+import { CouponField } from "@/features/coupons/CouponField";
 import { blankLine, DecisionInfo, DiscardRevisionDialog, ModifyQuoteDialog, QuoteHistory, QuoteLinesEditor, QuoteView, RecordDecisionDialog, RevisionChanges, versionLabel } from "./parts";
 
 const quoteLink = (q: Pick<Quote, "publicToken">) => (q.publicToken ? `${window.location.origin}/orden/${q.publicToken}` : "");
@@ -133,12 +135,13 @@ export function DirectQuotePage() {
 
   useEffect(() => {
     if (!quote || dirty || quote.status !== "draft") return;
-    setLines(quote.items.map(({ lineTotal: _t, ...rest }) => rest));
+    setLines(quote.items.map(({ lineTotal: _t, couponDiscount: _c, ...rest }) => rest));
     setNotes(quote.notes);
     setValidDays(quote.validDays);
   }, [quote, dirty]);
 
-  const preview = useMemo(() => computeQuote(lines, settings.taxRate), [lines, settings.taxRate]);
+  const draftCoupon = quote?.status === "draft" ? quote.coupon ?? null : null;
+  const preview = useMemo(() => computeQuote(lines, settings.taxRate, draftCoupon), [lines, settings.taxRate, draftCoupon]);
 
   const selectVehicle = async (vid: string) => {
     const s = await getDoc(vehicleRef(vid));
@@ -155,11 +158,30 @@ export function DirectQuotePage() {
       toast.error("Seleccione el vehículo");
       return null;
     }
-    const { quoteId } = await saveQuote({
+    const { quoteId, couponNotice } = await saveQuote({
       vehicleId, quoteId: quote?.id ?? null, items: lines.map((l) => ({ ...l, description: l.description.trim() })), notes: notes.trim(), validDays,
     });
+    if (couponNotice) toast.warning(couponNotice);
     setDirty(false);
     return quoteId;
+  };
+
+  // Cupón: se aplica sobre la cotización guardada (si es nueva o tiene cambios, se guarda antes)
+  const applyDraftCoupon = async (code: string) => {
+    const qid = dirty || !quote ? await persist() : quote.id;
+    if (!qid) throw new Error("Revise el vehículo y las líneas antes de aplicar el cupón.");
+    const r = await applyCoupon({ kind: "quote", id: qid, code });
+    toast.success(`Cupón ${r.code} aplicado: − ${formatMoney(r.discount)}`);
+    if (!quote) navigate(`/cotizaciones/${qid}`, { replace: true });
+  };
+  const applySentCoupon = async (code: string) => {
+    if (!quote) return;
+    const r = await applyCoupon({ kind: "quote", id: quote.id, code });
+    toast.success(`Cupón ${r.code} aplicado: − ${formatMoney(r.discount)}. El cliente ya ve el nuevo total.`);
+  };
+  const dropCoupon = async (qid: string) => {
+    await removeCoupon({ kind: "quote", id: qid });
+    toast.success("Cupón quitado");
   };
 
   const run = async (fn: () => Promise<void>) => {
@@ -251,6 +273,15 @@ export function DirectQuotePage() {
               <QuoteLinesEditor
                 lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost}
                 notes={notes} onNotes={(v) => { setNotes(v); setDirty(true); }} validDays={validDays} onValidDays={(v) => { setValidDays(v); setDirty(true); }} taxRate={settings.taxRate}
+                couponCode={draftCoupon?.code}
+                couponSlot={
+                  <CouponField
+                    applied={draftCoupon ? { ...draftCoupon, discount: preview.totals.couponDiscount ?? draftCoupon.discount } : null}
+                    notice={quote?.status === "draft" ? quote.couponNotice : null}
+                    onApply={applyDraftCoupon}
+                    onRemove={quote ? () => dropCoupon(quote.id) : undefined}
+                  />
+                }
               />
               {isRevision && base && <div className="mt-4"><RevisionChanges base={base} next={preview} /></div>}
               <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
@@ -285,7 +316,12 @@ export function DirectQuotePage() {
               {manage && quote.status === "approved" && !openRevision && <p className="text-xs text-slate-500">Si hay que agregar o cambiar algo, use "Modificar cotización". La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.</p>}
               <DecisionInfo quote={quote} />
               {isRevision && base && <RevisionChanges base={base} next={quote} />}
-              <QuoteView quote={quote} showCost={showCost} />
+              <QuoteView
+                quote={quote} showCost={showCost}
+                couponSlot={(quote.coupon || (manage && ["sent", "viewed"].includes(quote.status))) && (
+                  <CouponField applied={quote.coupon} disabled={!manage || !["sent", "viewed"].includes(quote.status)} onApply={applySentCoupon} onRemove={() => dropCoupon(quote.id)} />
+                )}
+              />
               {manage && ["sent", "viewed"].includes(quote.status) && (
                 <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                   <Button icon={<ClipboardCheck className="h-4 w-4" />} onClick={() => setRecording(true)}>Registrar respuesta del cliente</Button>

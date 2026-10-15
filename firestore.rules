@@ -403,6 +403,23 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // ---------- CUPONES ----------
+      // Todo lo escriben Cloud Functions (saveCoupon, applyCoupon, removeCoupon, createSale, chargeWash,
+      // applyCouponPublic...) en transacción: contadores de usos y límite por cliente.
+      // Cupones y canjes: solo admin y gerencia (caja valida el código por callable, sin leer la lista).
+      // couponUsage (índice de usos por cliente): nadie desde el navegador.
+      match /coupons/{code} {
+        allow read: if hasRole(tid, managers());
+        allow write: if false;
+      }
+      match /couponRedemptions/{id} {
+        allow read: if hasRole(tid, managers());
+        allow write: if false;
+      }
+      match /couponUsage/{id} {
+        allow read, write: if false;
+      }
+
       // ---------- CARWASH ----------
       // Todo lo escriben Cloud Functions (numeración, lealtad, membresías y cobros en transacción).
       // El lavador (washer) ve el menú, la cola y las tarjetas de lealtad; no ve planes ni membresías.

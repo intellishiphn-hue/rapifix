@@ -88,6 +88,14 @@ export const carwashCol = {
   memberships: (tid: string) => `tenants/${tid}/carwashMemberships`,
 } as const;
 
+/** Cupones (id = código), canjes y el índice de usos por cliente. Todo lo escribe el servidor. */
+export const couponCol = {
+  coupons: (tid: string) => `tenants/${tid}/coupons`,
+  redemptions: (tid: string) => `tenants/${tid}/couponRedemptions`,
+  /** couponUsage/{code}__{clave}: canjes vigentes por identidad del cliente (sin acceso desde el navegador) */
+  usage: (tid: string) => `tenants/${tid}/couponUsage`,
+} as const;
+
 export const carwashStoragePath = {
   photo: (tid: string, washId: string, fileId: string) => `tenants/${tid}/carwashWashes/${washId}/photos/${fileId}.jpg`,
 } as const;

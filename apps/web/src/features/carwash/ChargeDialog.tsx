@@ -11,6 +11,7 @@ import { Field } from "@/components/ui/Field";
 import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { chargeWash } from "./api";
 import { newPayLine, PaymentLines, payLinesError, payLinesInput, type PayLine } from "./PaymentLines";
+import { WashCouponField } from "./WashDialogs";
 
 export function ChargeDialog({ wash, onClose }: { wash: Wash | null; onClose: () => void }) {
   const [discount, setDiscount] = useState(0);
@@ -26,15 +27,21 @@ export function ChargeDialog({ wash, onClose }: { wash: Wash | null; onClose: ()
   }, [wash?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gross = wash ? wash.items.reduce((a, i) => a + i.price, 0) : 0;
+  const couponDiscount = wash?.coupon?.discount ?? 0;
   const charge = useMemo(
-    () => (wash ? computeWashCharge(wash.items.map((i) => i.price), wash.taxRate, wash.taxMode, Math.min(discount, gross)) : null),
-    [wash, discount, gross],
+    () => (wash ? computeWashCharge(wash.items.map((i) => i.price), wash.taxRate, wash.taxMode, Math.min(discount, gross - couponDiscount), couponDiscount) : null),
+    [wash, discount, gross, couponDiscount],
   );
+  const chargeTotal = charge?.totals.total ?? 0;
+  // Al aplicar o quitar el cupón cambia el total: el pago único lo sigue
+  useEffect(() => {
+    setLines((ls) => (ls.length === 1 ? [{ ...ls[0]!, amount: chargeTotal }] : ls));
+  }, [chargeTotal]);
   if (!wash || !charge) return null;
   const total = charge.totals.total;
 
   const save = async () => {
-    if (discount > gross) return toast.error("El descuento es mayor que el total");
+    if (discount > gross - couponDiscount) return toast.error(couponDiscount ? "El descuento más el cupón es mayor que el total" : "El descuento es mayor que el total");
     const bad = payLinesError(lines, total);
     if (bad) return toast.error(bad);
     setSaving(true);
@@ -98,12 +105,14 @@ export function ChargeDialog({ wash, onClose }: { wash: Wash | null; onClose: ()
             </div>
           ))}
           <dl className="mt-2 space-y-0.5 border-t border-slate-200 pt-2">
+            {wash.coupon && <div className="flex justify-between text-emerald-700"><dt>Cupón <span className="font-mono text-xs font-semibold">{wash.coupon.code}</span></dt><dd className="tabular">- {formatMoney(wash.coupon.discount)}</dd></div>}
             <div className="flex justify-between text-slate-600"><dt>Subtotal (sin ISV)</dt><dd className="tabular">{formatMoney(charge.totals.subtotal - charge.totals.discount)}</dd></div>
             <div className="flex justify-between text-slate-600"><dt>ISV ({wash.taxMode === "exempt" ? 0 : wash.taxRate}%)</dt><dd className="tabular">{formatMoney(charge.totals.tax)}</dd></div>
             <div className="flex justify-between text-lg font-extrabold"><dt>Total</dt><dd className="tabular">{formatMoney(total)}</dd></div>
           </dl>
         </div>
-        <Field label="Descuento" hint={discount > 0 ? `Se descuenta ${formatMoney(Math.min(discount, gross))} del precio final.` : "Opcional."}>
+        <WashCouponField wash={wash} />
+        <Field label="Descuento" hint={discount > 0 ? `Se descuenta ${formatMoney(Math.min(discount, gross - couponDiscount))} del precio final.` : "Opcional."}>
           <MoneyInput value={discount} onChange={setDiscount} className="w-40" placeholder="0.00" />
         </Field>
         <div>

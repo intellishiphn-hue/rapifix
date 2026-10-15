@@ -5,6 +5,7 @@ import {
   type CarwashMembership, type CarwashSettings, type MembershipStatus, type PublicProof, type PublicWash, type WashItem, DEFAULT_SETTINGS } from "@rapifix/shared";
 import { db } from "./admin";
 import { toMs } from "./carwash";
+import { customerCouponsAvailable } from "./coupons";
 
 const DAY = 86400000;
 
@@ -47,7 +48,7 @@ export async function buildPublicWash(tid: string, washId: string): Promise<stri
     const hasCard = !!plate && !isPlaceholderPlate(plate);
     const membershipId = w.get("membershipId") as string | null;
     const hasPhotos = Number(w.get("photoCount") ?? 0) > 0;
-    const [general, carwash, roki, loyalty, proofs, membership, photoSnap] = await Promise.all([
+    const [general, carwash, roki, loyalty, proofs, membership, photoSnap, couponsAvailable] = await Promise.all([
       tx.get(db.doc(`${col.settings(tid)}/general`)),
       tx.get(db.doc(`${col.settings(tid)}/carwash`)),
       tx.get(db.doc(`${catalogCol.privateConfig(tid)}/roki`)),
@@ -55,6 +56,7 @@ export async function buildPublicWash(tid: string, washId: string): Promise<stri
       tx.get(db.collection(catalogCol.paymentProofs(tid)).where("washId", "==", washId).limit(30)),
       membershipId ? tx.get(db.doc(`${carwashCol.memberships(tid)}/${membershipId}`)) : Promise.resolve(null),
       hasPhotos ? tx.get(db.collection(carwashCol.washPhotos(tid, washId)).limit(40)) : Promise.resolve(null),
+      customerCouponsAvailable(tid, "carwash", tx),
     ]);
     // Fotos de ingreso y salida (antes/después): mismas URLs con token que usa el portal del taller
     const grouped = groupWashPhotos(
@@ -123,6 +125,8 @@ export async function buildPublicWash(tid: string, washId: string): Promise<stri
       banks: bankList(s),
       proof: latestProof(proofs.docs),
       photos,
+      coupon: w.get("coupon") ? { code: String(w.get("coupon.code")), name: String(w.get("coupon.name") ?? ""), discount: Number(w.get("coupon.discount") ?? 0) } : null,
+      couponsAvailable,
       active: !expired,
       updatedAt: FieldValue.serverTimestamp(),
     };

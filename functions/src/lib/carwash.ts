@@ -2,8 +2,10 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp, type DocumentReference, type DocumentSnapshot, type Transaction } from "firebase-admin/firestore";
 import {
   applyLoyaltyWash, carwashCol, isPlaceholderPlate, carwashSettingsFrom, catalogCol, col, computeWashCharge, loyaltyWelcomeFor, VEHICLE_SIZE_SHORT,
-  type CarwashService, type CarwashSettings, type PaymentMethod, type Role, type Totals, type VehicleSize, type WashItem,
+  couponAmount,
+  type AppliedCoupon, type CarwashService, type CarwashSettings, type PaymentMethod, type Role, type Totals, type VehicleSize, type WashItem,
 } from "@rapifix/shared";
+import { markRedemptionUsed, readRedemption, releaseRedemption } from "./coupons";
 import { db } from "./admin";
 import { pad, readCounter } from "./counters";
 import { paymentExtras } from "./paymentExtras";
@@ -108,6 +110,8 @@ export interface WashChargeRead {
   loyalty: DocumentSnapshot | null;
   saleCounter: { ref: DocumentReference; next: number };
   payCounter: { ref: DocumentReference; next: number };
+  /** canje del cupón del lavado (si tiene) */
+  couponR: DocumentSnapshot | null;
 }
 
 /** Lecturas del cobro (el lavado puede no existir: el que llama decide qué hacer). */
@@ -120,7 +124,9 @@ export async function readWashCharge(tx: Transaction, tid: string, washId: strin
   const loyalty = loyaltyRef ? await tx.get(loyaltyRef) : null;
   const saleCounter = await readCounter(tx, tid, "sales");
   const payCounter = await readCounter(tx, tid, "payments");
-  return { tid, ref, wash, loyaltyRef, loyalty, saleCounter, payCounter };
+  const coupon = wash.exists ? (wash.get("coupon") as AppliedCoupon | null | undefined) : null;
+  const couponR = await readRedemption(tx, tid, coupon?.redemptionId);
+  return { tid, ref, wash, loyaltyRef, loyalty, saleCounter, payCounter, couponR };
 }
 
 export interface WashChargeResult {
@@ -153,11 +159,17 @@ export function writeWashCharge(
   const plate = String(w.get("plate"));
   const items = (w.get("items") as WashItem[]) ?? [];
   const gross = items.reduce((a, i) => a + i.price, 0);
-  if (args.discount > gross) throw new HttpsError("invalid-argument", "El descuento es mayor que el total.");
+  // Cupón del lavado (reservado al aplicarlo): se recalcula con las líneas y aquí queda usado
+  const rawCoupon = (w.get("coupon") as AppliedCoupon | null | undefined) ?? null;
+  const couponOk = !!rawCoupon && !!r.couponR && r.couponR.get("status") !== "released";
+  const couponCalc = couponOk ? couponAmount(rawCoupon!, items.filter((i) => i.price > 0).map((i) => ({ kind: "services" as const, amount: i.price }))) : null;
+  const couponDiscount = couponCalc?.ok ? couponCalc.discount : 0;
+  if (args.discount > gross - couponDiscount) throw new HttpsError("invalid-argument", couponDiscount ? "El descuento más el cupón es mayor que el total." : "El descuento es mayor que el total.");
   // Se respeta el modo de ISV con que se registró el lavado
   const taxMode = (w.get("taxMode") as CarwashSettings["taxMode"]) ?? cfg.cw.taxMode;
   const taxRate = Number(w.get("taxRate") ?? cfg.taxRate);
-  const charge = computeWashCharge(items.map((i) => i.price), taxRate, taxMode, args.discount);
+  const charge = computeWashCharge(items.map((i) => i.price), taxRate, taxMode, args.discount, couponDiscount);
+  const coupon: AppliedCoupon | null = couponDiscount > 0 ? { ...rawCoupon!, discount: couponDiscount } : null;
   const total = charge.totals.total;
   if (total <= 0) throw new HttpsError("failed-precondition", "El total es 0: no hay nada que cobrar.");
   const paidTotal = args.payments.reduce((a, p) => a + p.amount, 0);
@@ -186,8 +198,14 @@ export function writeWashCharge(
       unitPrice: charge.lines[i]!.unitPrice, discount: charge.lines[i]!.discount, taxable: charge.lines[i]!.taxable, lineTotal: charge.lines[i]!.lineTotal,
     })),
     taxRate, totals: charge.totals, payments: args.payments, washId: r.ref.id,
-    extra: { washCode: w.get("code") },
+    extra: { washCode: w.get("code"), ...(coupon ? { coupon } : {}) },
   });
+  if (coupon) {
+    markRedemptionUsed(tx, r.tid, r.couponR, { discount: coupon.discount, total, extra: { saleId: sale.saleId, saleCode: sale.code } });
+  } else if (rawCoupon && r.couponR) {
+    // El cupón ya no cumplía sus condiciones al cobrar: se libera
+    releaseRedemption(tx, r.tid, r.couponR, "El lavado ya no cumplía las condiciones del cupón al cobrar");
+  }
   if (loyaltyAfter && r.loyaltyRef) {
     const patch: Record<string, unknown> = { count: loyaltyAfter.count, rewardsAvailable: loyaltyAfter.rewardsAvailable, lastWashAt: FieldValue.serverTimestamp() };
     // Tarjeta nueva: sus sellos de regalo quedan aplicados (una sola vez)
@@ -202,7 +220,7 @@ export function writeWashCharge(
   }
   tx.update(r.ref, {
     paid: fullyPaid, paidAt: fullyPaid ? FieldValue.serverTimestamp() : null, saleId: sale.saleId, saleCode: sale.code,
-    discount: args.discount, totals: charge.totals, total,
+    discount: args.discount, totals: charge.totals, total, coupon,
     loyaltyCounted: !!loyaltyAfter,
     loyaltyStamps: loyaltyAfter ? loyaltyAfter.count : r.loyaltyRef ? Number(loyalty?.get("count") ?? 0) : null,
     loyaltyEvery: every,

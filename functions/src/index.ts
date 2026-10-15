@@ -51,3 +51,6 @@ export { waWorker } from "./public/waWorker";
 // Empresas con flota, referidos y comisiones
 export { saveCompany, assignVehicleToCompany, saveReferrer, setReferral, registerCompanyPayment, payCommissions, voidCommission } from "./callable/companies";
 export { onWorkOrderCompanyWritten, onSaleCreatedCompany } from "./triggers/companies";
+// Cupones / códigos de descuento (taller, carwash y punto de venta)
+export { saveCoupon, applyCoupon, removeCoupon, checkSaleCoupon } from "./callable/coupons";
+export { applyCouponPublic, removeCouponPublic } from "./public/coupons";

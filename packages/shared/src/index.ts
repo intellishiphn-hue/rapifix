@@ -19,3 +19,4 @@ export * from "./waAuto";
 export * from "./orderHistory";
 export * from "./orderFinance";
 export * from "./companies";
+export * from "./coupons";

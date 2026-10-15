@@ -3,6 +3,7 @@ import type { BaseDoc, TimestampLike } from "./types";
 import type { WorkOrderStatus } from "./workOrderStatus";
 import type { PublicProof } from "./catalog";
 import type { OdometerUnit } from "./odometer";
+import { couponAmount, couponLineEligible, distributeDiscount, quoteTypeToCouponKind, type AppliedCoupon, type CouponRule, type PublicCoupon } from "./coupons";
 
 export const QUOTE_ITEM_TYPES = ["labor", "part", "service", "other"] as const;
 export type QuoteItemType = (typeof QUOTE_ITEM_TYPES)[number];
@@ -38,13 +39,19 @@ export interface QuoteItem {
   unitCost: number; // costo interno (no se muestra al cliente)
   unitPrice: number;
   discount: number; // descuento de la línea en centavos
+  /** parte del descuento del cupón que le toca a esta línea (ya restada de lineTotal) */
+  couponDiscount?: number;
   taxable: boolean;
+  /** total de la línea sin ISV, después del descuento y del cupón */
   lineTotal: number;
 }
 
 export interface Totals {
   subtotal: number; // suma de líneas antes de descuento
+  /** descuento total: el de las líneas + el del cupón */
   discount: number;
+  /** parte de `discount` que viene del cupón (solo si hay cupón) */
+  couponDiscount?: number;
   tax: number;
   total: number;
 }
@@ -98,6 +105,10 @@ export interface Quote extends BaseDoc {
   viewedAt: TimestampLike | null;
   decision: QuoteDecision | null;
   questions: Array<{ at: TimestampLike; text: string; name: string }>;
+  /** cupón aplicado (uno solo); su descuento ya está en items[].couponDiscount y totals */
+  coupon?: AppliedCoupon | null;
+  /** el cupón se quitó solo porque la cotización ya no cumple sus condiciones */
+  couponNotice?: string | null;
   // ----- Modificación de una cotización ya aprobada -----
   /** id de la cotización aprobada que esta versión modifica (si es una modificación) */
   revisionOf?: string | null;
@@ -122,6 +133,7 @@ export function quoteStatusLabel(q: Pick<Quote, "status" | "discardedAt">): stri
 
 // ---------- Comparación entre la cotización aprobada y su modificación ----------
 export type DiffItem = Pick<QuoteItem, "id" | "type" | "description" | "qty" | "unitPrice" | "discount" | "lineTotal"> & {
+  couponDiscount?: number;
   productId?: string | null;
   serviceId?: string | null;
   taxable?: boolean;
@@ -162,17 +174,21 @@ export function diffQuotes(
     if (fields.length || before.lineTotal !== after.lineTotal) changed.push({ before, after, fields });
     else unchanged++;
   };
-  const nextById = new Map(next.items.map((it) => [it.id, it]));
+  // Las líneas se comparan sin el cupón (el cupón se reparte entre líneas; su efecto está en los totales)
+  const plain = (it: DiffItem): DiffItem => (it.couponDiscount ? { ...it, lineTotal: lineBeforeCoupon(it), couponDiscount: 0 } : it);
+  const prevItems = prev.items.map(plain);
+  const nextItems = next.items.map(plain);
+  const nextById = new Map(nextItems.map((it) => [it.id, it]));
   const usedNext = new Set<string>();
   const restPrev: DiffItem[] = [];
-  for (const it of prev.items) {
+  for (const it of prevItems) {
     const match = nextById.get(it.id);
     if (match && !usedNext.has(match.id)) {
       usedNext.add(match.id);
       pair(it, match);
     } else restPrev.push(it);
   }
-  const restNext = next.items.filter((it) => !usedNext.has(it.id));
+  const restNext = nextItems.filter((it) => !usedNext.has(it.id));
   const removed: DiffItem[] = [];
   for (const it of restPrev) {
     const i = restNext.findIndex((n) => diffKey(n) === diffKey(it));
@@ -242,23 +258,55 @@ export function consumedByItem(consumed: Record<string, { qty: number }> | null 
   return out;
 }
 
-/** Calcula el total de cada línea y de la cotización. ISV sobre la base con descuento. */
-export function computeQuote(items: Array<Omit<QuoteItem, "lineTotal">>, taxRate: number): { items: QuoteItem[]; totals: Totals } {
+/**
+ * Calcula el total de cada línea y de la cotización. ISV sobre la base con descuento.
+ * Con `coupon`, su descuento se resta ANTES del ISV, repartido en proporción entre las líneas elegibles
+ * (así el ISV y la utilidad por tipo de línea quedan bien). Si el cupón ya no cumple sus condiciones
+ * (compra mínima, líneas elegibles), no descuenta nada y `couponIssue` dice por qué.
+ */
+export function computeQuote(
+  items: Array<Omit<QuoteItem, "lineTotal" | "couponDiscount"> & { couponDiscount?: number }>,
+  taxRate: number,
+  coupon?: CouponRule | null,
+): { items: QuoteItem[]; totals: Totals; couponIssue?: string | null } {
   let subtotal = 0;
   let discount = 0;
   let taxable = 0;
-  const out = items.map((it) => {
+  const nets = items.map((it) => {
     const gross = Math.round(it.qty * it.unitPrice);
     const disc = Math.min(Math.max(0, Math.round(it.discount)), gross);
-    const lineTotal = gross - disc;
+    return { gross, disc, net: gross - disc };
+  });
+  let shares: number[] = items.map(() => 0);
+  let couponDiscount = 0;
+  let couponIssue: string | null = null;
+  if (coupon) {
+    const lines = items.map((it, i) => ({ kind: quoteTypeToCouponKind(it.type), amount: nets[i]!.net }));
+    const r = couponAmount(coupon, lines);
+    if (r.ok) {
+      shares = distributeDiscount(lines.map((l) => l.amount), lines.map((l) => couponLineEligible(coupon.appliesTo, l.kind)), r.discount);
+      couponDiscount = shares.reduce((a, b) => a + b, 0);
+    } else couponIssue = r.reason;
+  }
+  const out = items.map((raw, i) => {
+    const { couponDiscount: _old, ...it } = raw;
+    const { gross, disc, net } = nets[i]!;
+    const share = shares[i] ?? 0;
+    const lineTotal = net - share;
     subtotal += gross;
-    discount += disc;
+    discount += disc + share;
     if (it.taxable) taxable += lineTotal;
-    return { ...it, discount: disc, lineTotal };
+    return coupon ? { ...it, discount: disc, couponDiscount: share, lineTotal } : { ...it, discount: disc, lineTotal };
   });
   const tax = Math.round((taxable * taxRate) / 100);
-  return { items: out, totals: { subtotal, discount, tax, total: subtotal - discount + tax } };
+  const totals: Totals = coupon
+    ? { subtotal, discount, couponDiscount, tax, total: subtotal - discount + tax }
+    : { subtotal, discount, tax, total: subtotal - discount + tax };
+  return coupon ? { items: out, totals, couponIssue } : { items: out, totals };
 }
+
+/** Total de la línea antes del cupón (lo que se muestra en la línea; el cupón va aparte). */
+export const lineBeforeCoupon = (it: { lineTotal: number; couponDiscount?: number | null }) => it.lineTotal + (it.couponDiscount ?? 0);
 
 // ---------- Validaciones ----------
 const cents = z.number().int().min(0).max(100_000_000_00);
@@ -375,6 +423,8 @@ export interface PublicPortal {
     notes: string;
     validUntil: TimestampLike | null;
     decidedAt: TimestampLike | null;
+    /** cupón aplicado (el descuento ya está en totals) */
+    coupon?: PublicCoupon | null;
   } | null;
   /**
    * Actualización de una cotización ya aprobada, pendiente de respuesta del cliente.
@@ -397,5 +447,7 @@ export interface PublicPortal {
   banks?: string[];
   /** último comprobante de pago enviado por el cliente */
   proof?: PublicProof | null;
+  /** hay cupones que el cliente puede escribir en su link (muestra "¿Tiene un cupón?") */
+  couponsAvailable?: boolean;
   updatedAt: TimestampLike;
 }

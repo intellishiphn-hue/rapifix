@@ -6,7 +6,8 @@ import { useAuth } from "@/lib/auth/useAuth";
 
 const quotesCol = () => collection(db, quoteCol.quotes(TENANT_ID));
 
-export const saveQuote = callable<SaveQuoteInput, { quoteId: string }>("saveQuote");
+/** couponNotice: el cupón se quitó porque la cotización ya no cumple sus condiciones */
+export const saveQuote = callable<SaveQuoteInput, { quoteId: string; couponNotice?: string | null }>("saveQuote");
 export const sendQuote = callable<{ quoteId: string }, { orderId: string | null; token: string | null }>("sendQuote");
 /** Con `reason` sobre una cotización aprobada abre una modificación (o devuelve la que ya está abierta: `existing`). */
 export const newQuoteVersion = callable<{ quoteId: string; reason?: string }, { quoteId: string; existing?: boolean }>("newQuoteVersion");

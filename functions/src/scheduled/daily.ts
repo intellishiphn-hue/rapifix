@@ -7,6 +7,7 @@ import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { computeFields, generateMaintenanceFromOrder, maintenanceDefaults } from "../lib/maintenance";
 import { buildPortal, buildQuotePortal } from "../lib/portal";
+import { releaseQuoteCoupon } from "../lib/quoteCoupons";
 
 /** Al pasar una orden a Entregado, programa los mantenimientos de sus servicios. */
 export const onOrderDelivered = onDocumentUpdated({ document: "tenants/{tid}/workOrders/{orderId}", region: REGION }, async (event) => {
@@ -31,6 +32,8 @@ export const dailyMaintenance = onSchedule({ region: REGION, schedule: "0 6 * * 
     const expiredQuotes = await db.collection(quoteCol.quotes(tid)).where("status", "in", ["sent", "viewed"]).where("validUntil", "<", Timestamp.now()).get();
     for (const q of expiredQuotes.docs) {
       await q.ref.update({ status: "expired", updatedAt: FieldValue.serverTimestamp(), updatedBy: "system" });
+      // Cupón reservado de la cotización vencida: se libera (el heredado de una aprobada sigue usado)
+      if (q.get("coupon")) await releaseQuoteCoupon(tid, q.id, "La cotización venció").catch((e) => logger.warn("No se liberó el cupón", { quoteId: q.id, e: String(e) }));
       if (q.get("orderId")) await buildPortal(tid, q.get("orderId"));
       else await buildQuotePortal(tid, q.id);
     }

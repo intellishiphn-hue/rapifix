@@ -3,6 +3,7 @@ import type { BaseDoc, TimestampLike } from "./types";
 import { computeQuote, type Totals } from "./quote";
 import { createSaleSchema, type PublicProof } from "./catalog";
 import { buildSearchKeywords } from "./text";
+import { distributeDiscount, type AppliedCoupon, type PublicCoupon } from "./coupons";
 
 // ============================================================================
 // CARWASH: tamaños, menú de lavados, cola, lealtad y membresías.
@@ -130,6 +131,10 @@ export interface Wash {
   deliveredUnpaid?: boolean;
   /** token del link público del lavado (/lavado/:token): ver, pagar con tarjeta o subir comprobante */
   payToken?: string | null;
+  /** cupón aplicado (uno solo): su descuento ya está en total y totals */
+  coupon?: AppliedCoupon | null;
+  /** el cupón se quitó solo porque el lavado ya no cumple sus condiciones */
+  couponNotice?: string | null;
   notes: string;
   cancelReason: string;
   /** fotos del lavado (las mantiene el servidor al subir o borrar fotos) */
@@ -448,27 +453,35 @@ export interface ChargeLine {
  * - included: el precio ya incluye ISV; se separa la base para que el total sea exactamente el precio.
  * - exempt: sin ISV.
  * El descuento (monto final, con ISV si aplica) se reparte empezando por la primera línea.
+ * El cupón (`couponDiscount`, también sobre el precio que ve el cliente) se reparte en proporción
+ * entre las líneas que se cobran y se aplica antes del descuento manual. En `totals.couponDiscount`
+ * queda su parte sin ISV (misma unidad que `totals.discount`).
  */
 export function computeWashCharge(
   prices: number[],
   taxRate: number,
   taxMode: CarwashTaxMode,
   discount = 0,
+  couponDiscount = 0,
 ): { lines: ChargeLine[]; totals: Totals } {
   const gross = prices.map((p) => Math.max(0, Math.round(p)));
+  const coupon = distributeDiscount(gross, gross.map((g) => g > 0), couponDiscount);
   let left = Math.max(0, Math.round(discount));
-  const shares = gross.map((g) => {
-    const s = Math.min(g, left);
+  const shares = gross.map((g, i) => {
+    const s = Math.min(g - coupon[i]!, left);
     left -= s;
-    return s;
+    return s + coupon[i]!;
   });
+  const couponTotal = coupon.reduce((a, b) => a + b, 0);
+  const withCoupon = (r: { lines: ChargeLine[]; totals: Totals }, couponBase: number) =>
+    couponTotal > 0 ? { lines: r.lines, totals: { ...r.totals, couponDiscount: Math.min(couponBase, r.totals.discount) } } : r;
   const taxable = taxMode !== "exempt" && taxRate > 0;
   const run = (unit: number[], disc: number[]) =>
     computeQuote(unit.map((u, i) => ({ id: String(i), type: "other" as const, description: "", qty: 1, unitCost: 0, unitPrice: u, discount: disc[i] ?? 0, taxable })), taxable ? taxRate : 0);
 
   if (taxMode !== "included" || !taxable) {
     const r = run(gross, shares);
-    return { lines: r.items.map((i) => ({ unitPrice: i.unitPrice, discount: i.discount, taxable, lineTotal: i.lineTotal })), totals: r.totals };
+    return withCoupon({ lines: r.items.map((i) => ({ unitPrice: i.unitPrice, discount: i.discount, taxable, lineTotal: i.lineTotal })), totals: r.totals }, couponTotal);
   }
 
   const k = 100 / (100 + taxRate);
@@ -490,7 +503,9 @@ export function computeWashCharge(
     const net = r.totals.subtotal - r.totals.discount;
     r = { ...r, totals: { ...r.totals, tax: target - net, total: target } };
   }
-  return { lines: r.items.map((i) => ({ unitPrice: i.unitPrice, discount: i.discount, taxable, lineTotal: i.lineTotal })), totals: r.totals };
+  // Parte del cupón sin ISV: lo que baja la base por el cupón
+  const couponBase = gross.reduce((a, g, i) => a + Math.max(0, Math.round(g * k) - Math.round((g - coupon[i]!) * k)), 0);
+  return withCoupon({ lines: r.items.map((i) => ({ unitPrice: i.unitPrice, discount: i.discount, taxable, lineTotal: i.lineTotal })), totals: r.totals }, couponBase);
 }
 
 /** Total sin ISV (ingreso real del carwash). */
@@ -898,6 +913,10 @@ export interface PublicWash {
   proof: PublicProof | null;
   /** fotos de ingreso y salida (antes/después); ausente en páginas armadas antes de esta función */
   photos?: Record<WashPhotoStage, Array<{ url: string }>>;
+  /** cupón aplicado (el descuento ya está en total) */
+  coupon?: PublicCoupon | null;
+  /** hay cupones que el cliente puede escribir (muestra "¿Tiene un cupón?" mientras no esté pagado) */
+  couponsAvailable?: boolean;
   active: boolean;
   updatedAt: TimestampLike;
 }

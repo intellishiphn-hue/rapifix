@@ -7,6 +7,7 @@ import {
   saveCarwashPlanSchema, saveCarwashServiceSchema, saveWashSchema, sellMembershipSchema, setWashStatusSchema,
   type AdjustLoyaltyStampsResult, type LoyaltyAdjustment, type WashPayLinkResult,
   washCommissionTotal, assignWasherSchema, carwashVehicleData, hnDayKey, isPendingVehicle, isPlaceholderPlate, applyLoyaltyWash, loyaltyWelcomeFor, fixWashPlateSchema, VEHICLE_SIZE_SHORT, type FixWashPlateResult, linkWashCustomerSchema, pickVehicleForPlate, washPlate,
+  couponAmount, type AppliedCoupon,
   type CarwashLookupResult, type LinkWashCustomerResult, type SaveWashResult, type CarwashMembership, type MembershipStatus, type VehicleSize, type WashItem, type WashStatus,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
@@ -16,6 +17,7 @@ import { actorName } from "../lib/actors";
 import { pad, readCounter } from "../lib/counters";
 import { secureToken } from "../lib/token";
 import { buildPublicWash, rebuildPlatePublicWashes } from "../lib/publicWash";
+import { readRedemption, releaseRedemption, touchReservation } from "../lib/coupons";
 import { CARWASH_MANAGERS, CARWASH_STAFF, CASHIERS, loadCarwashConfig, loadCarwashServices, readWashCharge, toMs, writeCarwashSale, writeWashCharge } from "../lib/carwash";
 
 const bad = (msg: string) => new HttpsError("failed-precondition", msg);
@@ -314,6 +316,9 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
     const prevMembershipSnap = prevMembershipId ? await tx.get(db.doc(`${carwashCol.memberships(tid)}/${prevMembershipId}`)) : null;
     const found = input.useMembership && !keepMembership ? await activeMembershipFor(tid, input.plate, now, tx) : null;
     const counter = prev ? null : await readCounter(tx, tid, "washes");
+    // Cupón ya aplicado al lavado (se recalcula con los servicios nuevos)
+    const prevCoupon = prev ? ((prev.get("coupon") as AppliedCoupon | null | undefined) ?? null) : null;
+    const couponR = await readRedemption(tx, tid, prevCoupon?.redemptionId);
 
     // Vehículo del taller: se revisa otra vez la placa dentro de la transacción para no duplicarla
     let wCustomerId = customerId;
@@ -369,7 +374,10 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
     } catch (err) {
       throw new HttpsError("invalid-argument", (err as Error).message);
     }
-    const charge = computeWashCharge(items.map((i) => i.price), cfg.taxRate, cfg.cw.taxMode, 0);
+    const couponCalc = prevCoupon ? couponAmount(prevCoupon, items.filter((i) => i.price > 0).map((i) => ({ kind: "services" as const, amount: i.price }))) : null;
+    const couponLive = !!prevCoupon && !!couponR && couponR.get("status") !== "released";
+    const couponDiscount = couponLive && couponCalc?.ok ? couponCalc.discount : 0;
+    const charge = computeWashCharge(items.map((i) => i.price), cfg.taxRate, cfg.cw.taxMode, 0, couponDiscount);
     const total = charge.totals.total;
     const commission = washCommissionTotal(items);
 
@@ -384,6 +392,17 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
     }
 
     // ---------- escrituras ----------
+    let couponPatch: Record<string, unknown> = {};
+    if (prevCoupon) {
+      if (couponDiscount > 0) {
+        couponPatch = { coupon: { ...prevCoupon, discount: couponDiscount }, couponNotice: null };
+        touchReservation(tx, couponR, { discount: couponDiscount, total });
+      } else {
+        // Ya no cumple (compra mínima o nada que cobrar): se quita y se libera
+        if (couponLive) releaseRedemption(tx, tid, couponR, `El lavado ya no cumple las condiciones: ${couponCalc?.reason ?? ""}`);
+        couponPatch = { coupon: null, couponNotice: `Se quitó el cupón ${prevCoupon.code}: ${couponCalc?.reason ?? "ya no aplica."}` };
+      }
+    }
     if (newCustomerRef) {
       const [firstName, ...rest] = customerName.split(/\s+/);
       tx.set(newCustomerRef, {
@@ -446,7 +465,7 @@ export const saveWash = onCall({ region: REGION }, async (request): Promise<Save
     };
     const linkResult = { customerId: wCustomerId, vehicleId: wVehicleId, vehicleCreated: !!newVehicleRef };
     if (prev) {
-      tx.update(washRef, common);
+      tx.update(washRef, { ...common, ...couponPatch });
       return { washId: washRef.id, code: String(prev.get("code")), total, paid: total === 0, ...linkResult };
     }
     const code = `LAV-${pad(counter!.next)}`;
@@ -715,6 +734,8 @@ export const cancelWash = onCall({ region: REGION }, async (request) => {
     if (w.get("saleId")) throw bad("El lavado ya fue cobrado. Anule primero la venta en Pagos.");
     const mid = w.get("membershipId") as string | null;
     const m = mid ? await tx.get(db.doc(`${carwashCol.memberships(tid)}/${mid}`)) : null;
+    const couponR = await readRedemption(tx, tid, (w.get("coupon") as AppliedCoupon | null | undefined)?.redemptionId);
+    releaseRedemption(tx, tid, couponR, `Lavado cancelado: ${input.reason}`);
     if (w.get("loyaltyRedeemed")) {
       tx.set(db.doc(`${carwashCol.loyalty(tid)}/${w.get("plate")}`), { rewardsAvailable: FieldValue.increment(1), rewardsUsed: FieldValue.increment(-1) }, { merge: true });
     }

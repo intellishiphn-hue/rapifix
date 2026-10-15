@@ -52,6 +52,9 @@ const SERVER_ONLY = [
   "referrers",
   "commissions",
   "commissionPayouts",
+  "coupons",
+  "couponRedemptions",
+  "couponUsage",
 ] as const;
 
 beforeAll(async () => {
@@ -495,6 +498,18 @@ describe("lecturas restringidas por rol", () => {
     for (const c of ["referrers", "commissions", "commissionPayouts"]) await canRead(`${T}/${c}/x1`, ["admin", "manager"]);
     await assertFails(db("reception").collection(`${T}/commissions`).where("status", "==", "pending").get());
     await assertSucceeds(db("manager").collection(`${T}/commissions`).where("status", "==", "pending").get());
+  });
+
+  it("cupones y canjes: solo admin y gerente; el índice de usos por cliente: nadie", async () => {
+    await canRead(`${T}/coupons/PROMO10`, ["admin", "manager"]);
+    await canRead(`${T}/couponRedemptions/r1`, ["admin", "manager"]);
+    await canRead(`${T}/couponUsage/PROMO10__c:c1`, []);
+    await assertSucceeds(db("manager").collection(`${T}/coupons`).orderBy("code").limit(50).get());
+    await assertSucceeds(db("admin").collection(`${T}/couponRedemptions`).where("couponCode", "==", "PROMO10").get());
+    await assertFails(db("reception").collection(`${T}/coupons`).where("active", "==", true).get());
+    await assertFails(db("seller").collection(`${T}/couponRedemptions`).limit(5).get());
+    await assertFails(anon().doc(`${T}/coupons/PROMO10`).get());
+    await assertFails(otherTenantAdmin().doc(`${T}/coupons/PROMO10`).get());
   });
 
   it("meta: nadie", async () => {

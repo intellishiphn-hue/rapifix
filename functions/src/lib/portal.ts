@@ -1,10 +1,11 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  catalogCol, col, diffQuotes, orderCol, PORTAL_STEPS, publicDiff, quoteCol, RECEPTION_CHECKLIST, STATUS_META,
+  catalogCol, col, diffQuotes, lineBeforeCoupon, orderCol, PORTAL_STEPS, publicDiff, quoteCol, RECEPTION_CHECKLIST, STATUS_META,
   type PublicPortal, type Quote, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "./admin";
 import { bankList, latestProof } from "./publicWash";
+import { customerCouponsAvailable } from "./coupons";
 
 const PERCENT: Record<WorkOrderStatus, number> = {
   RECEIVED: 10, INSPECTION: 20, DIAGNOSIS: 35, AWAITING_QUOTE: 40, QUOTE_SENT: 50, AWAITING_APPROVAL: 50,
@@ -15,12 +16,14 @@ const publicQuote = (q: Quote): NonNullable<PublicPortal["quote"]> => ({
   id: q.id,
   code: q.code,
   status: q.status,
-  items: q.items.map((it) => ({ type: it.type, description: it.description, qty: it.qty, unitPrice: it.unitPrice, discount: it.discount, lineTotal: it.lineTotal })),
+  // La línea se muestra sin el cupón; el cupón va aparte en los totales
+  items: q.items.map((it) => ({ type: it.type, description: it.description, qty: it.qty, unitPrice: it.unitPrice, discount: it.discount, lineTotal: lineBeforeCoupon(it) })),
   totals: q.totals,
   taxRate: q.taxRate,
   notes: q.notes,
   validUntil: q.validUntil,
   decidedAt: q.decision?.at ?? null,
+  coupon: q.coupon ? { code: q.coupon.code, name: q.coupon.name, discount: q.coupon.discount } : null,
 });
 
 /**
@@ -49,13 +52,14 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
   const token = o.portalToken as string | undefined;
   if (!token) return null;
 
-  const [settings, events, photos, quoteSnap, roki, proofs] = await Promise.all([
+  const [settings, events, photos, quoteSnap, roki, proofs, couponsAvailable] = await Promise.all([
     tx.get(db.doc(`${col.settings(tid)}/general`)),
     tx.get(orderSnap.ref.collection("events").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(30)),
     tx.get(orderSnap.ref.collection("photos").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(40)),
     o.activeQuoteId ? tx.get(db.doc(`${quoteCol.quotes(tid)}/${o.activeQuoteId}`)) : Promise.resolve(null),
     tx.get(db.doc(`${catalogCol.privateConfig(tid)}/roki`)),
     tx.get(db.collection(catalogCol.paymentProofs(tid)).where("orderId", "==", orderId).limit(30)),
+    customerCouponsAvailable(tid, "shop", tx),
   ]);
   const s = settings.data() ?? {};
   const onlineEnabled = !!roki.get("enabled") && !!roki.get("secretKey");
@@ -127,6 +131,7 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
     },
     banks: bankList(s),
     proof: latestProof(proofs.docs),
+    couponsAvailable,
     updatedAt: FieldValue.serverTimestamp(),
   };
   tx.set(db.doc(`${quoteCol.portal}/${token}`), portal);
@@ -162,9 +167,10 @@ export async function buildQuotePortal(tid: string, quoteId: string): Promise<st
       rev = asked;
     }
   }
-  const [settings, vehicle] = await Promise.all([
+  const [settings, vehicle, couponsAvailable] = await Promise.all([
     tx.get(db.doc(`${col.settings(tid)}/general`)),
     q.vehicleId ? tx.get(db.doc(`${col.vehicles(tid)}/${q.vehicleId}`)) : Promise.resolve(null),
+    customerCouponsAvailable(tid, "shop", tx),
   ]);
   const v = vehicle?.data();
   const portal = {
@@ -189,6 +195,7 @@ export async function buildQuotePortal(tid: string, quoteId: string): Promise<st
     quote: q.status === "draft" ? null : publicQuote(q),
     quoteUpdate: publicUpdate(q, rev),
     active: true,
+    couponsAvailable,
     updatedAt: FieldValue.serverTimestamp(),
   };
   tx.set(db.doc(`${quoteCol.portal}/${q.publicToken}`), portal);

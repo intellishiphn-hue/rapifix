@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, HelpCircle, Minus, PencilLine, Plus, Search, Trash2, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { CatalogPicker, type CatalogPick } from "@/features/catalog/CatalogPicker";
 import { fetchCost } from "@/features/catalog/api";
 import {
-  balanceAfter, consumedByItem, DECISION_CHANNEL_LABELS, diffQuotes, formatMoney, QUOTE_ITEM_LABELS, QUOTE_ITEM_TYPES, stockImpact, stockNoticeText,
+  balanceAfter, consumedByItem, lineBeforeCoupon, DECISION_CHANNEL_LABELS, diffQuotes, formatMoney, QUOTE_ITEM_LABELS, QUOTE_ITEM_TYPES, stockImpact, stockNoticeText,
   type DiffItem, type Quote, type QuoteItemInput, type QuoteItemType, type Totals,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
@@ -21,18 +21,21 @@ import { MoneyInput } from "./MoneyInput";
 
 export const blankLine = (type: QuoteItemType = "labor"): QuoteItemInput => ({ id: newId(), type, description: "", qty: 1, unitCost: 0, unitPrice: 0, discount: 0, taxable: true });
 
-export function TotalsBox({ totals, taxRate }: { totals: Totals; taxRate: number }) {
+export function TotalsBox({ totals, taxRate, couponCode }: { totals: Totals; taxRate: number; couponCode?: string | null }) {
+  const coupon = totals.couponDiscount ?? 0;
+  const lineDiscount = totals.discount - coupon;
   return (
     <dl className="ml-auto w-full max-w-xs space-y-1.5 text-sm">
       <div className="flex justify-between"><dt className="text-slate-500">Subtotal</dt><dd className="tabular">{formatMoney(totals.subtotal)}</dd></div>
-      {totals.discount > 0 && <div className="flex justify-between"><dt className="text-slate-500">Descuento</dt><dd className="tabular text-red-600">- {formatMoney(totals.discount)}</dd></div>}
+      {lineDiscount > 0 && <div className="flex justify-between"><dt className="text-slate-500">Descuento</dt><dd className="tabular text-red-600">- {formatMoney(lineDiscount)}</dd></div>}
+      {coupon > 0 && <div className="flex justify-between gap-3" data-testid="coupon-total"><dt className="flex min-w-0 items-center gap-1.5 text-slate-500">Cupón{couponCode ? <span className="truncate font-mono text-xs font-semibold text-emerald-700">{couponCode}</span> : null}</dt><dd className="tabular shrink-0 text-emerald-700">- {formatMoney(coupon)}</dd></div>}
       <div className="flex justify-between"><dt className="text-slate-500">ISV ({taxRate}%)</dt><dd className="tabular">{formatMoney(totals.tax)}</dd></div>
       <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-bold"><dt>Total</dt><dd className="tabular">{formatMoney(totals.total)}</dd></div>
     </dl>
   );
 }
 
-export function QuoteView({ quote, showCost }: { quote: Quote; showCost: boolean }) {
+export function QuoteView({ quote, showCost, couponSlot }: { quote: Quote; showCost: boolean; couponSlot?: ReactNode }) {
   const margin = quote.items.reduce((a, it) => a + it.lineTotal - Math.round(it.qty * it.unitCost), 0);
   return (
     <div className="space-y-4">
@@ -49,7 +52,7 @@ export function QuoteView({ quote, showCost }: { quote: Quote; showCost: boolean
                 <td className="tabular px-3 py-2 text-right">{it.qty}</td>
                 <td className="tabular px-3 py-2 text-right">{formatMoney(it.unitPrice)}</td>
                 <td className="tabular px-3 py-2 text-right">{it.discount ? formatMoney(it.discount) : ""}</td>
-                <td className="tabular px-3 py-2 text-right font-semibold">{formatMoney(it.lineTotal)}</td>
+                <td className="tabular px-3 py-2 text-right font-semibold">{formatMoney(lineBeforeCoupon(it))}</td>
               </tr>
             ))}
           </tbody>
@@ -59,8 +62,9 @@ export function QuoteView({ quote, showCost }: { quote: Quote; showCost: boolean
         <div className="flex-1 space-y-2 text-sm">
           {quote.notes && <p className="whitespace-pre-line rounded-xl bg-slate-50 p-3 text-slate-700">{quote.notes}</p>}
           {showCost && <p className="text-xs text-slate-500">Margen estimado (sin ISV): <b className="tabular text-slate-800">{formatMoney(margin)}</b></p>}
+          {couponSlot}
         </div>
-        <TotalsBox totals={quote.totals} taxRate={quote.taxRate} />
+        <TotalsBox totals={quote.totals} taxRate={quote.taxRate} couponCode={quote.coupon?.code} />
       </div>
     </div>
   );
@@ -68,11 +72,14 @@ export function QuoteView({ quote, showCost }: { quote: Quote; showCost: boolean
 
 /** Editor de líneas (controlado). */
 export function QuoteLinesEditor({
-  lines, onLines, preview, showCost, notes, onNotes, validDays, onValidDays, taxRate,
+  lines, onLines, preview, showCost, notes, onNotes, validDays, onValidDays, taxRate, couponSlot, couponCode,
 }: {
+  /** campo de cupón (debajo de las notas) */
+  couponSlot?: ReactNode;
+  couponCode?: string | null;
   lines: QuoteItemInput[];
   onLines: (l: QuoteItemInput[]) => void;
-  preview: { items: Array<{ lineTotal: number }>; totals: Totals } | null;
+  preview: { items: Array<{ lineTotal: number; couponDiscount?: number }>; totals: Totals } | null;
   showCost: boolean;
   notes: string;
   onNotes: (v: string) => void;
@@ -110,13 +117,13 @@ export function QuoteLinesEditor({
           <Field label={i === 0 ? "Precio" : ""} className="sm:col-span-2"><MoneyInput value={l.unitPrice} onChange={(v) => edit(l.id, { unitPrice: v })} /></Field>
           <Field label={i === 0 ? "Descuento" : ""} className="sm:col-span-2"><MoneyInput value={l.discount} onChange={(v) => edit(l.id, { discount: v })} /></Field>
           <div className="flex items-center justify-between gap-2 sm:col-span-1 sm:justify-end">
-            <span className="tabular text-sm font-semibold sm:hidden">{formatMoney(preview?.items[i]?.lineTotal ?? 0)}</span>
+            <span className="tabular text-sm font-semibold sm:hidden">{formatMoney(preview?.items[i] ? lineBeforeCoupon(preview.items[i]) : 0)}</span>
             <button type="button" onClick={() => onLines(lines.filter((x) => x.id !== l.id))} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Quitar línea"><Trash2 className="h-4 w-4" /></button>
           </div>
           <div className="col-span-2 flex flex-wrap items-center gap-4 text-xs text-slate-500 sm:col-span-12">
             <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={l.taxable} onChange={(e) => edit(l.id, { taxable: e.target.checked })} /> Aplica ISV</label>
             {showCost && <span className="inline-flex items-center gap-2">Costo interno <MoneyInput value={l.unitCost} onChange={(v) => edit(l.id, { unitCost: v })} className="w-28" /></span>}
-            <span className="tabular ml-auto hidden font-semibold text-slate-800 sm:inline">{formatMoney(preview?.items[i]?.lineTotal ?? 0)}</span>
+            <span className="tabular ml-auto hidden font-semibold text-slate-800 sm:inline">{formatMoney(preview?.items[i] ? lineBeforeCoupon(preview.items[i]) : 0)}</span>
           </div>
         </div>
       ))}
@@ -130,8 +137,9 @@ export function QuoteLinesEditor({
         <div className="space-y-3">
           <Field label="Notas para el cliente"><Textarea value={notes} onChange={(e) => onNotes(e.target.value)} rows={3} placeholder="Garantía, tiempo estimado, condiciones..." /></Field>
           <Field label="Vigencia (días)" className="max-w-[140px]"><Input type="number" min={1} max={90} value={validDays} onChange={(e) => onValidDays(Math.max(1, Math.min(90, Number(e.target.value) || 7)))} /></Field>
+          {couponSlot}
         </div>
-        {preview && <TotalsBox totals={preview.totals} taxRate={taxRate} />}
+        {preview && <TotalsBox totals={preview.totals} taxRate={taxRate} couponCode={couponCode} />}
       </div>
     </div>
   );

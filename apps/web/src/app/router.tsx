@@ -56,6 +56,8 @@ const CarwashConfigPage = page(() => import("@/features/carwash/CarwashConfigPag
 const CompaniesPage = page(() => import("@/features/companies/CompaniesPage"), "CompaniesPage");
 const CompanyDetailPage = page(() => import("@/features/companies/CompanyDetailPage"), "CompanyDetailPage");
 const CommissionsPage = page(() => import("@/features/commissions/CommissionsPage"), "CommissionsPage");
+const CouponsPage = page(() => import("@/features/coupons/CouponsPage"), "CouponsPage");
+const CouponDetailPage = page(() => import("@/features/coupons/CouponDetailPage"), "CouponDetailPage");
 const ReferrerDetailPage = page(() => import("@/features/commissions/ReferrerDetailPage"), "ReferrerDetailPage");
 const PrintStatementPage = page(() => import("@/features/print/CompanyPrints"), "PrintStatementPage");
 const PrintCommissionPage = page(() => import("@/features/print/CompanyPrints"), "PrintCommissionPage");
@@ -108,6 +110,8 @@ export const router = createBrowserRouter([
       { path: "clientes/:id", element: <RequirePermission permission="customers.read"><S><CustomerDetailPage /></S></RequirePermission> },
       { path: "empresas", element: <RequirePermission permission="companies.read"><S><CompaniesPage /></S></RequirePermission> },
       { path: "empresas/:id", element: <RequirePermission permission="companies.read"><S><CompanyDetailPage /></S></RequirePermission> },
+      { path: "cupones", element: <RequirePermission permission="coupons.manage"><S><CouponsPage /></S></RequirePermission> },
+      { path: "cupones/:code", element: <RequirePermission permission="coupons.manage"><S><CouponDetailPage /></S></RequirePermission> },
       { path: "comisiones", element: <RequirePermission permission="commissions.manage"><S><CommissionsPage /></S></RequirePermission> },
       { path: "referidos/:id", element: <RequirePermission permission="commissions.manage"><S><ReferrerDetailPage /></S></RequirePermission> },
       { path: "vehiculos", element: <RequirePermission permission="vehicles.read"><S><VehiclesPage /></S></RequirePermission> },

@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Minus, Package, Plus, Printer, Search, ShoppingCart, Trash2, Wrench, X } from "lucide-react";
 import {
-  computeQuote, formatMoney, PAYMENT_METHOD_LABELS, MANUAL_PAYMENT_METHODS, methodNeedsBank,
-  type Customer, type ManualPaymentMethod, type Product, type SaleItemKind, type Service,
+  computeQuote, formatMoney, lineBeforeCoupon, PAYMENT_METHOD_LABELS, MANUAL_PAYMENT_METHODS, methodNeedsBank,
+  type CouponRule, type Customer, type ManualPaymentMethod, type Product, type SaleItemKind, type Service,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
 import { useDebounced } from "@/lib/firestore/hooks";
@@ -21,6 +21,8 @@ import { MoneyInput } from "@/features/quotes/MoneyInput";
 import { searchCatalog } from "@/features/catalog/api";
 import { ReceiptUpload } from "@/features/payments/PaymentDetailFields";
 import { createSale } from "@/features/payments/api";
+import { checkSaleCoupon } from "@/features/coupons/api";
+import { CouponField } from "@/features/coupons/CouponField";
 
 interface CartLine { id: string; kind: SaleItemKind; refId: string | null; description: string; qty: number; unitPrice: number; discount: number; taxable: boolean; stock?: number }
 interface PayLine { id: string; method: ManualPaymentMethod; amount: number; reference: string; bank: string; receiptPath: string | null }
@@ -46,10 +48,23 @@ export function POSPage() {
     };
   }, [debounced]);
 
+  // Cupón (vista previa validada por el servidor; el uso real ocurre al cobrar, en createSale)
+  const [coupon, setCoupon] = useState<CouponRule | null>(null);
   const computed = useMemo(
-    () => computeQuote(cart.map((l) => ({ id: l.id, type: "other" as const, description: l.description, qty: l.qty, unitCost: 0, unitPrice: l.unitPrice, discount: l.discount, taxable: l.taxable })), settings.taxRate),
-    [cart, settings.taxRate],
+    () => computeQuote(cart.map((l) => ({ id: l.id, type: l.kind === "product" ? "part" as const : l.kind === "service" ? "service" as const : "other" as const, description: l.description, qty: l.qty, unitCost: 0, unitPrice: l.unitPrice, discount: l.discount, taxable: l.taxable })), settings.taxRate, coupon),
+    [cart, settings.taxRate, coupon],
   );
+  const applySaleCoupon = async (code: string) => {
+    if (!cart.length) throw new Error("Agregue productos o servicios antes del cupón.");
+    const base = computeQuote(cart.map((l) => ({ id: l.id, type: "other" as const, description: l.description, qty: l.qty, unitCost: 0, unitPrice: l.unitPrice, discount: l.discount, taxable: l.taxable })), settings.taxRate);
+    const r = await checkSaleCoupon({
+      code, ...(customer ? { customerId: customer.id } : {}),
+      lines: cart.map((l, i) => ({ kind: l.kind, amount: base.items[i]?.lineTotal ?? 0 })),
+    });
+    if (!r.ok || !r.rule) throw new Error(r.reason ?? "Este cupón no aplica.");
+    setCoupon(r.rule);
+    toast.success(`Cupón ${r.rule.code} aplicado: − ${formatMoney(r.discount)}`);
+  };
   const total = computed.totals.total;
   const paid = payments.reduce((a, p) => a + p.amount, 0);
 
@@ -83,6 +98,7 @@ export function POSPage() {
     setReceived(0);
     setPayTouched(false);
     setDone(null);
+    setCoupon(null);
   };
 
   const charge = async () => {
@@ -90,6 +106,7 @@ export function POSPage() {
     if (cart.some((l) => !l.description.trim() || !(l.qty > 0))) return toast.error("Revise las líneas: descripción y cantidad");
     const over = cart.find((l) => l.kind === "product" && l.stock !== undefined && l.qty > l.stock);
     if (over) return toast.error(`No hay suficiente existencia de ${over.description} (hay ${over.stock})`);
+    if (coupon && computed.couponIssue) return toast.error(`El cupón ${coupon.code} ya no aplica: ${computed.couponIssue} Quítelo para cobrar.`);
     if (paid > total) return toast.error("Los pagos superan el total");
     if (paid < total && !customer) return toast.error("Para dejar saldo pendiente, seleccione el cliente");
     const missingBank = payments.find((p) => p.amount > 0 && methodNeedsBank(p.method) && !p.bank.trim());
@@ -98,6 +115,7 @@ export function POSPage() {
     try {
       const r = await createSale({
         customerId: customer?.id ?? null,
+        ...(coupon ? { couponCode: coupon.code } : {}),
         items: cart.map(({ stock: _s, ...l }) => ({ ...l, description: l.description.trim() })),
         payments: payments.filter((p) => p.amount > 0).map((p) => {
           const cash = p.method === "cash";
@@ -174,16 +192,25 @@ export function POSPage() {
                       </div>
                       <label className="text-[11px] text-slate-500">Precio<MoneyInput value={l.unitPrice} onChange={(v) => edit(l.id, { unitPrice: v })} className="w-28" placeholder="0.00" /></label>
                       <label className="text-[11px] text-slate-500">Descuento<MoneyInput value={l.discount} onChange={(v) => edit(l.id, { discount: v })} className="w-24" placeholder="0.00" /></label>
-                      <span className="tabular ml-auto font-semibold">{formatMoney(computed.items[i]?.lineTotal ?? 0)}</span>
+                      <span className="tabular ml-auto font-semibold">{formatMoney(computed.items[i] ? lineBeforeCoupon(computed.items[i]) : 0)}</span>
                     </div>
                     {l.stock !== undefined && l.qty > l.stock && <p className="mt-1 text-xs text-red-600">Solo hay {l.stock} en existencia</p>}
                   </li>
                 ))}
               </ul>
             )}
+            {cart.length > 0 && (
+              <CouponField
+                applied={coupon ? { code: coupon.code, name: coupon.name, discount: computed.totals.couponDiscount ?? 0 } : null}
+                notice={coupon && computed.couponIssue ? `El cupón ya no aplica: ${computed.couponIssue}` : null}
+                onApply={applySaleCoupon}
+                onRemove={async () => setCoupon(null)}
+              />
+            )}
             <dl className="space-y-1 border-t border-slate-100 pt-3 text-sm">
               <div className="flex justify-between text-slate-600"><dt>Subtotal</dt><dd className="tabular">{formatMoney(computed.totals.subtotal)}</dd></div>
-              {computed.totals.discount > 0 && <div className="flex justify-between text-slate-600"><dt>Descuento</dt><dd className="tabular">- {formatMoney(computed.totals.discount)}</dd></div>}
+              {computed.totals.discount - (computed.totals.couponDiscount ?? 0) > 0 && <div className="flex justify-between text-slate-600"><dt>Descuento</dt><dd className="tabular">- {formatMoney(computed.totals.discount - (computed.totals.couponDiscount ?? 0))}</dd></div>}
+              {(computed.totals.couponDiscount ?? 0) > 0 && <div className="flex justify-between text-emerald-700"><dt>Cupón <span className="font-mono text-xs font-semibold">{coupon?.code}</span></dt><dd className="tabular">- {formatMoney(computed.totals.couponDiscount ?? 0)}</dd></div>}
               <div className="flex justify-between text-slate-600"><dt>ISV ({settings.taxRate}%)</dt><dd className="tabular">{formatMoney(computed.totals.tax)}</dd></div>
               <div className="flex justify-between text-xl font-extrabold"><dt>Total</dt><dd className="tabular">{formatMoney(total)}</dd></div>
             </dl>

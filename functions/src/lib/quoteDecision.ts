@@ -3,10 +3,12 @@ import { FieldValue } from "firebase-admin/firestore";
 import { randomUUID } from "node:crypto";
 import {
   consumedByItem, formatMoney, orderCol, quoteCol, stockImpact, stockNoticeText, DECISION_CHANNEL_LABELS,
-  type DecisionChannel, type DiffItem, type WorkOrderStatus,
+  type AppliedCoupon, type DecisionChannel, type DiffItem, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "./admin";
 import { buildPortal, buildQuotePortal } from "./portal";
+import { markRedemptionUsed, readRedemption, releaseRedemption } from "./coupons";
+import { isInherited } from "./quoteCoupons";
 
 const APPROVABLE_FROM: WorkOrderStatus[] = ["RECEIVED", "INSPECTION", "DIAGNOSIS", "AWAITING_QUOTE", "QUOTE_SENT", "AWAITING_APPROVAL"];
 
@@ -57,7 +59,22 @@ export async function applyDecision(tid: string, quoteId: string, d: DecisionInp
       throw new HttpsError("failed-precondition", "Esta actualización ya no corresponde a la cotización vigente. Pida al taller una nueva.");
     }
 
+    // ----- Cupón (lecturas) -----
+    const coupon = q.get("coupon") as AppliedCoupon | null | undefined;
+    const couponR = await readRedemption(tx, tid, coupon?.redemptionId);
+    const baseCoupon = (base?.get("coupon") as AppliedCoupon | null | undefined) ?? null;
+    const replacedR = d.approved && base && baseCoupon && baseCoupon.redemptionId !== coupon?.redemptionId ? await readRedemption(tx, tid, baseCoupon.redemptionId) : null;
+
     const approvalId = randomUUID();
+    const label0 = `${q.get("code")}${Number(q.get("version") ?? 1) > 1 ? ` v${q.get("version")}` : ""}`;
+    if (d.approved) {
+      // Aprobada: el cupón queda usado (con el descuento de esta versión)
+      if (coupon) markRedemptionUsed(tx, tid, couponR, { discount: coupon.discount, total: Number((q.get("totals") as { total: number }).total), target: { kind: "quote", id: quoteId, code: label0 } });
+      // Reemplaza a una aprobada con otro cupón (o sin cupón): ese uso se libera
+      releaseRedemption(tx, tid, replacedR, `La cotización ${label0} reemplazó a la aprobada${coupon ? ` con el cupón ${coupon.code}` : " sin el cupón"}`);
+    } else if (!isInherited(couponR)) {
+      releaseRedemption(tx, tid, couponR, `Cotización ${label0} rechazada`);
+    }
     tx.update(quoteRef, {
       status: d.approved ? "approved" : "rejected",
       decision: {

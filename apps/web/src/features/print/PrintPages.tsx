@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom";
 import { Printer } from "lucide-react";
 import {
-  formatMoney, formatOdometer, formatPhone, odometerNoun, FUEL_LABELS, PAYMENT_METHOD_LABELS, PRIORITY_LABELS, QUOTE_ITEM_LABELS, QUOTE_STATUS_META, RECEPTION_CHECKLIST, STATUS_META, WORK_TYPE_LABELS,
+  formatMoney, formatOdometer, formatPhone, lineBeforeCoupon, odometerNoun, FUEL_LABELS, PAYMENT_METHOD_LABELS, PRIORITY_LABELS, QUOTE_ITEM_LABELS, QUOTE_STATUS_META, RECEPTION_CHECKLIST, STATUS_META, WORK_TYPE_LABELS,
   type WorkshopSettings,
 } from "@rapifix/shared";
 import { formatDate, formatPlate } from "@/lib/format";
@@ -68,6 +68,8 @@ export function PrintOrderPage() {
   const { id } = useParams();
   const { data: o, loading, error } = useWorkOrder(id);
   const v = useVehicle(o?.vehicleId);
+  // Cupón de la cotización vigente (para mostrar su código)
+  const { data: activeQuote } = useQuote((o?.totals?.couponDiscount ? o.activeQuoteId : null) ?? undefined);
   const { settings } = useSettings();
   if (loading) return <PageLoader />;
   if (error || !o) return <ErrorState message={error ?? "Orden no encontrada"} />;
@@ -97,7 +99,9 @@ export function PrintOrderPage() {
         </Box>
       )}
       <div className="flex justify-end">
-        <dl className="w-64 space-y-1"><div className="flex justify-between text-base font-bold"><dt>Total</dt><dd>{formatMoney(o.totals?.total ?? 0)}</dd></div><div className="flex justify-between"><dt className="text-slate-500">Saldo</dt><dd>{formatMoney(o.balance ?? 0)}</dd></div></dl>
+        <dl className="w-64 space-y-1">
+          {(o.totals?.couponDiscount ?? 0) > 0 && <div className="flex justify-between"><dt className="text-slate-500">Cupón{activeQuote?.coupon ? ` ${activeQuote.coupon.code}` : ""} (incluido)</dt><dd>- {formatMoney(o.totals!.couponDiscount!)}</dd></div>}
+          <div className="flex justify-between text-base font-bold"><dt>Total</dt><dd>{formatMoney(o.totals?.total ?? 0)}</dd></div><div className="flex justify-between"><dt className="text-slate-500">Saldo</dt><dd>{formatMoney(o.balance ?? 0)}</dd></div></dl>
       </div>
       <div className="grid grid-cols-2 gap-10 pt-12 text-center text-[11px] text-slate-500">
         <div className="border-t border-slate-400 pt-1">Firma del cliente</div>
@@ -127,7 +131,7 @@ export function PrintQuotePage() {
             <tr key={it.id} className="border-b border-slate-200">
               <td className="px-2 py-1.5">{it.description}</td><td className="px-2 py-1.5 text-slate-500">{QUOTE_ITEM_LABELS[it.type]}</td>
               <td className="px-2 py-1.5 text-right">{it.qty}</td><td className="px-2 py-1.5 text-right">{formatMoney(it.unitPrice)}</td>
-              <td className="px-2 py-1.5 text-right">{it.discount ? formatMoney(it.discount) : ""}</td><td className="px-2 py-1.5 text-right font-semibold">{formatMoney(it.lineTotal)}</td>
+              <td className="px-2 py-1.5 text-right">{it.discount ? formatMoney(it.discount) : ""}</td><td className="px-2 py-1.5 text-right font-semibold">{formatMoney(lineBeforeCoupon(it))}</td>
             </tr>
           ))}
         </tbody>
@@ -135,7 +139,8 @@ export function PrintQuotePage() {
       <div className="flex justify-end">
         <dl className="w-64 space-y-1">
           <div className="flex justify-between"><dt className="text-slate-500">Subtotal</dt><dd>{formatMoney(q.totals.subtotal)}</dd></div>
-          {q.totals.discount > 0 && <div className="flex justify-between"><dt className="text-slate-500">Descuento</dt><dd>- {formatMoney(q.totals.discount)}</dd></div>}
+          {q.totals.discount - (q.totals.couponDiscount ?? 0) > 0 && <div className="flex justify-between"><dt className="text-slate-500">Descuento</dt><dd>- {formatMoney(q.totals.discount - (q.totals.couponDiscount ?? 0))}</dd></div>}
+          {(q.totals.couponDiscount ?? 0) > 0 && <div className="flex justify-between"><dt className="text-slate-500">Cupón {q.coupon?.code ?? ""}</dt><dd>- {formatMoney(q.totals.couponDiscount ?? 0)}</dd></div>}
           <div className="flex justify-between"><dt className="text-slate-500">ISV ({q.taxRate}%)</dt><dd>{formatMoney(q.totals.tax)}</dd></div>
           <div className="flex justify-between border-t-2 border-slate-900 pt-1 text-base font-extrabold"><dt>Total</dt><dd>{formatMoney(q.totals.total)}</dd></div>
         </dl>
@@ -186,14 +191,15 @@ export function PrintSalePage() {
         <thead><tr className="bg-slate-900 text-left text-[11px] uppercase tracking-wide text-white"><th className="px-2 py-1.5">Descripción</th><th className="px-2 py-1.5 text-right">Cant.</th><th className="px-2 py-1.5 text-right">Precio</th><th className="px-2 py-1.5 text-right">Desc.</th><th className="px-2 py-1.5 text-right">Total</th></tr></thead>
         <tbody>
           {s.items.map((it) => (
-            <tr key={it.id} className="border-b border-slate-200"><td className="px-2 py-1.5">{it.description}</td><td className="px-2 py-1.5 text-right">{it.qty}</td><td className="px-2 py-1.5 text-right">{formatMoney(it.unitPrice)}</td><td className="px-2 py-1.5 text-right">{it.discount ? formatMoney(it.discount) : ""}</td><td className="px-2 py-1.5 text-right font-semibold">{formatMoney(it.lineTotal)}</td></tr>
+            <tr key={it.id} className="border-b border-slate-200"><td className="px-2 py-1.5">{it.description}</td><td className="px-2 py-1.5 text-right">{it.qty}</td><td className="px-2 py-1.5 text-right">{formatMoney(it.unitPrice)}</td><td className="px-2 py-1.5 text-right">{it.discount ? formatMoney(it.discount) : ""}</td><td className="px-2 py-1.5 text-right font-semibold">{formatMoney(lineBeforeCoupon(it))}</td></tr>
           ))}
         </tbody>
       </table>
       <div className="flex justify-end">
         <dl className="w-64 space-y-1">
           <div className="flex justify-between"><dt className="text-slate-500">Subtotal</dt><dd>{formatMoney(s.totals.subtotal)}</dd></div>
-          {s.totals.discount > 0 && <div className="flex justify-between"><dt className="text-slate-500">Descuento</dt><dd>- {formatMoney(s.totals.discount)}</dd></div>}
+          {s.totals.discount - (s.totals.couponDiscount ?? 0) > 0 && <div className="flex justify-between"><dt className="text-slate-500">Descuento</dt><dd>- {formatMoney(s.totals.discount - (s.totals.couponDiscount ?? 0))}</dd></div>}
+          {(s.totals.couponDiscount ?? 0) > 0 && <div className="flex justify-between"><dt className="text-slate-500">Cupón {s.coupon?.code ?? ""}</dt><dd>- {formatMoney(s.totals.couponDiscount ?? 0)}</dd></div>}
           <div className="flex justify-between"><dt className="text-slate-500">ISV ({s.taxRate}%)</dt><dd>{formatMoney(s.totals.tax)}</dd></div>
           <div className="flex justify-between border-t-2 border-slate-900 pt-1 text-base font-extrabold"><dt>Total</dt><dd>{formatMoney(s.totals.total)}</dd></div>
           {pays.data.filter((p) => p.status === "valid").map((p) => <div key={p.id} className="flex justify-between text-slate-600"><dt>{PAYMENT_METHOD_LABELS[p.method]} ({p.code})</dt><dd>{formatMoney(p.amount)}</dd></div>)}

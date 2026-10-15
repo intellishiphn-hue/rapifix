@@ -1,7 +1,7 @@
 import { doc, getDoc, where, limit } from "firebase/firestore";
 import {
-  catalogCol, computeOrderFinance, financeCol, FINANCE_META_DOCS, movementCostMap, normalizeText, orderCol, QUOTE_ITEM_LABELS, resolvePartCost,
-  type Expense, type FinanceBudget, type InventoryMovement, type SupplierPayment, type Payment, type ProductCost, type Purchase, type QuoteItemType, type Sale, type WorkOrder,
+  catalogCol, computeOrderFinance, couponCol, financeCol, FINANCE_META_DOCS, movementCostMap, normalizeText, orderCol, QUOTE_ITEM_LABELS, resolvePartCost,
+  type CouponRedemption, type Expense, type FinanceBudget, type InventoryMovement, type SupplierPayment, type Payment, type ProductCost, type Purchase, type QuoteItemType, type Sale, type WorkOrder,
 } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { toDate } from "@/lib/format";
@@ -211,6 +211,23 @@ export function loadFixedExpenses(months: string[], refresh: number): Promise<Ex
   return cached(`fixedExp|${uniq.join(",")}|${refresh}`, () =>
     fetchIn<Expense>(financeCol.expenses(TENANT_ID), "period", uniq).then((l) => l.filter((e) => e.fixedCostId && e.status !== "voided")),
   );
+}
+
+/**
+ * Descuento de cupones usados (cobrados o aprobados) en el período, por la fecha de uso.
+ * Ya está restado de los ingresos: es solo informativo.
+ */
+export function loadCouponDiscounts(start: Date, end: Date, refresh: number): Promise<{ total: number; uses: number }> {
+  return cached(rk("couponDiscounts", start, end, refresh), async () => {
+    const list = await fetchAll<CouponRedemption>(couponCol.redemptions(TENANT_ID), where("status", "==", "used"), limit(5000));
+    const from = start.getTime();
+    const to = end.getTime();
+    const inRange = list.filter((r) => {
+      const t = r.usedAt?.toMillis?.() ?? 0;
+      return t >= from && t < to;
+    });
+    return { total: inRange.reduce((a, r) => a + (r.discount ?? 0), 0), uses: inRange.length };
+  });
 }
 
 /** Todos los gastos pendientes de pagar (gastos fijos generados). */

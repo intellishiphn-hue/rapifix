@@ -111,7 +111,8 @@ export interface WorkOrder extends BaseDoc {
   reception: Reception;
   diagnosis: Diagnosis | null;
   qc: QualityControl | null;
-  totals: { subtotal: number; discount: number; tax: number; total: number };
+  /** totales de la cotización vigente (couponDiscount: parte del descuento que viene de un cupón) */
+  totals: { subtotal: number; discount: number; couponDiscount?: number; tax: number; total: number };
   paid: number;
   balance: number;
   portalToken: string;

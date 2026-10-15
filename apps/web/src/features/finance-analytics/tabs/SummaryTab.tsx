@@ -7,14 +7,14 @@ import { toDate } from "@/lib/format";
 import { useLoader } from "@/features/reports/data";
 import type { ColKind, ReportCell } from "@/features/reports/table";
 import { TabActions, TabError, TabHeader, TabSkeleton } from "@/features/reports/ui";
-import { aggregateTypes, loadBalances, loadCore, loadExpenses, loadPayments, loadPendingExpenses, orderMargin, pct, type Core } from "../data";
+import { aggregateTypes, loadBalances, loadCouponDiscounts, loadCore, loadExpenses, loadPayments, loadPendingExpenses, orderMargin, pct, type Core } from "../data";
 import { buckets, effectiveEnd } from "../period";
 import { Delta, fmtPct, KpiCard, MoneyChart, Note, ProfitWaterfall, RichTable, toReportTable, type Col } from "../components";
 import { finKey, type FinTabProps } from "./common";
 
 async function load(p: FinTabProps) {
   const { period, prev, refresh } = p;
-  const [cur, old, pay, payPrev, exp, expPrev, balances, pending] = await Promise.all([
+  const [cur, old, pay, payPrev, exp, expPrev, balances, pending, coupons, couponsPrev] = await Promise.all([
     loadCore(period.start, period.end, refresh),
     loadCore(prev.start, prev.end, refresh),
     loadPayments(period.start, period.end, refresh),
@@ -23,6 +23,8 @@ async function load(p: FinTabProps) {
     loadExpenses(prev.start, prev.end, refresh),
     loadBalances(refresh),
     loadPendingExpenses(refresh).catch(() => [] as Expense[]),
+    loadCouponDiscounts(period.start, period.end, refresh).catch(() => ({ total: 0, uses: 0 })),
+    loadCouponDiscounts(prev.start, prev.end, refresh).catch(() => ({ total: 0, uses: 0 })),
   ]);
   // Gastos fijos pendientes que vencen dentro del período (hasta hoy si el período no ha terminado)
   const from = period.start.getTime();
@@ -31,7 +33,7 @@ async function load(p: FinTabProps) {
     const t = toDate(e.dueDate ?? e.date)?.getTime() ?? 0;
     return t >= from && t < to;
   });
-  return { cur, old, pay, payPrev, exp, expPrev, balances, pendingInPeriod };
+  return { cur, old, pay, payPrev, exp, expPrev, balances, pendingInPeriod, coupons, couponsPrev };
 }
 
 interface Figures {
@@ -140,6 +142,9 @@ export function SummaryTab(props: FinTabProps) {
       { label: "Ingresos por órdenes entregadas", cur: f.orderRevenue, old: o.orderRevenue },
       { label: "Ingresos por ventas del POS", cur: f.saleRevenue, old: o.saleRevenue },
       { label: "Ingresos (ventas netas, sin ISV)", cur: f.revenue, old: o.revenue, strong: true },
+      ...(data.coupons.total || data.couponsPrev.total
+        ? [{ label: `Descuentos por cupones (${data.coupons.uses} usos, ya restados de los ingresos)`, cur: -data.coupons.total, old: -data.couponsPrev.total }]
+        : []),
       { label: "(−) Costo de ventas", cur: -f.cost, old: -o.cost },
       { label: "Utilidad bruta", cur: f.profit, old: o.profit, strong: true },
       { label: "Margen bruto", cur: f.margin, old: o.margin, isPct: true },
@@ -178,6 +183,7 @@ export function SummaryTab(props: FinTabProps) {
     ["Período anterior comparado", props.prev.label],
     ["Órdenes entregadas", f.orders, "number"],
     ["Ventas del POS", f.sales, "number"],
+    ["Descuentos por cupones (ya restados de los ingresos)", data.coupons.total, "money"],
     ["Ticket promedio por orden (sin ISV)", f.ticket, "money"],
     ["Cuentas por cobrar (hoy)", data.balances.receivable, "money"],
     ["Cuentas por pagar (hoy)", data.balances.payable, "money"],

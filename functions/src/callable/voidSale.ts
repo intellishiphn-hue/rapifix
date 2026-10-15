@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { addMonthsHN, carwashCol, catalogCol, voidSaleSchema, type MembershipHistoryEntry } from "@rapifix/shared";
+import { addMonthsHN, carwashCol, catalogCol, computeWashCharge, voidSaleSchema, type AppliedCoupon, type CarwashTaxMode, type MembershipHistoryEntry, type WashItem } from "@rapifix/shared";
+import { readRedemption, releaseRedemption } from "../lib/coupons";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 import { parseInput, requireRole } from "../lib/guards";
@@ -35,6 +36,9 @@ export const voidSale = onCall({ region: REGION }, async (request) => {
     // Carwash: venta o renovación de membresía -> se quitan los meses pagados con esta venta
     const membershipId = sale.get("membershipId") as string | null | undefined;
     const membership = membershipId ? await tx.get(db.doc(`${carwashCol.memberships(tid)}/${membershipId}`)) : null;
+    // Cupón usado en la venta (o en el lavado cobrado con ella): se libera
+    const saleCoupon = (sale.get("coupon") as AppliedCoupon | null | undefined) ?? (washOk ? (wash!.get("coupon") as AppliedCoupon | null | undefined) : null) ?? null;
+    const couponR = await readRedemption(tx, tid, saleCoupon?.redemptionId);
 
     for (const pay of pays.docs) {
       if (pay.get("status") !== "valid") continue;
@@ -51,8 +55,15 @@ export const voidSale = onCall({ region: REGION }, async (request) => {
         orderId: null, orderCode: null, saleId: sale.id, saleCode: sale.get("code"), by: caller.uid, byName: name, at: FieldValue.serverTimestamp(),
       });
     }
+    releaseRedemption(tx, tid, couponR, `Venta ${sale.get("code")} anulada: ${input.reason}`);
     if (washOk) {
-      tx.update(wash!.ref, { paid: false, saleId: null, saleCode: null, loyaltyCounted: false, voidedSaleCode: sale.get("code"), updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
+      // Si tenía cupón, el lavado vuelve a su total sin cupón (se puede aplicar otro al cobrarlo de nuevo)
+      const couponReset = wash!.get("coupon") ? (() => {
+        const items = (wash!.get("items") as WashItem[]) ?? [];
+        const charge = computeWashCharge(items.map((i) => i.price), Number(wash!.get("taxRate") ?? 15), (wash!.get("taxMode") as CarwashTaxMode) ?? "included", 0);
+        return { coupon: null, discount: 0, total: charge.totals.total, totals: charge.totals };
+      })() : {};
+      tx.update(wash!.ref, { paid: false, saleId: null, saleCode: null, loyaltyCounted: false, voidedSaleCode: sale.get("code"), ...couponReset, updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid });
       if (loyalty?.exists) {
         const count = Number(loyalty.get("count") ?? 0);
         const rewards = Number(loyalty.get("rewardsAvailable") ?? 0);

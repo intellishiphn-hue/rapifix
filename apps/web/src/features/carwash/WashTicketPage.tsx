@@ -58,6 +58,7 @@ export function WashTicketPage() {
           </div>
         ))}
         <Rule />
+        {w.coupon && <Row label={`Cupón ${w.coupon.code}`} value={`- ${formatMoney(w.coupon.discount)}`} />}
         {w.discount > 0 && <Row label="Descuento" value={`- ${formatMoney(w.discount)}`} />}
         {w.totals && w.taxMode !== "exempt" && (
           <>

@@ -29,6 +29,7 @@ import { convertQuoteToOrder, newQuoteVersion, saveQuote, sendQuote, useQuote, u
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { applyCoupon, removeCoupon } from "@/features/coupons/api";
 import { CouponField } from "@/features/coupons/CouponField";
+import { CostOnlyHint, EditCostsButton } from "./EditCostsDialog";
 import { blankLine, DecisionInfo, DiscardRevisionDialog, ModifyQuoteDialog, QuoteHistory, QuoteLinesEditor, QuoteView, RecordDecisionDialog, RevisionChanges, versionLabel } from "./parts";
 
 const quoteLink = (q: Pick<Quote, "publicToken">) => (q.publicToken ? `${window.location.origin}/orden/${q.publicToken}` : "");
@@ -220,6 +221,7 @@ export function DirectQuotePage() {
         actions={quote && quote.status !== "draft" && (
           <>
             <Link to={`/imprimir/cotizacion/${quote.id}`} target="_blank"><Button variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
+            {showCost && ["sent", "viewed", "approved"].includes(quote.status) && <EditCostsButton quote={quote} size="md" />}
             {quote.publicToken && <a href={quoteLink(quote)} target="_blank" rel="noreferrer"><Button variant="ghost" icon={<ExternalLink className="h-4 w-4" />}>Ver link</Button></a>}
             {manage && quote.status === "approved" && !openRevision && <Button variant="secondary" icon={<PencilLine className="h-4 w-4" />} onClick={() => setModifying(quote)}>Modificar cotización</Button>}
             {manage && !["approved", "superseded"].includes(quote.status) && (!quote.revisionOf || isRevision) && <Button variant="secondary" icon={<FilePlus2 className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => { const r = await newQuoteVersion({ quoteId: quote.id }); toast.success(isRevision ? "Ya puede seguir editando los cambios" : "Nueva versión creada"); goTo(r.quoteId); })}>{isRevision ? "Continuar edición" : "Nueva versión"}</Button>}
@@ -283,6 +285,7 @@ export function DirectQuotePage() {
                   />
                 }
               />
+              {isRevision && base && <div className="mt-4"><CostOnlyHint base={base} lines={lines} canEditCosts={showCost} /></div>}
               {isRevision && base && <div className="mt-4"><RevisionChanges base={base} next={preview} /></div>}
               <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
                 {isRevision && <Button variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={() => setDiscarding(true)} className="mr-auto text-red-600">Descartar modificación</Button>}
@@ -313,7 +316,7 @@ export function DirectQuotePage() {
                   {manage && <Button onClick={() => setConverting(true)} icon={<ClipboardCheck className="h-4 w-4" />}>Convertir en orden</Button>}
                 </div>
               )}
-              {manage && quote.status === "approved" && !openRevision && <p className="text-xs text-slate-500">Si hay que agregar o cambiar algo, use "Modificar cotización". La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.</p>}
+              {manage && quote.status === "approved" && !openRevision && <p className="text-xs text-slate-500">Si hay que agregar o cambiar algo, use "Modificar cotización". La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.{showCost && " Para corregir solo el costo interno use \"Editar costos\": el cliente no lo ve y no necesita volver a aprobar."}</p>}
               <DecisionInfo quote={quote} />
               {isRevision && base && <RevisionChanges base={base} next={quote} />}
               <QuoteView

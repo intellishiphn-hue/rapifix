@@ -12,6 +12,8 @@ export const sendQuote = callable<{ quoteId: string }, { orderId: string | null;
 /** Con `reason` sobre una cotización aprobada abre una modificación (o devuelve la que ya está abierta: `existing`). */
 export const newQuoteVersion = callable<{ quoteId: string; reason?: string }, { quoteId: string; existing?: boolean }>("newQuoteVersion");
 export const discardQuoteRevision = callable<{ quoteId: string; reason?: string }, { ok: boolean }>("discardQuoteRevision");
+/** Corrige el costo interno de líneas (también en cotizaciones aprobadas): el cliente no lo ve. */
+export const updateQuoteCosts = callable<import("@rapifix/shared").UpdateQuoteCostsInput, { changed: number; revisionChanged: number }>("updateQuoteCosts");
 export const ensurePortal = callable<{ orderId: string }, { token: string }>("ensurePortal");
 
 function scope(role: string | null, uid: string | undefined): QueryConstraint[] {

@@ -9,6 +9,7 @@ export * from "./workOrderStatus";
 export * from "./workOrder";
 export * from "./templates";
 export * from "./quote";
+export * from "./quoteCosts";
 export * from "./catalog";
 export * from "./operations";
 export * from "./finance";

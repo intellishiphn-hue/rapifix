@@ -124,6 +124,10 @@ export interface Quote extends BaseDoc {
   discardedAt?: TimestampLike | null;
   discardedByName?: string | null;
   discardReason?: string | null;
+  /** última corrección del costo interno (updateQuoteCosts): no cambia lo que ve el cliente */
+  costsUpdatedAt?: TimestampLike | null;
+  costsUpdatedBy?: string | null;
+  costsUpdatedByName?: string | null;
 }
 
 /** Etiqueta del estado; una modificación descartada se guarda como "expired" pero se muestra "Descartada". */

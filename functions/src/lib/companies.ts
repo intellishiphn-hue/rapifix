@@ -56,8 +56,9 @@ const fingerprint = (o: FirebaseFirestore.DocumentData | undefined) =>
  * Idempotente: decide por el estado actual de la orden y de la comisión, no por el evento.
  * La escritura va en una transacción que confirma que la orden no cambió mientras se calculaba
  * (si cambió, se vuelve a calcular), así dos eventos seguidos no dejan un estado viejo.
+ * `flagNote`: nota para una comisión ya pagada que queda en revisión (ej. corrección de costos internos).
  */
-export async function syncOrderCommission(tid: string, orderId: string) {
+export async function syncOrderCommission(tid: string, orderId: string, opts: { flagNote?: string } = {}) {
   const orderRef = db.doc(`${orderCol.workOrders(tid)}/${orderId}`);
   const comRef = db.doc(`${companyCol.commissions(tid)}/${orderId}`);
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -115,7 +116,7 @@ export async function syncOrderCommission(tid: string, orderId: string) {
       } else if (action.kind === "void") {
         tx.update(comRef, { status: "voided", autoVoided: true, voidReason: action.reason, voidedAt: ts, updatedAt: ts });
       } else if (action.kind === "flag") {
-        tx.update(comRef, { needsReview: true, reviewNote: action.note, updatedAt: ts });
+        tx.update(comRef, { needsReview: true, reviewNote: (paidFull && opts.flagNote) || action.note, updatedAt: ts });
       }
       return true;
     });

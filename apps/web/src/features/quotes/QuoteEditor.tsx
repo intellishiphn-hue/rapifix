@@ -22,9 +22,12 @@ import { CouponField } from "@/features/coupons/CouponField";
 import { consumeOrderPart } from "@/features/catalog/api";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { useCompany } from "@/features/companies/api";
+import { CostOnlyHint, EditCostsButton } from "./EditCostsDialog";
 import { blankLine, DecisionInfo, DiscardRevisionDialog, ModifyQuoteDialog, QuoteHistory, QuoteLinesEditor, QuoteView, RecordDecisionDialog, RevisionChanges, versionLabel } from "./parts";
 
 const REVISION_STATE: Record<string, string> = { draft: "Borrador", sent: "Enviada al cliente", viewed: "Vista por el cliente" };
+/** Estados (fuera de borrador) en los que se corrige el costo interno con "Editar costos". */
+const COST_FIX_STATUSES = ["sent", "viewed", "approved"];
 
 /** Pestaña Cotización de una orden. */
 export function QuoteEditor({ order }: { order: WorkOrder }) {
@@ -178,6 +181,9 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
                 />
               }
             />
+            {isRevision && approved && (
+              <div className="mt-4"><CostOnlyHint base={approved} lines={lines} canEditCosts={showCost} /></div>
+            )}
             {isRevision && approved && preview && (
               <div className="mt-4"><RevisionChanges base={approved} next={preview} paid={order.paid ?? 0} consumed={order.consumed} /></div>
             )}
@@ -207,13 +213,14 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
             action={
               <div className="flex flex-wrap justify-end gap-2">
                 <Link to={`/imprimir/cotizacion/${current.id}`} target="_blank"><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
+                {showCost && COST_FIX_STATUSES.includes(current.status) && <EditCostsButton quote={current} />}
                 {manage && current.status === "approved" && <Button size="sm" variant="secondary" icon={<PencilLine className="h-4 w-4" />} onClick={() => setModifying(current)}>Modificar cotización</Button>}
                 {manage && current.status !== "approved" && <Button size="sm" variant="secondary" icon={<FilePlus2 className="h-4 w-4" />} loading={saving} onClick={() => void run(async () => { await newQuoteVersion({ quoteId: current.id }); toast.success(isRevision ? "Ya puede seguir editando los cambios." : "Nueva versión creada. Edítela y vuelva a enviarla."); })}>{isRevision ? "Continuar edición" : "Nueva versión"}</Button>}
               </div>
             }
           />
           <div className="space-y-4 p-5">
-            {manage && current.status === "approved" && <p className="text-xs text-slate-500">Si aparece trabajo adicional o hay que cambiar un repuesto, use "Modificar cotización". La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.</p>}
+            {manage && current.status === "approved" && <p className="text-xs text-slate-500">Si aparece trabajo adicional o hay que cambiar un repuesto, use "Modificar cotización". La cotización aprobada sigue vigente hasta que el cliente apruebe los cambios.{showCost && " Para corregir solo el costo interno use \"Editar costos\": el cliente no lo ve y no necesita volver a aprobar."}</p>}
             <DecisionInfo quote={current} />
             {isRevision && approved && <RevisionChanges base={approved} next={current} paid={order.paid ?? 0} consumed={order.consumed} />}
             <QuoteView
@@ -247,7 +254,10 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
           <div className="mt-4 space-y-4">
             <DecisionInfo quote={approved} />
             <QuoteView quote={approved} showCost={showCost} />
-            <Link to={`/imprimir/cotizacion/${approved.id}`} target="_blank"><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
+            <div className="flex flex-wrap gap-2">
+              <Link to={`/imprimir/cotizacion/${approved.id}`} target="_blank"><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
+              {showCost && <EditCostsButton quote={approved} />}
+            </div>
           </div>
         </details>
       )}
@@ -288,7 +298,15 @@ export function ApprovedItems({ order, types, empty }: { order: WorkOrder; types
     }
   };
 
+  const approvedQuote = can("dashboard.financials") ? data.find((q) => q.status === "approved") ?? null : null;
   return (
+    <>
+    {approvedQuote && (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-2.5 text-xs text-slate-500">
+        <span>¿El costo interno de alguna línea está mal? Corríjalo sin pedir nueva aprobación al cliente.</span>
+        <EditCostsButton quote={approvedQuote} />
+      </div>
+    )}
     <ul className="divide-y divide-slate-100">
       {items.map((it) => {
         const used = order.consumed?.[`${it.quoteId}_${it.id}`];
@@ -307,5 +325,6 @@ export function ApprovedItems({ order, types, empty }: { order: WorkOrder; types
         );
       })}
     </ul>
+    </>
   );
 }

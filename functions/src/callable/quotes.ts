@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  col, computeQuote, convertQuoteSchema, diffQuotes, discardRevisionSchema, formatMoney, newVersionSchema, OPEN_QUOTE_STATUSES, orderCol, quoteCol, recordDecisionSchema, saveQuoteSchema, sendQuoteSchema,
+  applyCostChanges, col, COST_EDITABLE_STATUSES, costChangesText, computeQuote, convertQuoteSchema, updateQuoteCostsSchema, diffQuotes, discardRevisionSchema, formatMoney, newVersionSchema, OPEN_QUOTE_STATUSES, orderCol, quoteCol, recordDecisionSchema, saveQuoteSchema, sendQuoteSchema,
   type Role, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
@@ -15,6 +15,7 @@ import { buildPortal, buildQuotePortal } from "../lib/portal";
 import { applyDecision } from "../lib/quoteDecision";
 import { insertWorkOrder } from "../lib/orders";
 import { secureToken } from "../lib/token";
+import { syncOrderCommission } from "../lib/companies";
 
 const DESK: Role[] = ["admin", "manager", "reception"];
 /** Estados en los que enviar una cotización mueve la orden a "Cotización enviada". */
@@ -457,4 +458,96 @@ export const convertQuoteToOrder = onCall({ region: REGION }, async (request) =>
   }
   await buildPortal(tid, orderId);
   return { orderId, code };
+});
+
+
+/** Quienes ven costos en la interfaz (permiso "dashboard.financials"). */
+const COST_ROLES: Role[] = ["admin", "manager"];
+
+/**
+ * Corrige el costo interno (unitCost) de líneas existentes, también en cotizaciones enviadas o aprobadas.
+ * El cliente no ve el costo: no cambian precios, totales ni el link del cliente, y no hace falta volver a aprobar.
+ * - Si la cotización aprobada tiene una modificación abierta (borrador/enviada), el mismo costo se aplica a sus
+ *   líneas con el mismo id, siempre que esa línea siga con el costo anterior (si la modificación ya le puso
+ *   otro costo, se respeta). Así la corrección no se pierde cuando el cliente apruebe la modificación.
+ * - Queda en el historial interno de la orden y en auditoría.
+ * - La comisión por referido pendiente se recalcula; si ya se pagó, queda marcada para revisión.
+ */
+export const updateQuoteCosts = onCall({ region: REGION }, async (request) => {
+  const caller = requireRole(request, COST_ROLES);
+  const input = parseInput(updateQuoteCostsSchema, request.data);
+  const tid = caller.tid;
+  const name = await actorName(caller.uid, caller.email);
+  const quotes = db.collection(quoteCol.quotes(tid));
+  const ref = quotes.doc(input.quoteId);
+
+  const res = await db.runTransaction(async (tx) => {
+    const q = await tx.get(ref);
+    if (!q.exists) throw new HttpsError("not-found", "La cotización no existe.");
+    const d = q.data()!;
+    if (!COST_EDITABLE_STATUSES.includes(d.status as QuoteStatus)) {
+      throw new HttpsError("failed-precondition", d.status === "superseded"
+        ? "Esta versión fue reemplazada. Corrija los costos en la cotización aprobada vigente."
+        : "Esta cotización ya no está vigente: sus costos no se pueden cambiar.");
+    }
+    const items = (d.items as QuoteItem[]) ?? [];
+    let applied: ReturnType<typeof applyCostChanges<QuoteItem>>;
+    try {
+      applied = applyCostChanges(items, input.costs, { strict: true });
+    } catch (err) {
+      throw new HttpsError("failed-precondition", (err as Error).message);
+    }
+    if (!applied.changes.length) return { changed: 0, revisionChanged: 0, orderId: null as string | null, approved: false };
+
+    // Modificación abierta hecha a partir de esta cotización (lecturas antes de escribir)
+    const openId = (d.openRevisionId as string | null | undefined) ?? null;
+    const rev = openId ? await tx.get(quotes.doc(openId)) : null;
+    const orderId = (d.orderId as string | null) ?? null;
+    const orderRef = orderId ? db.doc(`${orderCol.workOrders(tid)}/${orderId}`) : null;
+    const order = orderRef ? await tx.get(orderRef) : null;
+
+    const now = FieldValue.serverTimestamp();
+    tx.update(ref, { items: applied.items, costsUpdatedAt: now, costsUpdatedBy: caller.uid, costsUpdatedByName: name, updatedAt: now, updatedBy: caller.uid });
+
+    let revisionChanged = 0;
+    let revLabel = "";
+    if (rev?.exists && rev.get("revisionOf") === ref.id && isOpenQuote(rev.get("status"))) {
+      const prevCost = Object.fromEntries(applied.changes.map((c) => [c.itemId, c.before]));
+      const r = applyCostChanges((rev.get("items") as QuoteItem[]) ?? [], input.costs, { onlyIfCost: prevCost });
+      if (r.changes.length) {
+        tx.update(rev.ref, { items: r.items, costsUpdatedAt: now, costsUpdatedBy: caller.uid, costsUpdatedByName: name, updatedAt: now, updatedBy: caller.uid });
+        revisionChanged = r.changes.length;
+        revLabel = versionLabel(rev.data()!);
+      }
+    }
+
+    const label = versionLabel(d);
+    const detail = costChangesText(applied.changes);
+    if (orderRef && order?.exists) {
+      tx.set(orderRef.collection("events").doc(), {
+        type: "note",
+        text: `Costos internos actualizados en ${label} por ${name}: ${detail}${revisionChanged ? ` (también en la modificación ${revLabel})` : ""}`,
+        visibleToCustomer: false, channels: [], fromStatus: null, toStatus: null,
+        actorId: caller.uid, actorName: name, at: now,
+      });
+    }
+    tx.set(db.collection(col.auditLogs(tid)).doc(), {
+      action: "update", entity: "quotes", entityId: ref.id, path: ref.path,
+      actorId: caller.uid, actorName: name, actorType: "user",
+      before: { code: label, costs: Object.fromEntries(applied.changes.map((c) => [c.itemId, c.before])) },
+      after: { code: label, costs: Object.fromEntries(applied.changes.map((c) => [c.itemId, c.after])) },
+      changedFields: ["items.unitCost"],
+      reason: `Costos internos: ${detail}`,
+      at: now,
+    });
+    return { changed: applied.changes.length, revisionChanged, orderId: order?.exists ? orderId : null, approved: d.status === "approved" };
+  });
+
+  // Comisión por referido: usa la cotización aprobada vigente, así que se recalcula con el costo nuevo
+  if (res.orderId && res.approved) {
+    await syncOrderCommission(tid, res.orderId, {
+      flagNote: "Se corrigieron costos internos de la cotización después de pagar la comisión. Revise si corresponde un ajuste.",
+    }).catch((err) => console.error("[comisiones] no se pudo recalcular tras corregir costos", tid, res.orderId, err));
+  }
+  return { changed: res.changed, revisionChanged: res.revisionChanged };
 });

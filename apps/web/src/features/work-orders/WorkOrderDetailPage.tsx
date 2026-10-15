@@ -1,6 +1,6 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
-  Camera, ChevronLeft, ClipboardList, CreditCard, FileText, History, LayoutGrid, MessageCircle, Package, Phone, Stethoscope, Wrench, 
+  Building2, Camera, ChevronLeft, ClipboardList, CreditCard, FileText, History, LayoutGrid, MessageCircle, Package, Phone, Stethoscope, Wrench, 
 } from "lucide-react";
 import { allowedTransitions, formatMoney, formatPhone, PRIORITY_LABELS, whatsappLink } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -80,6 +80,9 @@ export function WorkOrderDetailPage() {
                 <PlateTag plate={order.vehicle.plate} /> {order.vehicle.make} {order.vehicle.model} {order.vehicle.year}
               </Link>
               <Link to={`/clientes/${order.customerId}`} className="font-medium text-slate-700 hover:text-brand-700">{order.customer.fullName}</Link>
+              {order.companyId && (can("companies.read")
+                ? <Link to={`/empresas/${order.companyId}`} className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-inset ring-brand-100 hover:bg-brand-100"><Building2 className="h-3.5 w-3.5" />{order.companyName}</Link>
+                : <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700"><Building2 className="h-3.5 w-3.5" />{order.companyName}</span>)}
               <span className="flex items-center gap-2">
                 <a href={`tel:${order.customer.phone}`} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Llamar"><Phone className="h-4 w-4" /></a>
                 <a href={whatsappLink(order.customer.whatsapp || order.customer.phone)} target="_blank" rel="noreferrer" className="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-50" aria-label="WhatsApp"><MessageCircle className="h-4 w-4" /></a>

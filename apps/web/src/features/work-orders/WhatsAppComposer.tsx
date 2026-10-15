@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Field";
 import { errorMessage } from "@/lib/errors";
 import { enqueueWhatsApp, trackOutbox, useOutboxDoc, useWaAuto } from "@/features/whatsapp/auto";
+import { useCompany } from "@/features/companies/api";
+import { cn } from "@/lib/cn";
 
 /**
  * Mensaje de WhatsApp: el sistema lo prepara y el empleado lo revisa.
@@ -33,10 +35,15 @@ export function WhatsAppComposer({
   /** De dónde sale el mensaje (para el historial): orden, cotización, mantenimiento, cobro, cita... */
   context?: string;
 }) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const myName = useDisplayName();
-  const phone = to?.phone ?? order?.customer.whatsapp ?? order?.customer.phone ?? "";
-  const name = to?.name ?? order?.customer.fullName ?? "el cliente";
+  // Orden de una empresa con encargado de flota: se puede mandar a él en lugar del chofer
+  const company = useCompany(!to ? order?.companyId : null, can("companies.read"));
+  const approver = company.data?.approverPhone ? { phone: company.data.approverPhone, name: company.data.approverName || "Encargado de flota" } : null;
+  const [recipient, setRecipient] = useState<"driver" | "approver">("driver");
+  const toApprover = recipient === "approver" && !!approver;
+  const phone = to?.phone ?? (toApprover ? approver!.phone : order?.customer.whatsapp || order?.customer.phone || "");
+  const name = to?.name ?? (toApprover ? approver!.name : order?.customer.fullName ?? "el cliente");
   const [text, setText] = useState(initial);
   useEffect(() => setText(initial), [initial]);
 
@@ -96,6 +103,17 @@ export function WhatsAppComposer({
 
   return (
     <div className="space-y-3">
+      {approver && order && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-xs font-medium text-slate-500">Enviar a</span>
+          <div className="flex max-w-full overflow-x-auto rounded-[10px] bg-slate-200/70 p-1">
+            {([["driver", `Chofer: ${order.customer.fullName.split(" ")[0]}`], ["approver", `Encargado: ${approver.name.split(" ")[0]}`]] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setRecipient(k)} className={cn("whitespace-nowrap rounded-lg px-3 py-1 text-xs font-semibold", recipient === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900")}>{label}</button>
+            ))}
+          </div>
+          <span className="text-xs text-slate-500">{order.companyName}</span>
+        </div>
+      )}
       <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={compact ? 3 : 4} />
       <div className="flex flex-wrap gap-2">
         {autoReady ? (

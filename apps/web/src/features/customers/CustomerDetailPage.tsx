@@ -20,6 +20,7 @@ import { VehicleFormDialog } from "@/features/vehicles/VehicleFormDialog";
 import { CarwashCustomerHistory } from "@/features/carwash/CarwashCustomerHistory";
 import { useCustomer } from "./api";
 import { CustomerFormDialog } from "./CustomerFormDialog";
+import { ReferralCard } from "@/features/commissions/ReferralDialog";
 
 type Tab = "vehicles" | "orders" | "carwash" | "quotes" | "payments" | "changes";
 
@@ -100,6 +101,7 @@ export function CustomerDetailPage() {
             </div>
             {customer.notes && <div className="border-t border-slate-100 px-5 py-4 text-sm whitespace-pre-line text-slate-600">{customer.notes}</div>}
           </Card>
+          <ReferralCard target="customer" targetId={customer.id} targetName={customer.fullName} referral={customer.referral} />
           <Card className="grid grid-cols-2 divide-x divide-slate-100">
             <div className="p-4">
               <div className="text-xs text-slate-500">Vehículos</div>

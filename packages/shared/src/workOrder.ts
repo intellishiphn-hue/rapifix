@@ -126,6 +126,9 @@ export interface WorkOrder extends BaseDoc {
   /** Repuestos ya descontados del inventario: clave `${quoteId}_${itemId}` */
   consumed?: Record<string, { movementId: string; qty: number }>;
   activeQuoteId?: string | null;
+  /** Empresa (flota) del vehículo al crear la orden (las abiertas se actualizan si cambia) */
+  companyId?: string | null;
+  companyName?: string;
   searchKeywords: string[];
 }
 

@@ -78,11 +78,18 @@ export function useBoardDelivered() {
 
 export type ListStatus = WorkOrderStatus | "all" | "open";
 
-export function useOrdersList(opts: { search: string; status: ListStatus; pageSize: number }) {
+export function useOrdersList(opts: { search: string; status: ListStatus; pageSize: number; companyId?: string }) {
   const scope = useScope();
   const token = searchToken(opts.search);
   const searching = token.length >= 2;
   const c: QueryConstraint[] = [...scope.constraints];
+  const byCompany = !!opts.companyId && scope.key === "all";
+
+  // Órdenes de una empresa: un solo filtro (companyId) y el resto en memoria, sin índices compuestos
+  const companyState = useQueryData<WorkOrder>(
+    byCompany ? query(ordersCol(), where("companyId", "==", opts.companyId), limit(1000)) : null,
+    `orders-company|${opts.companyId ?? ""}|${byCompany}`,
+  );
 
   // Firestore permite un solo array-contains por consulta. El personal busca en el servidor;
   // el técnico (que ya filtra por technicianIds) busca sobre sus órdenes en pantalla.
@@ -97,7 +104,14 @@ export function useOrdersList(opts: { search: string; status: ListStatus; pageSi
   }
   c.push(limit(opts.pageSize));
 
-  const state = useQueryData<WorkOrder>(query(ordersCol(), ...c), `orders|${scope.key}|${token}|${opts.status}|${opts.pageSize}`);
+  const state = useQueryData<WorkOrder>(byCompany ? null : query(ordersCol(), ...c), `orders|${scope.key}|${token}|${opts.status}|${opts.pageSize}|${byCompany}`);
+  if (byCompany) {
+    const data = companyState.data
+      .filter((o) => (opts.status === "open" ? o.isOpen : opts.status === "all" ? true : o.status === opts.status))
+      .filter((o) => !searching || o.searchKeywords?.includes(token))
+      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+    return { ...companyState, data: data.slice(0, opts.pageSize), hasMore: data.length > opts.pageSize };
+  }
   let data = state.data;
   if (searching && scope.key !== "all") data = data.filter((o) => o.searchKeywords?.includes(token));
   if (searching && scope.key === "all") {

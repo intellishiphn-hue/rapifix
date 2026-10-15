@@ -1,5 +1,6 @@
 import type { Role } from "./roles";
 import type { OdometerUnit } from "./odometer";
+import type { Referral } from "./companies";
 
 /**
  * Timestamp genérico: en el cliente es firebase/firestore Timestamp y en Functions es
@@ -50,6 +51,8 @@ export interface Customer extends BaseDoc {
   openOrders: number; // Fase 2
   balanceDue: number; // centavos, Fase 4
   lastVisitAt?: TimestampLike | null;
+  /** Comisión por referido (la escribe solo setReferral) */
+  referral?: Referral | null;
   searchKeywords: string[];
 }
 
@@ -92,6 +95,9 @@ export interface Vehicle extends BaseDoc {
   coverPhotoUrl: string;
   photoCount: number;
   archived: boolean;
+  /** Empresa (flota) a la que pertenece. La escribe solo assignVehicleToCompany. */
+  companyId?: string | null;
+  companyName?: string;
   searchKeywords: string[];
 }
 

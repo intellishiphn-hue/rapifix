@@ -48,3 +48,6 @@ export { carwashDaily } from "./scheduled/carwash";
 // WhatsApp automático (OpenWA en la computadora del taller): cola, clave del worker y su punto de conexión
 export { queueWhatsApp, retryWhatsApp, cancelWhatsApp, createWaWorkerToken, revokeWaWorkerToken } from "./callable/whatsapp";
 export { waWorker } from "./public/waWorker";
+// Empresas con flota, referidos y comisiones
+export { saveCompany, assignVehicleToCompany, saveReferrer, setReferral, registerCompanyPayment, payCommissions, voidCommission } from "./callable/companies";
+export { onWorkOrderCompanyWritten, onSaleCreatedCompany } from "./triggers/companies";

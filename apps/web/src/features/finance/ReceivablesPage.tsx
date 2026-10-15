@@ -21,6 +21,8 @@ import { orderVars } from "@/features/work-orders/whatsapp";
 import { VoidSaleButton } from "./VoidSaleButton";
 import { useReceivableOrders, useReceivableSales } from "./api";
 import { StatCard } from "./parts";
+import { Select } from "@/components/ui/Field";
+import { useCompanies } from "@/features/companies/api";
 
 /** Misma firma que las plantillas de templates.ts */
 const FIRMA = "Gracias por su preferencia en *{{taller}}* 🚗";
@@ -32,8 +34,14 @@ type Charge = { kind: "order"; order: WorkOrder } | { kind: "sale"; sale: Sale }
 
 export function ReceivablesPage() {
   const { can, role } = useAuth();
-  const orders = useReceivableOrders();
-  const sales = useReceivableSales(can("payments.read"));
+  const allOrders = useReceivableOrders();
+  const allSales = useReceivableSales(can("payments.read"));
+  const companies = useCompanies(can("companies.read"));
+  const [companyId, setCompanyId] = useState("");
+  // Filtro por empresa (en memoria): "none" = sin empresa
+  const byCompany = <T extends { companyId?: string | null }>(l: T[]) => (!companyId ? l : l.filter((x) => (companyId === "none" ? !x.companyId : x.companyId === companyId)));
+  const orders = { ...allOrders, data: byCompany(allOrders.data) };
+  const sales = { ...allSales, data: byCompany(allSales.data) };
   const [tab, setTab] = useState<"orders" | "sales">("orders");
   const [charging, setCharging] = useState<Charge | null>(null);
   const [messaging, setMessaging] = useState<Charge | null>(null);
@@ -53,6 +61,17 @@ export function ReceivablesPage() {
   return (
     <>
       <PageHeader title="Cuentas por cobrar" description="Órdenes y ventas con saldo pendiente. Cobre aquí o envíe un recordatorio amable por WhatsApp." />
+
+      {companies.data.length > 0 && (
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className="sm:w-64" aria-label="Empresa">
+            <option value="">Todas las empresas y clientes</option>
+            {companies.data.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="none">Sin empresa</option>
+          </Select>
+          {companyId && companyId !== "none" && <Link to={`/empresas/${companyId}?tab=cuenta`} className="text-sm font-semibold text-brand-700 hover:underline">Ver estado de cuenta de la empresa</Link>}
+        </div>
+      )}
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Por cobrar total" value={formatMoney(ordersTotal + salesTotal)} tone={ordersTotal + salesTotal > 0 ? "amber" : "green"} />
@@ -82,7 +101,8 @@ export function ReceivablesPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Link to={`/ordenes/${o.id}`} className="font-semibold text-slate-900 hover:text-brand-700">{o.code}</Link>
                         <StatusBadge status={o.status} short />
-                        {days !== null && <Badge tone="red">Entregada {days === 0 ? "hoy" : `hace ${days} ${days === 1 ? "día" : "días"}`}</Badge>}
+                        {days !== null && <Badge tone={o.companyId ? "amber" : "red"}>Entregada {days === 0 ? "hoy" : `hace ${days} ${days === 1 ? "día" : "días"}`}</Badge>}
+                        {o.companyName && <Badge tone="blue">{o.companyName}</Badge>}
                       </div>
                       <div className="truncate text-sm text-slate-700">{o.customer.fullName}</div>
                       <div className="truncate text-xs text-slate-500">{o.vehicle.make} {o.vehicle.model} {o.vehicle.year} · {formatPlate(o.vehicle.plate)}{isDelivered && o.deliveredAt ? ` · entregada ${formatDate(o.deliveredAt)}` : ""}</div>

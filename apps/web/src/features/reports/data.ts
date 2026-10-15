@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { collection, getDocs, limit, query, Timestamp, where, type QueryConstraint } from "firebase/firestore";
-import { quoteCol, type Quote, type QuoteItem, type WorkOrder } from "@rapifix/shared";
+import { pickApprovedQuote, quoteCol, type Quote, type QuoteItem, type WorkOrder } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
 import { errorMessage } from "@/lib/errors";
-import { toDate } from "@/lib/format";
 
 /** Lee una colección completa con restricciones (sin tiempo real). */
 export async function fetchAll<T>(path: string, ...constraints: QueryConstraint[]): Promise<T[]> {
@@ -26,14 +25,18 @@ export async function fetchApprovedQuotes(orders: Array<Pick<WorkOrder, "id" | "
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
   const results = await Promise.all(chunks.map((c) => fetchAll<Quote>(quoteCol.quotes(TENANT_ID), where("orderId", "in", c))));
-  const out = new Map<string, Quote>();
+  const byOrder = new Map<string, Quote[]>();
   for (const q of results.flat()) {
-    if (q.status !== "approved" || !q.orderId) continue;
-    const prev = out.get(q.orderId);
-    const isActive = active.get(q.orderId) === q.id;
-    if (!prev || isActive || (active.get(q.orderId) !== prev.id && (toDate(q.createdAt)?.getTime() ?? 0) > (toDate(prev.createdAt)?.getTime() ?? 0))) {
-      out.set(q.orderId, q);
-    }
+    if (!q.orderId) continue;
+    const list = byOrder.get(q.orderId) ?? [];
+    list.push(q);
+    byOrder.set(q.orderId, list);
+  }
+  // Misma regla que las comisiones (packages/shared/src/orderFinance.ts)
+  const out = new Map<string, Quote>();
+  for (const [orderId, list] of byOrder) {
+    const q = pickApprovedQuote(list, active.get(orderId) ?? null);
+    if (q) out.set(orderId, q);
   }
   return out;
 }

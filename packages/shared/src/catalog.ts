@@ -163,6 +163,10 @@ export interface Payment {
   receiptType?: "image" | "pdf" | null;
   voidedAt?: TimestampLike | null;
   voidedBy?: string | null;
+  /** Empresa de la orden pagada (estado de cuenta) */
+  companyId?: string | null;
+  /** Pago de empresa que repartió este recibo entre varias órdenes */
+  companyPaymentId?: string | null;
 }
 
 export const paymentReceiptPathRe = /^tenants\/[a-z0-9-]+\/paymentReceipts\/[A-Za-z0-9_-]+\.(jpg|png|webp|pdf)$/;
@@ -225,6 +229,9 @@ export interface Sale {
   unit?: BusinessUnit;
   /** Lavado del carwash que originó la venta. */
   washId?: string | null;
+  /** Empresa del vehículo (lo pone el servidor al crear la venta) */
+  companyId?: string | null;
+  companyName?: string;
   by: string;
   byName: string;
   at: TimestampLike;

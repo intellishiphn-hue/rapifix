@@ -122,7 +122,7 @@ export const voidPurchaseSchema = z.object({ purchaseId: id, reason: text(300).m
 export const EXPENSE_CATEGORIES = [
   "Alquiler", "Energía y agua", "Internet y teléfono", "Salarios", "Herramientas", "Insumos del taller",
   "Mantenimiento del local", "Publicidad", "Combustible y transporte", "Impuestos y permisos", "Servicios profesionales",
-  "Bancos y comisiones", "Otros",
+  "Bancos y comisiones", "Comisiones", "Otros",
 ] as const;
 
 /**
@@ -168,6 +168,8 @@ export interface Expense extends BaseDoc {
   dueDate?: TimestampLike | null;
   employeeId?: string | null;
   employeeName?: string;
+  /** Pago de comisiones a un referido que generó este gasto */
+  commissionPayoutId?: string | null;
   /** el monto de este mes se cambió a mano: ya no se actualiza desde la plantilla */
   adjusted?: boolean;
   paidAt?: TimestampLike | null;

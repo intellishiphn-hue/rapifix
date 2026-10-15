@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getDoc } from "firebase/firestore";
 import { toast } from "sonner";
-import { Car, ClipboardCheck, UserPlus } from "lucide-react";
+import { AlertTriangle, Building2, Car, ClipboardCheck, UserPlus } from "lucide-react";
 import {
-  createWorkOrderSchema, EMPTY_RECEPTION, normalizeUnit, PRIORITIES, PRIORITY_LABELS, WORK_TYPES, WORK_TYPE_LABELS,
+  createWorkOrderSchema, EMPTY_RECEPTION, formatMoney, isCreditTerms, paymentTermsLabel, normalizeUnit, PRIORITIES, PRIORITY_LABELS, WORK_TYPES, WORK_TYPE_LABELS,
   type Customer, type Priority, type ReceptionInput, type Vehicle, type WorkType,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
@@ -20,6 +20,9 @@ import { createWorkOrder } from "./api";
 import { ReceptionForm } from "./ReceptionForm";
 import { TechnicianSelect } from "./TechnicianSelect";
 import { VehiclePicker } from "./VehiclePicker";
+import { useAuth } from "@/lib/auth/useAuth";
+import { cn } from "@/lib/cn";
+import { useCompany } from "@/features/companies/api";
 
 export function NewWorkOrderPage() {
   const navigate = useNavigate();
@@ -90,6 +93,7 @@ export function NewWorkOrderPage() {
           <div className="p-5">
             <VehiclePicker value={vehicle} onChange={setVehicle} />
             {errors.vehicleId && <p className="mt-2 text-sm text-red-600">{errors.vehicleId}</p>}
+            {vehicle?.companyId && <CompanyNotice companyId={vehicle.companyId} companyName={vehicle.companyName ?? ""} />}
             {!vehicle && (
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="secondary" icon={<UserPlus className="h-4 w-4" />} onClick={() => setNewCustomer(true)}>Cliente nuevo</Button>
@@ -148,5 +152,24 @@ export function NewWorkOrderPage() {
         onSaved={(id) => void selectVehicle(id)}
       />
     </>
+  );
+}
+
+/** Vehículo de empresa: forma de pago y aviso si supera el límite de crédito (no bloquea). */
+function CompanyNotice({ companyId, companyName }: { companyId: string; companyName: string }) {
+  const { can } = useAuth();
+  const company = useCompany(companyId, can("companies.read"));
+  const c = company.data;
+  const over = c?.creditLimit ? (c.balanceDue ?? 0) >= c.creditLimit : false;
+  return (
+    <div className={cn("mt-3 flex gap-2 rounded-xl border px-3 py-2.5 text-sm", over ? "border-amber-200 bg-amber-50 text-amber-900" : "border-brand-100 bg-brand-50/60 text-slate-700")}>
+      {over ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />}
+      <div>
+        <span className="font-semibold">{c?.name ?? companyName}</span>
+        {c && <> · {paymentTermsLabel(c)}</>}
+        {over && c?.creditLimit && <div className="mt-0.5">Supera su límite de crédito: debe {formatMoney(c.balanceDue)} de un límite de {formatMoney(c.creditLimit)}. Puede continuar; avise a administración.</div>}
+        {!over && c && isCreditTerms(c) && <div className="mt-0.5 text-xs text-slate-500">La orden se puede entregar con saldo; se cobra según su forma de pago.</div>}
+      </div>
+    </div>
   );
 }

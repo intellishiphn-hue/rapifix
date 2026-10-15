@@ -94,6 +94,8 @@ export async function insertWorkOrder(caller: Caller, name: string, p: NewOrderP
       type: p.type, priority: p.priority, reason: p.reason,
       customerId, customer: { fullName: c.fullName, phone: c.phone, whatsapp: c.whatsapp || c.phone },
       vehicleId: p.vehicleId, vehicle: { make: v.make, model: v.model, year: v.year, color: v.color ?? "", plate: v.plate },
+      // Empresa (flota) del vehículo: queda guardada en la orden para su reporte y estado de cuenta
+      companyId: (v.companyId as string | undefined) || null, companyName: (v.companyName as string | undefined) ?? "",
       technicianIds: technicians.map((t) => t.id), technicians,
       reception: { ...reception, receivedAt: now, receivedBy: caller.uid },
       diagnosis: { reportedProblem: p.reason, technicianDiagnosis: "", recommendations: "", observations: "", testsPerformed: "", obdCodes: [], completedAt: null, completedBy: null },

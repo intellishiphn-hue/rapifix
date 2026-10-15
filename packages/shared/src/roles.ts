@@ -58,6 +58,9 @@ export const PERMISSIONS = [
   "carwash.charge",
   "carwash.manage",
   "carwash.reports",
+  "companies.read",
+  "companies.write",
+  "commissions.manage",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -76,6 +79,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "catalog.read", "sales.create", "payments.read",
     "agenda.read", "agenda.manage", "maintenance.manage", "employees.read", "reports.view", "messages.read",
     "carwash.read", "carwash.create", "carwash.charge",
+    "companies.read", "companies.write",
   ],
   technician: ["dashboard.view", "customers.read", "vehicles.read", "orders.read", "orders.diagnose", "catalog.read", "agenda.read"],
   warehouse: [
@@ -86,6 +90,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "dashboard.view", "customers.read", "customers.write", "vehicles.read", "vehicles.write", "orders.read",
     "catalog.read", "sales.create", "payments.read", "agenda.read", "reports.view", "messages.read",
     "carwash.read", "carwash.create", "carwash.charge",
+    "companies.read",
   ],
   washer: ["carwash.read", "carwash.create"],
 };

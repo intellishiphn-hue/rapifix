@@ -24,6 +24,7 @@ import { PlateTag } from "./VehicleCard";
 import { VehicleFormDialog } from "./VehicleFormDialog";
 import { VehiclePhotos } from "./VehiclePhotos";
 import { MileageDialog } from "./MileageDialog";
+import { VehicleCompany } from "@/features/companies/VehicleCompany";
 
 type Tab = "photos" | "mileage" | "timeline" | "carwash" | "changes";
 
@@ -157,6 +158,7 @@ export function VehicleDetailPage() {
                 <a href={whatsappLink(vehicle.customer.phone)} target="_blank" rel="noreferrer"><Button variant="secondary" className="w-full" icon={<MessageCircle className="h-4 w-4 text-emerald-600" />}>WhatsApp</Button></a>
               </div>
             )}
+            <VehicleCompany vehicle={vehicle} />
           </div>
         </Card>
       </div>

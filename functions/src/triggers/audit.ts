@@ -5,7 +5,7 @@ import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
 
 /** Colecciones auditadas. Se amplía en cada fase (órdenes, pagos, inventario...). */
-const AUDITED = new Set(["customers", "vehicles", "settings"]);
+const AUDITED = new Set(["customers", "vehicles", "settings", "companies", "referrers"]);
 
 /** Campos mantenidos por el sistema: sus cambios solos no generan registro. */
 const SYSTEM_FIELDS = new Set([

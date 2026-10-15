@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 
 export function PlateTag({ plate, className }: { plate: string; className?: string }) {
   return (
-    <span className={cn("inline-flex items-center rounded-md border-2 border-slate-800 bg-white px-1.5 py-0.5 font-mono text-xs font-bold tracking-wider text-slate-900", className)}>
+    <span className={cn("inline-flex shrink-0 items-center whitespace-nowrap rounded-md border-2 border-slate-800 bg-white px-1.5 py-0.5 font-mono text-xs font-bold tracking-wider text-slate-900", className)}>
       {formatPlate(plate)}
     </span>
   );

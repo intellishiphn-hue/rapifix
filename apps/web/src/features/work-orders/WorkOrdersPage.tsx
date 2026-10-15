@@ -16,6 +16,7 @@ import { useBoardDelivered, useOpenOrders, useOrdersList, type ListStatus } from
 import { useDeliveredCount } from "./historyApi";
 import { computePeriod } from "@/features/reports/period";
 import { KanbanBoard } from "./KanbanBoard";
+import { useCompanies } from "@/features/companies/api";
 import { StatusBadge } from "./StatusBadge";
 import { daysInShop } from "./OrderCard";
 
@@ -36,8 +37,11 @@ function OrdersList() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ListStatus>("open");
   const [pageSize, setPageSize] = useState(PAGE);
+  const [companyId, setCompanyId] = useState("");
+  const { can } = useAuth();
+  const companies = useCompanies(can("companies.read"));
   const debounced = useDebounced(search, 300);
-  const { data, loading, error, hasMore } = useOrdersList({ search: debounced, status, pageSize });
+  const { data, loading, error, hasMore } = useOrdersList({ search: debounced, status, pageSize, companyId: companyId || undefined });
 
   return (
     <Card>
@@ -51,6 +55,12 @@ function OrdersList() {
           <option value="all">Todas</option>
           {WORK_ORDER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
         </Select>
+        {companies.data.length > 0 && (
+          <Select value={companyId} onChange={(e) => { setCompanyId(e.target.value); setPageSize(PAGE); }} className="sm:w-56" aria-label="Empresa">
+            <option value="">Todas las empresas</option>
+            {companies.data.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+        )}
       </div>
       {error ? (
         <ErrorState message={error} />
@@ -75,7 +85,7 @@ function OrdersList() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2"><PlateTag plate={o.vehicle.plate} /><span className="truncate">{o.vehicle.make} {o.vehicle.model}</span></div>
                     </td>
-                    <td className="px-5 py-3">{o.customer.fullName}</td>
+                    <td className="px-5 py-3">{o.customer.fullName}{o.companyName && <div className="text-xs font-medium text-brand-700">{o.companyName}</div>}</td>
                     <td className="px-5 py-3"><StatusBadge status={o.status} /></td>
                     <td className="px-5 py-3 text-slate-600">{o.technicians?.map((t) => t.name).join(", ") || <span className="text-amber-700">Sin asignar</span>}</td>
                     <td className="px-5 py-3 text-slate-500">{formatDate(o.createdAt)}</td>
@@ -94,7 +104,7 @@ function OrdersList() {
                     <StatusBadge status={o.status} short />
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-sm"><PlateTag plate={o.vehicle.plate} /> {o.vehicle.make} {o.vehicle.model}</div>
-                  <div className="mt-0.5 text-xs text-slate-500">{o.customer.fullName} · {daysInShop(o)} días</div>
+                  <div className="mt-0.5 text-xs text-slate-500">{o.customer.fullName}{o.companyName ? ` · ${o.companyName}` : ""} · {daysInShop(o)} días</div>
                 </Link>
               </li>
             ))}

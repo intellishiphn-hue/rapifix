@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { assertFails, assertSucceeds, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
+import firebase from "firebase/compat/app";
 import {
   ROLES,
   T,
@@ -46,6 +47,11 @@ const SERVER_ONLY = [
   "carwashLoyalty",
   "carwashPlans",
   "carwashMemberships",
+  "companies",
+  "companyPayments",
+  "referrers",
+  "commissions",
+  "commissionPayouts",
 ] as const;
 
 beforeAll(async () => {
@@ -244,6 +250,22 @@ describe("clientes", () => {
     );
   });
 
+  it("nadie crea un cliente con comisión por referido (la pone setReferral)", async () => {
+    await assertFails(ref("reception").set(newCustomer("reception1", { referral: { referrerId: "r1", pct: 50 } })));
+    await assertFails(ref("admin").set(newCustomer("admin1", { referral: null })));
+  });
+
+  it("al editar un cliente con referido no se puede cambiar ni quitar la comisión", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`${T}/customers/c1`).update({ referral: { referrerId: "r1", referrerName: "Ana", pct: 5, basis: "profit", startDate: "2026-01-01", endDate: null } });
+    });
+    const c = (r: Role) => db(r).doc(`${T}/customers/c1`);
+    // editar datos normales sigue funcionando (la comisión viaja sin cambios)
+    await assertSucceeds(c("reception").update({ city: "Comayagua", updatedBy: "reception1", updatedAt: serverTs() }));
+    await assertFails(c("reception").update({ "referral.pct": 50, updatedBy: "reception1", updatedAt: serverTs() }));
+    await assertFails(c("admin").update({ referral: null, updatedBy: "admin1", updatedAt: serverTs() }));
+  });
+
   it("nadie borra clientes (se desactivan)", async () => {
     await assertFails(db("admin").doc(`${T}/customers/c1`).delete());
   });
@@ -288,6 +310,19 @@ describe("vehículos", () => {
     await assertSucceeds(db("reception").doc(`${T}/vehicles/usa`).set({ ...vehicle("reception1", "c1"), odometerUnit: "mi" }));
     await assertSucceeds(db("reception").doc(`${T}/vehicles/local`).set({ ...vehicle("reception1", "c1"), odometerUnit: "km" }));
     await assertFails(db("reception").doc(`${T}/vehicles/malo`).set({ ...vehicle("reception1", "c1"), odometerUnit: "millas" }));
+  });
+  it("no se crea un vehículo ya asignado a una empresa (lo asigna assignVehicleToCompany)", async () => {
+    await assertFails(db("reception").doc(`${T}/vehicles/nuevo`).set({ ...vehicle("reception1", "c1"), companyId: "e1", companyName: "INTELLISHIP" }));
+  });
+  it("al editar un vehículo de empresa no se cambia ni se quita la empresa", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`${T}/vehicles/flota`).set({ ...vehicle("admin1", "c1"), createdAt: fixedTs(), updatedAt: fixedTs(), companyId: "e1", companyName: "INTELLISHIP" });
+    });
+    const v = (r: Role) => db(r).doc(`${T}/vehicles/flota`);
+    await assertSucceeds(v("reception").update({ color: "Gris", updatedBy: "reception1", updatedAt: serverTs() }));
+    await assertFails(v("reception").update({ companyId: "e2", updatedBy: "reception1", updatedAt: serverTs() }));
+    await assertFails(v("admin").update({ companyName: "Otra", updatedBy: "admin1", updatedAt: serverTs() }));
+    await assertFails(v("reception").update({ companyId: firebase.firestore.FieldValue.delete(), companyName: firebase.firestore.FieldValue.delete(), updatedBy: "reception1", updatedAt: serverTs() }));
   });
   it("el historial de kilometraje acepta la unidad de la lectura", async () => {
     const entry = { mileage: 28100, source: "manual", note: "", at: serverTs(), by: "reception1", byName: "Recepción" };
@@ -447,6 +482,19 @@ describe("lecturas restringidas por rol", () => {
     for (const c of ["appointments", "employees", "staffDirectory", "counters"]) {
       await canRead(`${T}/${c}/x1`, ROLES);
     }
+  });
+
+  it("empresas y pagos de empresa: caja y gerencia (sin técnico, bodega ni lavador)", async () => {
+    await canRead(`${T}/companies/x1`, ["admin", "manager", "reception", "seller"]);
+    await canRead(`${T}/companyPayments/x1`, ["admin", "manager", "reception", "seller"]);
+    await assertSucceeds(db("reception").collection(`${T}/companies`).orderBy("name").limit(50).get());
+    await assertFails(db("technician").collection(`${T}/companies`).limit(5).get());
+  });
+
+  it("referidos, comisiones y pagos de comisiones: solo admin y gerente", async () => {
+    for (const c of ["referrers", "commissions", "commissionPayouts"]) await canRead(`${T}/${c}/x1`, ["admin", "manager"]);
+    await assertFails(db("reception").collection(`${T}/commissions`).where("status", "==", "pending").get());
+    await assertSucceeds(db("manager").collection(`${T}/commissions`).where("status", "==", "pending").get());
   });
 
   it("meta: nadie", async () => {

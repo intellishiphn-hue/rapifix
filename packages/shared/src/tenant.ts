@@ -68,6 +68,16 @@ export const financeCol = {
 } as const;
 
 /** Carwash: menú, cola de lavados, lealtad por placa, planes y membresías. Settings en settings/carwash. */
+/** Empresas con flota, referidos y comisiones. Todo lo escribe el servidor. */
+export const companyCol = {
+  companies: (tid: string) => `tenants/${tid}/companies`,
+  referrers: (tid: string) => `tenants/${tid}/referrers`,
+  commissions: (tid: string) => `tenants/${tid}/commissions`,
+  commissionPayouts: (tid: string) => `tenants/${tid}/commissionPayouts`,
+  /** pagos de una empresa repartidos entre varias órdenes (cada orden con su recibo REC) */
+  companyPayments: (tid: string) => `tenants/${tid}/companyPayments`,
+} as const;
+
 export const carwashCol = {
   services: (tid: string) => `tenants/${tid}/carwashServices`,
   washes: (tid: string) => `tenants/${tid}/carwashWashes`,

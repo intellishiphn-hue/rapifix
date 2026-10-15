@@ -19,6 +19,7 @@ import { orderVars } from "@/features/work-orders/whatsapp";
 import { newQuoteVersion, saveQuote, sendQuote, useOrderQuotes } from "./api";
 import { consumeOrderPart } from "@/features/catalog/api";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
+import { useCompany } from "@/features/companies/api";
 import { blankLine, DecisionInfo, DiscardRevisionDialog, ModifyQuoteDialog, QuoteHistory, QuoteLinesEditor, QuoteView, RecordDecisionDialog, RevisionChanges, versionLabel } from "./parts";
 
 const REVISION_STATE: Record<string, string> = { draft: "Borrador", sent: "Enviada al cliente", viewed: "Vista por el cliente" };
@@ -36,6 +37,7 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
   const closedOk = !order.isOpen && order.status !== "CANCELLED" && !!approved && (role === "admin" || role === "manager");
   const manage = can("quotes.manage") && (order.isOpen || closedOk);
   const showCost = can("dashboard.financials");
+  const company = useCompany(order.companyId, can("companies.read"));
 
   const [lines, setLines] = useState<QuoteItemInput[] | null>(null);
   const [notes, setNotes] = useState("");
@@ -131,6 +133,17 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
             description={`ISV ${settings.taxRate}% · los totales finales los calcula el sistema al guardar`}
           />
           <div className="p-5">
+            {company.data?.discountPct ? (
+              <div className="mb-4 flex flex-col gap-2 rounded-xl border border-brand-100 bg-brand-50/60 px-4 py-3 text-sm text-slate-700 sm:flex-row sm:items-center">
+                <span className="flex-1"><b>{company.data.name}</b> tiene un descuento sugerido de <b>{company.data.discountPct}%</b>.</span>
+                <Button size="sm" variant="secondary" onClick={() => {
+                  const pct = company.data?.discountPct ?? 0;
+                  setLines((ls) => ls?.map((l) => ({ ...l, discount: Math.round((l.qty * l.unitPrice * pct) / 100) })) ?? ls);
+                  setDirty(true);
+                  toast.success(`Descuento de ${pct}% aplicado a todas las líneas`);
+                }}>Aplicar {company.data.discountPct}% a todas las líneas</Button>
+              </div>
+            ) : null}
             <QuoteLinesEditor
               lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost}
               notes={notes} onNotes={(v) => { setNotes(v); setDirty(true); }} validDays={validDays} onValidDays={(v) => { setValidDays(v); setDirty(true); }} taxRate={settings.taxRate}

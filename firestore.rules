@@ -80,7 +80,7 @@ service cloud.firestore {
         return d.keys().hasOnly([
             'firstName', 'lastName', 'fullName', 'phone', 'whatsapp', 'email', 'idNumber', 'rtn',
             'address', 'city', 'notes', 'status', 'vehicleCount', 'openOrders', 'balanceDue',
-            'lastVisitAt', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+            'lastVisitAt', 'referral', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
           ])
           && isStr(d.firstName, 1, 60)
           && isStr(d.lastName, 1, 60)
@@ -104,13 +104,15 @@ service cloud.firestore {
           && validCreateMeta()
           && incoming().vehicleCount == 0
           && incoming().openOrders == 0
-          && incoming().balanceDue == 0;
-        // Contadores y saldos solo los cambian Cloud Functions
+          && incoming().balanceDue == 0
+          && !('referral' in incoming());
+        // Contadores, saldos y la comisión por referido (setReferral) solo los cambian Cloud Functions
         allow update: if hasRole(tid, writers())
           && validCustomer(incoming())
           && validUpdateMeta()
           && unchanged('vehicleCount') && unchanged('openOrders')
-          && unchanged('balanceDue') && unchanged('lastVisitAt');
+          && unchanged('balanceDue') && unchanged('lastVisitAt')
+          && unchanged('referral');
         allow delete: if false; // se desactivan, nunca se borran
       }
 
@@ -119,7 +121,7 @@ service cloud.firestore {
         return d.keys().hasOnly([
             'customerId', 'customer', 'make', 'model', 'year', 'color', 'plate', 'vin', 'mileage',
             'odometerUnit', 'mileageUpdatedAt', 'fuelType', 'engine', 'transmission', 'notes', 'coverPhotoUrl',
-            'photoCount', 'archived', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+            'photoCount', 'archived', 'companyId', 'companyName', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
           ])
           && isStr(d.customerId, 1, 128)
           && d.customer is map
@@ -148,11 +150,14 @@ service cloud.firestore {
         allow create: if hasRole(tid, writers())
           && validVehicle(incoming())
           && validCreateMeta()
-          && incoming().photoCount == 0;
+          && incoming().photoCount == 0
+          && !('companyId' in incoming()) && !('companyName' in incoming());
+        // La empresa (flota) solo la asigna assignVehicleToCompany
         allow update: if hasRole(tid, writers())
           && validVehicle(incoming())
           && validUpdateMeta()
-          && unchanged('photoCount');
+          && unchanged('photoCount')
+          && unchanged('companyId') && unchanged('companyName');
         allow delete: if false;
 
         // Historial de kilometraje: solo se agrega, nunca se edita ni borra
@@ -370,6 +375,31 @@ service cloud.firestore {
       }
       match /financeMeta/{docId} {
         allow read: if hasRole(tid, ['admin', 'manager']);
+        allow write: if false;
+      }
+
+      // ---------- Empresas con flota, referidos y comisiones ----------
+      // Todo lo escriben Cloud Functions (saveCompany, assignVehicleToCompany, saveReferrer, setReferral,
+      // registerCompanyPayment, payCommissions, voidCommission y el trigger de órdenes).
+      // El técnico no lee empresas: ve solo el nombre copiado en la orden (companyName).
+      match /companies/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
+      match /companyPayments/{id} {
+        allow read: if hasRole(tid, ['admin', 'manager', 'reception', 'seller']);
+        allow write: if false;
+      }
+      match /referrers/{id} {
+        allow read: if hasRole(tid, managers());
+        allow write: if false;
+      }
+      match /commissions/{id} {
+        allow read: if hasRole(tid, managers());
+        allow write: if false;
+      }
+      match /commissionPayouts/{id} {
+        allow read: if hasRole(tid, managers());
         allow write: if false;
       }
 

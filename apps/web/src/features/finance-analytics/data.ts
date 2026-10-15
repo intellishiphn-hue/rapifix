@@ -1,6 +1,6 @@
 import { doc, getDoc, where, limit } from "firebase/firestore";
 import {
-  catalogCol, financeCol, FINANCE_META_DOCS, normalizeText, orderCol, QUOTE_ITEM_LABELS,
+  catalogCol, computeOrderFinance, financeCol, FINANCE_META_DOCS, movementCostMap, normalizeText, orderCol, QUOTE_ITEM_LABELS, resolvePartCost,
   type Expense, type FinanceBudget, type InventoryMovement, type SupplierPayment, type Payment, type ProductCost, type Purchase, type QuoteItemType, type Sale, type WorkOrder,
 } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
@@ -106,21 +106,8 @@ function productCosts(refresh: number) {
   });
 }
 
-/** Promedio ponderado del costo de las salidas de inventario por documento y producto. */
-function movementCosts(movs: InventoryMovement[], docField: "orderId" | "saleId") {
-  const acc = new Map<string, { qty: number; cost: number }>();
-  for (const m of movs) {
-    const doc = m[docField];
-    if (m.type !== "out" || !doc || !(m.unitCost > 0)) continue;
-    const k = `${doc}|${m.productId}`;
-    const a = acc.get(k) ?? { qty: 0, cost: 0 };
-    const q = Math.abs(m.qty);
-    a.qty += q;
-    a.cost += q * m.unitCost;
-    acc.set(k, a);
-  }
-  return new Map([...acc].map(([k, a]) => [k, a.qty ? a.cost / a.qty : 0]));
-}
+/** Promedio ponderado del costo de las salidas de inventario por documento y producto (lógica compartida). */
+const movementCosts = (movs: InventoryMovement[], docField: "orderId" | "saleId") => movementCostMap(movs, docField);
 
 /** Ingresos, costos y utilidad de órdenes entregadas y ventas del POS en [start, end). */
 export function loadCore(start: Date, end: Date, refresh: number): Promise<Core> {
@@ -140,40 +127,25 @@ export function loadCore(start: Date, end: Date, refresh: number): Promise<Core>
 
     const lines: FinLine[] = [];
     const resolvePart = (docId: string, productId: string | null | undefined, lineCost: number, movMap: Map<string, number>) => {
-      if (lineCost > 0) return { unit: lineCost, missing: false, est: false };
-      if (productId) {
-        const m = movMap.get(`${docId}|${productId}`);
-        if (m && m > 0) return { unit: m, missing: false, est: false };
-        const avg = costs.get(productId);
-        if (avg && avg > 0) return { unit: avg, missing: false, est: true };
-      }
-      return { unit: 0, missing: true, est: false };
+      const r = resolvePartCost(lineCost, productId, productId ? movMap.get(`${docId}|${productId}`) : undefined, productId ? costs.get(productId) : undefined);
+      return { unit: r.unit, missing: r.missing, est: r.estimated };
     };
 
+    // Utilidad por orden: misma lógica que las comisiones por referido (packages/shared/src/orderFinance.ts)
     const orders: OrderFin[] = delivered.map((o) => {
-      const q = quotes.get(o.id);
+      const q = quotes.get(o.id) ?? null;
       const at = toDate(o.deliveredAt);
-      if (!q) {
-        const revenue = (o.totals?.subtotal ?? 0) - (o.totals?.discount ?? 0);
-        return { order: o, at, revenue, tax: o.totals?.tax ?? 0, cost: 0, profit: revenue, hasQuote: false, missingLines: revenue > 0 ? 1 : 0 };
-      }
-      let revenue = 0;
-      let cost = 0;
-      let missing = 0;
-      for (const it of q.items ?? []) {
+      const f = computeOrderFinance(o, q, { movementCost: (pid) => orderMov.get(`${o.id}|${pid}`), avgCost: (pid) => costs.get(pid) });
+      for (const l of f.lines) {
+        const it = l.item;
         const isPart = it.type === "part";
-        const r = isPart ? resolvePart(o.id, it.productId, it.unitCost, orderMov) : { unit: it.unitCost || 0, missing: false, est: false };
-        const c = Math.round(r.unit * it.qty);
-        revenue += it.lineTotal;
-        cost += c;
-        if (r.missing) missing++;
         const ref = isPart ? it.productId : it.serviceId;
         lines.push({
           source: "order", docId: o.id, at, key: `${isPart ? "part" : it.type === "other" ? "other" : "svc"}:${ref || `${it.type}:${normalizeText(it.description)}`}`,
-          name: it.description, type: it.type, qty: it.qty, revenue: it.lineTotal, cost: c, missingCost: r.missing, estimatedCost: r.est,
+          name: it.description, type: it.type, qty: it.qty, revenue: it.lineTotal, cost: l.cost, missingCost: l.missing, estimatedCost: l.estimated,
         });
       }
-      return { order: o, at, revenue, tax: q.totals?.tax ?? 0, cost, profit: revenue - cost, hasQuote: true, missingLines: missing };
+      return { order: o, at, revenue: f.revenue, tax: f.tax, cost: f.cost, profit: f.profit, hasQuote: f.hasQuote, missingLines: f.missingLines };
     });
 
     const saleFins: SaleFin[] = sales.map((s) => {

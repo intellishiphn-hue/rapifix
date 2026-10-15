@@ -15,7 +15,7 @@ import { usePayment, useSale, useSalePayments } from "@/features/payments/api";
 
 const FUEL = ["Vacío", "1/8", "1/4", "3/8", "1/2", "5/8", "3/4", "7/8", "Lleno"];
 
-function PrintShell({ settings, title, code, date, children }: { settings: WorkshopSettings; title: string; code: string; date: string; children: React.ReactNode }) {
+export function PrintShell({ settings, title, code, date, children }: { settings: WorkshopSettings; title: string; code: string; date: string; children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-200 py-6 print:bg-white print:py-0">
       <style>{`@page { size: letter; margin: 12mm; } @media print { .no-print { display: none !important; } body { background: #fff; } }`}</style>
@@ -47,7 +47,7 @@ function PrintShell({ settings, title, code, date, children }: { settings: Works
   );
 }
 
-function Box({ title, children }: { title: string; children: React.ReactNode }) {
+export function Box({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
       <h2 className="mb-1.5 border-l-4 border-brand-600 pl-2 text-[11px] font-bold uppercase tracking-wider text-slate-900">{title}</h2>
@@ -56,7 +56,7 @@ function Box({ title, children }: { title: string; children: React.ReactNode }) 
   );
 }
 
-function KV({ rows }: { rows: Array<[string, React.ReactNode]> }) {
+export function KV({ rows }: { rows: Array<[string, React.ReactNode]> }) {
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-1">
       {rows.map(([k, v]) => <div key={k} className="flex gap-2"><dt className="w-28 shrink-0 text-slate-500">{k}</dt><dd className="font-medium">{v || "—"}</dd></div>)}

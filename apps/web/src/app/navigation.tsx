@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BadgeCheck, Droplets, ListChecks, PieChart, SlidersHorizontal } from "lucide-react";
+import { BadgeCheck, Building2, Droplets, HandHeart, ListChecks, PieChart, SlidersHorizontal } from "lucide-react";
 import {
   BarChart3, Boxes, CalendarDays, Car, ClipboardList, CreditCard, FileText, Globe, LayoutDashboard,
   History, MessageCircle, Package, Receipt, Repeat, Settings, ShieldCheck, ShoppingCart, Truck, Users, Wrench, HardHat, CalendarClock, ClipboardPlus, HandCoins, Landmark,
@@ -45,6 +45,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: "Clientes",
     items: [
       { label: "Clientes", to: "/clientes", icon: Users, permission: "customers.read" },
+      { label: "Empresas", to: "/empresas", icon: Building2, permission: "companies.read" },
       { label: "Vehículos", to: "/vehiculos", icon: Car, permission: "vehicles.read" },
       { label: "Cotizaciones", to: "/cotizaciones", icon: FileText, permission: "orders.read" },
       { label: "Mantenimiento", to: "/mantenimiento", icon: CalendarClock, permission: "maintenance.manage" },
@@ -58,6 +59,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { label: "Punto de venta", to: "/pos", icon: ShoppingCart, permission: "sales.create" },
       { label: "Pagos", to: "/pagos", icon: CreditCard, permission: "payments.read", counter: "proofs" },
       { label: "Finanzas", to: "/finanzas", icon: Landmark, permission: "reports.financial" },
+      { label: "Comisiones", to: "/comisiones", icon: HandHeart, permission: "commissions.manage" },
       { label: "Cuentas por cobrar", to: "/cuentas-por-cobrar", icon: HandCoins, permission: "payments.read" },
       { label: "Gastos", to: "/gastos", icon: Receipt, permission: "expenses.manage" },
       { label: "Gastos fijos", to: "/gastos-fijos", icon: Repeat, permission: "expenses.manage" },

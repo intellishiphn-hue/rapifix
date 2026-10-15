@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, Info } from "lucide-react";
 import {
-  formatOdometer, isOdometerLower, normalizeUnit, odometerFieldLabel, STATUS_META,
+  formatOdometer, isCreditTerms, isOdometerLower, orderDueKey, paymentTermsLabel, normalizeUnit, odometerFieldLabel, STATUS_META,
   type OdometerUnit, type WorkOrder, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
@@ -16,6 +16,8 @@ import { StatusBadge } from "./StatusBadge";
 import { WhatsAppComposer } from "./WhatsAppComposer";
 import { messageForStatus } from "./whatsapp";
 import { useWaSilentSend } from "@/features/whatsapp/auto";
+import { useAuth } from "@/lib/auth/useAuth";
+import { keyLabel, useCompany } from "@/features/companies/api";
 
 export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; to: WorkOrderStatus | null; onClose: () => void }) {
   const { settings } = useSettings();
@@ -26,6 +28,8 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
   const [unit, setUnit] = useState<OdometerUnit>(orderUnit);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const { can } = useAuth();
+  const company = useCompany(order.companyId, !!to && can("companies.read"));
 
   useEffect(() => {
     if (to) {
@@ -42,7 +46,11 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
   const warnings: string[] = [];
   if (to === "AWAITING_QUOTE" && !order.diagnosis?.completedAt) warnings.push("El diagnóstico todavía no está marcado como completado.");
   if (to === "READY" && !order.qc?.passedAt) warnings.push("El control de calidad no ha sido aprobado.");
-  if (delivering && (order.balance ?? 0) > 0) warnings.push("La orden tiene saldo pendiente.");
+  // Empresa a crédito o fin de mes: entregar con saldo es lo normal (aviso informativo, no advertencia)
+  const creditInfo = delivering && (order.balance ?? 0) > 0 && company.data && isCreditTerms(company.data)
+    ? `A crédito (${paymentTermsLabel(company.data)}): vence el ${keyLabel(orderDueKey(company.data, Date.now()))}.`
+    : null;
+  if (delivering && (order.balance ?? 0) > 0 && !creditInfo) warnings.push("La orden tiene saldo pendiente.");
 
   const kmNum = Number(km);
   const kmInvalid = delivering && km !== "" && (!Number.isInteger(kmNum) || kmNum < 0);
@@ -104,6 +112,11 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
           <ArrowRight className="h-4 w-4 text-slate-400" />
           <StatusBadge status={to} />
         </div>
+        {creditInfo && (
+          <div className="flex gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" /> {order.companyName}. {creditInfo}
+          </div>
+        )}
         {warnings.map((w) => (
           <div key={w} className="flex gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {w}

@@ -16,7 +16,7 @@ type OrderDates = Pick<WorkOrder, "deliveredAt" | "statusChangedAt" | "updatedAt
 export type HistoryOrder = Pick<
   WorkOrder,
   "id" | "code" | "type" | "customerId" | "customer" | "vehicleId" | "vehicle" | "technicianIds" | "technicians" | "totals" | "paid" | "balance"
-> & OrderDates;
+> & OrderDates & Partial<Pick<WorkOrder, "companyId" | "companyName">>;
 
 const ms = (t: TimestampLike | null | undefined): number | null => (t && typeof t.toMillis === "function" ? t.toMillis() : null);
 
@@ -64,6 +64,8 @@ export interface HistoryFilters {
   technicianId?: string;
   type?: WorkType | "";
   payment?: HistoryPayment;
+  /** id de la empresa (flota), o "none" para órdenes sin empresa */
+  companyId?: string;
 }
 
 const compact = (s: string) => normalizeText(s).replace(/[^a-z0-9]/g, "");
@@ -98,6 +100,7 @@ export function filterHistory<T extends HistoryOrder>(orders: T[], f: HistoryFil
       if (f.technicianId === "none" ? ids.length > 0 : !ids.includes(f.technicianId)) return false;
     }
     if (f.type && o.type !== f.type) return false;
+    if (f.companyId && (f.companyId === "none" ? !!o.companyId : o.companyId !== f.companyId)) return false;
     if (f.payment === "paid" && !isOrderPaid(o)) return false;
     if (f.payment === "balance" && isOrderPaid(o)) return false;
     return matchesHistorySearch(o, f.search ?? "");

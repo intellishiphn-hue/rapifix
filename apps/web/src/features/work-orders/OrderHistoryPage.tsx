@@ -24,6 +24,7 @@ import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { computePeriod, hnTodayStart, type Period, type PeriodKey } from "@/features/reports/period";
 import { exportToExcel, type ColKind, type ReportCell, type ReportTable } from "@/features/reports/table";
 import { HISTORY_PAGE, useDeliveredHistory } from "./historyApi";
+import { useCompanies } from "@/features/companies/api";
 
 // ---------------- Período ----------------
 type HistoryPeriod = PeriodKey | "last90";
@@ -80,6 +81,8 @@ export function OrderHistoryPage() {
   const payment: HistoryPayment = showMoney && (params.get("pago") === "paid" || params.get("pago") === "balance") ? (params.get("pago") as HistoryPayment) : "all";
   const groupBy = isGroup(params.get("grupo")) ? (params.get("grupo") as HistoryGroupBy) : "day";
   const urlSearch = params.get("q") ?? "";
+  const companyId = params.get("emp") ?? "";
+  const companies = useCompanies(can("companies.read"));
 
   const setParam = (changes: Record<string, string | null>) =>
     setParams((prev) => {
@@ -105,16 +108,16 @@ export function OrderHistoryPage() {
 
   const technicians = useMemo(() => historyTechnicians(history.orders), [history.orders]);
   const rows = useMemo(
-    () => filterHistory(history.orders, { search: debounced, technicianId, type, payment }),
-    [history.orders, debounced, technicianId, type, payment],
+    () => filterHistory(history.orders, { search: debounced, technicianId, type, payment, companyId }),
+    [history.orders, debounced, technicianId, type, payment, companyId],
   );
   const summary = useMemo(() => summarizeHistory(rows), [rows]);
   const groups = useMemo(() => groupHistory(rows, groupBy), [rows, groupBy]);
 
-  const filtersOn = !!(debounced.trim() || technicianId || type || payment !== "all");
+  const filtersOn = !!(debounced.trim() || technicianId || type || payment !== "all" || companyId);
   const clearFilters = () => {
     setSearch("");
-    setParam({ q: null, tec: null, tipo: null, pago: null });
+    setParam({ q: null, tec: null, tipo: null, pago: null, emp: null });
   };
 
   const [exporting, setExporting] = useState(false);
@@ -185,7 +188,14 @@ export function OrderHistoryPage() {
               </button>
             )}
           </div>
-          <div className={cn("grid gap-2 sm:grid-cols-3 lg:flex", !showMoney && "sm:grid-cols-2")}>
+          <div className={cn("grid gap-2 lg:flex", { 2: "sm:grid-cols-2", 3: "sm:grid-cols-3", 4: "sm:grid-cols-2 md:grid-cols-4" }[2 + (showMoney ? 1 : 0) + (companies.data.length > 0 ? 1 : 0)])}>
+            {companies.data.length > 0 && (
+              <Select value={companyId} onChange={(e) => setParam({ emp: e.target.value || null })} className="lg:w-48" aria-label="Empresa">
+                <option value="">Todas las empresas</option>
+                {companies.data.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="none">Sin empresa</option>
+              </Select>
+            )}
             <Select value={technicianId} onChange={(e) => setParam({ tec: e.target.value || null })} className="lg:w-48" aria-label="Técnico">
               <option value="">Todos los técnicos</option>
               {technicians.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -481,12 +491,12 @@ function GroupCard({ group, by, showMoney, canContact }: { group: HistoryGroup<W
 
 function exportTable(rows: WorkOrder[], money: boolean): ReportTable {
   const columns: ReportTable["columns"] = [
-    { label: "Orden" }, { label: "Entregada" }, { label: "Hora" }, { label: "Cliente" }, { label: "Teléfono" }, { label: "Vehículo" }, { label: "Placa" },
+    { label: "Orden" }, { label: "Entregada" }, { label: "Hora" }, { label: "Cliente" }, { label: "Teléfono" }, { label: "Empresa" }, { label: "Vehículo" }, { label: "Placa" },
     { label: "Tipo de trabajo" }, { label: "Técnico" }, { label: "Días en taller", kind: "number" },
     ...(money ? [{ label: "Total", kind: "money" as const }, { label: "Cobrado", kind: "money" as const }, { label: "Saldo", kind: "money" as const }, { label: "Pago" }] : []),
   ];
   const body: ReportCell[][] = rows.map((o) => [
-    o.code, fmtDate(o), fmtTime(o), o.customer.fullName, formatPhone(o.customer.phone), vehicleName(o), formatPlate(o.vehicle.plate),
+    o.code, fmtDate(o), fmtTime(o), o.customer.fullName, formatPhone(o.customer.phone), o.companyName ?? "", vehicleName(o), formatPlate(o.vehicle.plate),
     WORK_TYPE_LABELS[o.type] ?? "Otro", techNames(o) || "Sin técnico", shopDays(o),
     ...(money ? [orderTotal(o), orderPaid(o), orderBalance(o), isOrderPaid(o) ? "Pagada" : "Con saldo"] : []),
   ]);
@@ -495,7 +505,7 @@ function exportTable(rows: WorkOrder[], money: boolean): ReportTable {
     title: "Órdenes entregadas",
     columns,
     rows: body,
-    total: money ? ["Total", "", "", "", "", "", "", "", "", null, s.billed, s.collected, s.balance, ""] : undefined,
+    total: money ? ["Total", "", "", "", "", "", "", "", "", "", null, s.billed, s.collected, s.balance, ""] : undefined,
     empty: "Sin entregas con estos filtros",
   };
 }

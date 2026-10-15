@@ -44,6 +44,8 @@ export function writePaymentToTarget(
     /** mensaje visible para el cliente en su portal (orden) */
     customerText?: string;
     extra?: Record<string, unknown>;
+    /** el contador de recibos lo escribe quien llama (varios pagos en una sola transacción) */
+    skipCounter?: boolean;
   },
 ): { paymentId: string; code: string; balance: number } {
   const t = r.target;
@@ -54,7 +56,7 @@ export function writePaymentToTarget(
   if (p.amount > balance) throw new HttpsError("failed-precondition", `El monto supera el saldo pendiente (${formatMoney(balance)}).`);
   const payRef = db.collection(catalogCol.payments(r.tid)).doc();
   const code = `REC-${pad(r.counter.next)}`;
-  tx.set(r.counter.ref, { next: r.counter.next + 1 }, { merge: true });
+  if (!p.skipCounter) tx.set(r.counter.ref, { next: r.counter.next + 1 }, { merge: true });
   const newPaid = paid + p.amount;
   const upd: Record<string, unknown> = { paid: newPaid, balance: total - newPaid };
   if (r.saleId) upd.status = total - newPaid <= 0 ? "paid" : "partial";
@@ -65,6 +67,7 @@ export function writePaymentToTarget(
     customerName: (t.get("customer.fullName") as string) ?? (t.get("customerName") as string) ?? "Consumidor final",
     orderId: r.orderId, orderCode: r.orderId ? t.get("code") : null,
     saleId: r.saleId, saleCode: r.saleId ? t.get("code") : null,
+    companyId: (t.get("companyId") as string | null | undefined) || null,
     receivedBy: p.uid, receivedByName: p.byName, at: FieldValue.serverTimestamp(),
     ...(p.extra ?? {}),
   });

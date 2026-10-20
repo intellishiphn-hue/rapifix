@@ -32,9 +32,11 @@
   letter-spacing: -0.025em;
 }
 .lp-h1 { font-size: clamp(2.6rem, 6.6vw, 6.2rem); line-height: 0.94; }
+@media (min-width: 640px) and (max-width: 1023px) { .lp-h1 { font-size: clamp(3.6rem, 9.4vw, 5.4rem); } }
 .lp-h2 { font-size: clamp(2rem, 4.3vw, 3.6rem); line-height: 1; }
 .lp-h3 { font-size: clamp(1.15rem, 1.6vw, 1.4rem); line-height: 1.12; letter-spacing: -0.01em; font-stretch: 108%; }
-.lp-lead { font-size: clamp(1.05rem, 1.35vw, 1.22rem); line-height: 1.6; }
+.lp-lead { font-size: clamp(1.05rem, 1.35vw, 1.22rem); line-height: 1.6; text-wrap: pretty; }
+.lp-h2, .lp-h3 { text-wrap: balance; }
 
 .lp-wrap { width: 100%; max-width: 1240px; margin-inline: auto; padding-inline: 16px; }
 @media (min-width: 640px) { .lp-wrap { padding-inline: 32px; } }
@@ -81,40 +83,22 @@
 
 /* Hero */
 .lp-hero { position: relative; isolation: isolate; background: radial-gradient(120% 80% at 70% 0%, #0b2a7a 0%, #021240 45%, var(--lp-night) 75%); }
-.lp-hero-grid {
-  position: absolute; inset: auto 0 0 0; height: 46%; z-index: -1; pointer-events: none;
-  background-image:
-    linear-gradient(rgb(59 140 255 / 0.16) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(59 140 255 / 0.16) 1px, transparent 1px);
-  background-size: 64px 64px;
-  transform: perspective(600px) rotateX(62deg);
-  transform-origin: 50% 100%;
-  mask-image: linear-gradient(to top, #000 0%, transparent 85%);
-  -webkit-mask-image: linear-gradient(to top, #000 0%, transparent 85%);
-}
-.lp-hero-strip {
-  position: absolute; z-index: -1; left: 50%; top: 0; width: min(1100px, 120vw); height: 220px; transform: translateX(-38%);
-  background: radial-gradient(50% 40% at 50% 0%, rgb(160 196 255 / 0.4), transparent 70%);
-  pointer-events: none;
-}
-.lp-noise {
-  position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0.07; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-.lp-hero-car { transform: translate3d(var(--px, 0px), calc(var(--py, 0px) + var(--sy, 0px)), 0); transition: transform 0.6s var(--lp-ease); will-change: transform; }
-.lp-hero-glow { transform: translate3d(calc(var(--px, 0px) * -2.5), 0, 0); transition: transform 0.8s var(--lp-ease); }
+/* Escena del hero (SVG por capas). El parallax usa --px/--py (de -0.5 a 0.5) del hero. */
+.lp-scene .lp-layer-bg { transform: translate(calc(var(--px, 0) * -14px), calc(var(--py, 0) * -8px)); transition: transform 0.9s var(--lp-ease); }
+.lp-scene .lp-layer-car { transform: translate(calc(var(--px, 0) * -26px), calc(var(--py, 0) * -10px)); transition: transform 0.7s var(--lp-ease); }
+.lp-scene .lp-layer-lights { transform: translate(calc(var(--px, 0) * -40px), calc(var(--py, 0) * -14px)); transition: transform 0.6s var(--lp-ease); }
+/* Móvil y tablet: recorte del vehículo con bordes difuminados */
+.lp-car-wrap { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%), linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); -webkit-mask-composite: source-in; mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%), linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%); mask-composite: intersect; }
 
-/* Secuencia de entrada del hero (el único momento orquestado) */
+/* Secuencia de entrada del hero (el único momento orquestado): texto, vehículo y luces que se encienden */
 @keyframes lp-rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
-@keyframes lp-car-in { from { opacity: 0; transform: translateX(60px); } to { opacity: 1; transform: none; } }
+@keyframes lp-car-in { from { opacity: 0; transform: translateX(48px); } to { opacity: 1; transform: none; } }
+@keyframes lp-on { 0%, 40% { opacity: 0; } 100% { opacity: 1; } }
 @keyframes lp-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes lp-scan { from { transform: translateX(0); } to { transform: translateX(1500px); } }
-@keyframes lp-lamp { 0%, 60% { opacity: 0.2; } 100% { opacity: 1; } }
 .lp-in { opacity: 0; animation: lp-rise 0.9s var(--lp-ease) forwards; animation-delay: var(--d, 0ms); }
-.lp-car-wrap { opacity: 0; animation: lp-car-in 1.4s var(--lp-ease) 0.25s forwards; }
-.lp-car-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: lp-draw 1.6s var(--lp-ease) 0.9s forwards; filter: drop-shadow(0 0 6px rgb(234 1 1 / 0.9)); }
-.lp-car-scan { animation: lp-scan 2.2s cubic-bezier(0.45, 0, 0.25, 1) 1.2s 1 both; }
-.lp-car-lamp { animation: lp-lamp 1.8s ease-out 0.9s both; filter: drop-shadow(0 0 8px rgb(191 224 255 / 0.9)); }
+.lp-car-wrap, .lp-scene { opacity: 0; animation: lp-car-in 1.4s var(--lp-ease) 0.2s forwards; }
+.lp-scene { animation-name: lp-on; animation-duration: 1.2s; animation-delay: 0s; }
+.lp-led-glow, .lp-led { animation: lp-on 1.6s ease-out 0.7s both; }
 
 /* Revelado al desplazarse: sin JS todo se ve */
 .lp-js [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity 0.8s var(--lp-ease), transform 0.8s var(--lp-ease); transition-delay: var(--d, 0ms); }
@@ -196,12 +180,10 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .lp *, .lp *::before, .lp *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; transition-delay: 0ms !important; }
-  .lp-in, .lp-car-wrap { opacity: 1; animation: none; }
-  .lp-car-line { stroke-dashoffset: 0; animation: none; }
-  .lp-car-scan { display: none; }
+  .lp-in, .lp-car-wrap, .lp-scene, .lp-led-glow, .lp-led { opacity: 1; animation: none; }
   .lp-js [data-reveal] { opacity: 1; transform: none; }
   .lp-js .lp-phone-bar { transform: none; animation: none; }
-  .lp-tile, .lp-hero-car, .lp-hero-glow { transform: none !important; }
+  .lp-tile, .lp-scene .lp-layer-bg, .lp-scene .lp-layer-car, .lp-scene .lp-layer-lights { transform: none !important; }
   .lp-step .lp-step-body { opacity: 1; }
   .lp-rail-fill { transform: none; }
 }

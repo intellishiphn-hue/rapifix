@@ -98,6 +98,14 @@ describe("buscador de la landing", () => {
     expect(jobsOf("bateria")).toHaveLength(2);
   });
 
+  it("amortiguadores y variantes con y sin tilde", () => {
+    expect(jobsOf("amortiguadores")).toContain("Cambio de amortiguadores delanteros y traseros.");
+    expect(jobsOf("amortiguador")).toEqual(jobsOf("amortiguadores"));
+    expect(jobsOf("climatización")).toEqual(jobsOf("climatizacion"));
+    expect(jobsOf("ACEITE")).toEqual(jobsOf("aceite"));
+    expect(jobsOf("diagnóstico")).toEqual(jobsOf("diagnostico"));
+  });
+
   it("sin resultados", () => {
     expect(searchCatalog("xyzxyz")).toHaveLength(0);
   });

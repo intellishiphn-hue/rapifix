@@ -68,7 +68,7 @@ export function ServicesSection() {
       : `${jobsLabel(jobCount)} en ${results.length} ${results.length === 1 ? "categoría" : "categorías"}.`;
 
   return (
-    <section id="servicios" className="lp-section lp-light relative bg-white py-24 sm:py-32">
+    <section id="servicios" className="lp-section lp-light relative bg-white py-28 sm:py-36">
       <div className="lp-wrap">
         <div className="grid gap-8 lg:grid-cols-[1.25fr_1fr] lg:items-end" data-reveal>
           <h2 className="lp-display lp-h2 max-w-[15ch] text-[var(--lp-navy)]">Todo lo que tu vehículo necesita. En un solo lugar.</h2>
@@ -150,7 +150,7 @@ function Tile({ category: c, variant, onOpen }: { category: ServiceCategory; var
   const Icon = CATEGORY_ICON[c.id];
   const tilt = useMemo(() => tiltHandlers(), []);
   const dark = variant === "hero" || variant === "fleet";
-  const label = `${c.name}: ${jobsLabel(c.jobs.length)}. Ver detalle`;
+  const label = `${c.name}: ${jobsLabel(c.jobs.length)}. Explorar servicios`;
   const motifKind = c.id === "mantenimiento" || c.id === "frenos" || c.id === "diagnostico" || c.id === "aire" || c.id === "flotillas" ? c.id : null;
 
   return (
@@ -163,7 +163,7 @@ function Tile({ category: c, variant, onOpen }: { category: ServiceCategory; var
       className={cn(
         "lp-tile group flex w-full flex-col",
         dark ? "lp-tile-dark" : "lp-tile-plain",
-        variant === "hero" ? "min-h-[360px] p-6 sm:p-8 lg:min-h-[400px]" : variant === "small" ? "min-h-[150px] p-4 sm:min-h-[170px] sm:p-5" : "min-h-[190px] p-6 sm:p-7",
+        variant === "hero" ? "min-h-[360px] p-6 sm:p-8 lg:min-h-[400px]" : variant === "small" ? "min-h-[156px] p-4 sm:min-h-[190px] sm:p-5" : "min-h-[190px] p-6 sm:p-7",
       )}
     >
       {motifKind && (
@@ -171,10 +171,10 @@ function Tile({ category: c, variant, onOpen }: { category: ServiceCategory; var
           aria-hidden
           className={cn(
             "lp-tile-motif pointer-events-none absolute",
-            variant === "hero" && "-bottom-10 -right-10 h-[260px] w-[260px] text-white/25 sm:h-[320px] sm:w-[320px] lg:-bottom-6 lg:-right-6 lg:h-[340px] lg:w-[340px]",
+            variant === "hero" && "-bottom-10 -right-10 h-[260px] w-[260px] text-white/15 sm:text-white/25 sm:h-[320px] sm:w-[320px] lg:-bottom-6 lg:-right-6 lg:h-[340px] lg:w-[340px]",
             c.id === "frenos" && "hidden sm:block -right-8 top-1/2 h-[200px] w-[200px] -translate-y-1/2 text-[var(--lp-navy)]/25 sm:right-2 sm:h-[180px] sm:w-[180px]",
             (c.id === "diagnostico" || c.id === "aire") && "hidden sm:block right-5 top-6 h-[64px] w-[150px] text-[var(--lp-electric-ink)]/40 sm:h-[80px] sm:w-[220px]",
-            c.id === "flotillas" && "hidden sm:block bottom-3 right-4 h-[80px] w-[260px] text-white/30 sm:w-[300px]",
+            c.id === "flotillas" && "hidden sm:block right-5 top-6 h-[70px] w-[240px] text-white/30",
           )}
         >
           <Motif kind={motifKind} className="h-full w-full" />
@@ -187,13 +187,14 @@ function Tile({ category: c, variant, onOpen }: { category: ServiceCategory; var
         <span className={cn("lp-display block", variant === "hero" ? "text-[clamp(1.7rem,3vw,2.5rem)] leading-[1.02]" : variant === "small" ? "text-[1.02rem] leading-[1.1] sm:text-[1.12rem]" : "text-[1.45rem] leading-[1.05]", dark ? "text-white" : "text-[var(--lp-navy)]")}>
           {variant === "small" ? c.short : c.name}
         </span>
-        {variant === "small" && <span className="mt-2 hidden text-[0.88rem] leading-snug text-[var(--lp-mute)] lg:block">{c.blurb}</span>}
-        {variant !== "small" && (
-          <span className={cn("mt-3 block max-w-[30rem] text-[0.95rem] leading-relaxed", dark ? "text-[var(--lp-mute-dark)]" : "text-[var(--lp-mute)]")}>{c.blurb}</span>
-        )}
-        <span className={cn("mt-4 flex items-center gap-2 text-sm font-semibold", dark ? "text-white" : "text-[var(--lp-electric-ink)]")}>
-          {jobsLabel(c.jobs.length)}
-          <ArrowRight className="lp-tile-go h-4 w-4" aria-hidden />
+        <span className={cn("mt-2 max-w-[30rem]", variant === "small" ? "hidden sm:block" : "block")}>
+          <span className={cn("line-clamp-2 text-[0.93rem] leading-snug", dark ? "text-[var(--lp-mute-dark)]" : "text-[var(--lp-mute)]")}>{c.blurb}</span>
+        </span>
+        <span className={cn("mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm", dark ? "text-white" : "text-[var(--lp-navy)]")}>
+          <span className={cn("tabular", dark ? "text-white/70" : "text-[var(--lp-mute)]")}>{jobsLabel(c.jobs.length)}</span>
+          <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap font-semibold", variant === "small" && "text-[0.8rem] sm:text-sm", dark ? "text-white" : "text-[var(--lp-electric-ink)]")}>
+            Explorar servicios <ArrowRight className={cn("lp-tile-go h-4 w-4", variant === "small" && "hidden sm:block")} aria-hidden />
+          </span>
         </span>
       </span>
     </button>

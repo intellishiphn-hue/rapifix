@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, Cpu, Gauge, Menu, MessageCircle, Smartphone, Truck, Wrench, X, Zap } from "lucide-react";
+import { ArrowRight, ClipboardCheck, Gauge, Menu, MessageCircle, Wrench, X, Zap } from "lucide-react";
 import { useAuth } from "@/lib/auth/useAuth";
-import { cn } from "@/lib/cn";
 import "./landing.css";
 import { BUSINESS, WA_MESSAGES, structuredData, waLink } from "./business";
 import { BrandLogo } from "./Brand";
-import { HeroCar } from "./Art";
+import { HERO_VIEWBOX_CAR, HeroScene } from "./HeroScene";
 import { finePointer, useReducedMotion, useRevealAll } from "./motion";
 import { ServicesSection } from "./Services";
 import { ContactSection, FleetSection, Footer, ProcessSection, TrackingSection } from "./Sections";
@@ -212,47 +211,54 @@ function Nav() {
 
 /* ---------------------------------------------------------------- Hero */
 
+/** Escritorio ancho: escena completa de fondo. Pantallas angostas: recorte centrado en el vehículo. */
+function useWide() {
+  const q = "(min-width: 1024px)";
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(q);
+    if (!m) return;
+    const on = () => setWide(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return wide;
+}
+
 function Hero() {
   const ref = useRef<HTMLElement>(null);
-  const carRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
+  const wide = useWide();
+  const photo = BUSINESS.heroImage;
 
-  // Parallax suave del vehículo con el scroll y el puntero (solo puntero preciso)
+  // Parallax por capas (fondo, vehículo, luces) siguiendo el mouse. Solo escritorio con puntero preciso.
   useEffect(() => {
     const el = ref.current;
-    const car = carRef.current;
-    if (!el || !car || reduce) return;
+    if (!el || reduce || !wide || photo) return;
     let raf = 0;
-    let last = -1;
-    const scroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        // Solo mientras el hero está a la vista (más abajo el valor queda fijo y no se repinta)
-        const y = Math.min(window.scrollY, 900);
-        if (y === last) return;
-        last = y;
-        car.style.setProperty("--sy", `${(y * 0.12).toFixed(1)}px`);
-      });
-    };
     const move = (e: PointerEvent) => {
       if (e.pointerType !== "mouse" || !finePointer()) return;
       const r = el.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width - 0.5;
       const y = (e.clientY - r.top) / r.height - 0.5;
-      car.style.setProperty("--px", `${(x * -14).toFixed(1)}px`);
-      car.style.setProperty("--py", `${(y * -8).toFixed(1)}px`);
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        el.style.setProperty("--px", x.toFixed(3));
+        el.style.setProperty("--py", y.toFixed(3));
+      });
     };
-    window.addEventListener("scroll", scroll, { passive: true });
+    const leave = () => {
+      el.style.setProperty("--px", "0");
+      el.style.setProperty("--py", "0");
+    };
     el.addEventListener("pointermove", move);
+    el.addEventListener("pointerleave", leave);
     return () => {
-      window.removeEventListener("scroll", scroll);
       el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerleave", leave);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [reduce]);
-
-  const photo = BUSINESS.heroImage;
+  }, [reduce, wide, photo]);
 
   return (
     <section ref={ref} id="inicio" className="lp-hero lp-section relative overflow-hidden text-white">
@@ -262,15 +268,20 @@ function Hero() {
           <div className="absolute inset-0 bg-gradient-to-r from-[var(--lp-night)] via-[rgb(0_10_43/0.75)] to-[rgb(0_10_43/0.2)]" />
         </div>
       ) : (
-        <>
-          <div className="lp-hero-strip" aria-hidden />
-          <div className="lp-hero-grid" aria-hidden />
-        </>
+        wide && (
+          <div className="lp-scene absolute inset-0 -z-10">
+            <HeroScene className="h-full w-full" preserveAspectRatio="xMaxYMid slice" />
+            {/* Contraste para el texto a la izquierda */}
+            <div className="absolute inset-y-0 left-0 w-[46%] bg-gradient-to-r from-[var(--lp-night)] via-[rgb(0_10_43/0.6)] to-transparent" aria-hidden />
+            {/* Oscurece la franja superior para que la navegación se lea bien */}
+            <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[rgb(0_10_43/0.85)] to-transparent" aria-hidden />
+          </div>
+        )
       )}
       <div className="lp-noise" aria-hidden />
 
-      <div className="lp-wrap relative flex min-h-[100svh] flex-col pb-10 pt-[112px] lg:min-h-[min(100svh,960px)] lg:pt-[150px]">
-        <div className="max-w-[46rem]">
+      <div className="lp-wrap relative flex min-h-[100svh] flex-col pt-[112px] lg:min-h-[min(100svh,980px)] lg:justify-center lg:pb-24 lg:pt-[96px]">
+        <div className="max-w-[40rem]">
           <p className="lp-in flex items-center gap-3 text-[0.95rem] font-semibold text-white/85" style={{ ["--d" as string]: "60ms" }}>
             <span className="h-[3px] w-8 rounded-full bg-[var(--lp-red)]" aria-hidden />
             RAPIFIX Centro Automotriz
@@ -279,39 +290,25 @@ function Hero() {
             <span className="lp-in block whitespace-nowrap" style={{ ["--d" as string]: "160ms" }}>Tu vehículo</span>
             <span className="lp-in block whitespace-nowrap" style={{ ["--d" as string]: "280ms" }}>merece más.</span>
           </h1>
-          <p className="lp-in lp-lead mt-7 max-w-[34rem] text-white" style={{ ["--d" as string]: "420ms" }}>
-            La nueva forma de cuidar, reparar y mantener tu automóvil.
+          <p className="lp-in lp-lead mt-7 max-w-[30rem] text-white/85" style={{ ["--d" as string]: "420ms" }}>
+            Mantenimiento y reparación automotriz con un enfoque profesional y transparente.
           </p>
-          <p className="lp-in mt-3 max-w-[34rem] text-[1.02rem] leading-relaxed text-[var(--lp-mute-dark)]" style={{ ["--d" as string]: "500ms" }}>
-            Profesionalismo, transparencia y una experiencia diseñada para que conduzcas con tranquilidad.
-          </p>
-          <div className="lp-in mt-9 flex flex-wrap gap-3" style={{ ["--d" as string]: "620ms" }}>
+          <div className="lp-in mt-10 flex flex-wrap gap-3" style={{ ["--d" as string]: "560ms" }}>
             <a href="#servicios" className="lp-btn lp-btn-red">
-              Descubre nuestros servicios <ArrowRight className="lp-arrow h-4 w-4" aria-hidden />
+              Explorar servicios <ArrowRight className="lp-arrow h-4 w-4" aria-hidden />
             </a>
-            <a href="#nosotros" className="lp-btn lp-btn-ghost">Conoce RAPIFIX</a>
+            <a href="#nosotros" className="lp-btn lp-btn-ghost">Conocer RAPIFIX</a>
           </div>
         </div>
 
-        {!photo && (
-          <div
-            ref={carRef}
-            className="lp-hero-car pointer-events-none relative -mx-4 mt-auto pt-10 sm:mx-0 lg:absolute lg:bottom-[7%] lg:right-[-14%] lg:mt-0 lg:w-[78%] xl:right-[-12%] xl:w-[76%]"
-          >
-            <div className="lp-hero-glow absolute inset-x-[10%] top-[30%] h-[40%] rounded-full bg-[var(--lp-electric)]/20 blur-[80px]" aria-hidden />
-            <div className="lp-car-wrap relative">
-              <HeroCar className="h-auto w-[118%] max-w-none sm:w-full" />
-            </div>
+        {/* Móvil y tablet: el vehículo va debajo de los botones */}
+        {!photo && !wide && (
+          <div className="lp-car-wrap relative -mx-4 mt-10 sm:-mx-8">
+            <HeroScene viewBox={HERO_VIEWBOX_CAR} className="h-auto w-full" />
           </div>
         )}
-
-        <ul className="lp-in relative z-[1] mt-6 hidden flex-wrap lg:flex gap-x-7 gap-y-2 text-sm text-white/85 lg:mt-auto lg:max-w-[40%] lg:pt-16" style={{ ["--d" as string]: "800ms" }} aria-label="Lo que hacemos">
-          <li className="flex items-center gap-2"><Gauge className="h-4 w-4 text-[var(--lp-electric)]" aria-hidden /> Mantenimiento</li>
-          <li className="flex items-center gap-2"><Cpu className="h-4 w-4 text-[var(--lp-electric)]" aria-hidden /> Diagnóstico</li>
-          <li className="flex items-center gap-2"><Wrench className="h-4 w-4 text-[var(--lp-electric)]" aria-hidden /> Reparación</li>
-        </ul>
       </div>
-      {/* Transición hacia la sección clara */}
+      {/* Transición hacia la sección siguiente */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-[var(--lp-night)]" aria-hidden />
     </section>
   );
@@ -320,38 +317,30 @@ function Hero() {
 /* ---------------------------------------------------------------- Nosotros */
 
 const PILLARS = [
-  { icon: Gauge, title: "Mantenimiento preventivo", text: "Cambios de aceite, filtros y fluidos, e inspecciones por kilometraje según las recomendaciones del fabricante." },
-  { icon: ClipboardCheck, title: "Diagnóstico automotriz", text: "Inspección general y diagnóstico computarizado en sistemas compatibles, con informe técnico y cotización." },
-  { icon: Wrench, title: "Reparación mecánica", text: "Frenos, suspensión, dirección, transmisión, enfriamiento, combustible y escape." },
-  { icon: Zap, title: "Sistemas eléctricos y electrónicos", text: "Baterías, carga, arranque, iluminación, sensores, y aire acondicionado y climatización." },
-  { icon: Truck, title: "Flotillas", text: "Mantenimiento programado e historial por vehículo para instituciones públicas y privadas." },
-  { icon: Smartphone, title: "Seguimiento digital", text: "Un enlace personal para ver el avance de tu vehículo, aprobar la cotización y pagar en línea." },
+  { icon: Gauge, title: "Mantenimiento preventivo", text: "Aceite, filtros, fluidos e inspección por kilometraje." },
+  { icon: ClipboardCheck, title: "Diagnóstico", text: "Inspección y diagnóstico computarizado con informe y cotización." },
+  { icon: Wrench, title: "Reparación mecánica", text: "Frenos, suspensión, dirección, transmisión y más." },
+  { icon: Zap, title: "Eléctrico y climatización", text: "Baterías, sensores, iluminación y aire acondicionado." },
 ];
 
 function About() {
   return (
-    <section id="nosotros" className="lp-section lp-light relative bg-[var(--lp-paper)] py-24 sm:py-32">
-      <div className="lp-wrap grid gap-14 lg:grid-cols-[1.05fr_1fr] lg:gap-20">
+    <section id="nosotros" className="lp-section lp-light relative bg-[var(--lp-paper)] py-28 sm:py-36">
+      <div className="lp-wrap grid gap-14 lg:grid-cols-[1fr_1.1fr] lg:items-end lg:gap-24">
         <div data-reveal>
-          <h2 className="lp-display lp-h2 text-[var(--lp-navy)]">
-            Más que mantenimiento. Confianza en cada recorrido.
-          </h2>
-          <p className="lp-lead mt-7 max-w-[36rem] text-[var(--lp-mute)]">
-            RAPIFIX Centro Automotriz es un taller dedicado al mantenimiento, el diagnóstico y la reparación de vehículos.
-            Te explicamos qué encontramos, te cotizamos antes de trabajar y te mantenemos al tanto hasta que tu vehículo
-            está listo para volver a la calle.
+          <h2 className="lp-display lp-h2 max-w-[14ch] text-[var(--lp-navy)]">Más que mantenimiento. Confianza en cada recorrido.</h2>
+          <p className="lp-lead mt-7 max-w-[32rem] text-[var(--lp-mute)]">
+            Centro automotriz en Tegucigalpa dedicado al mantenimiento, el diagnóstico y la reparación de vehículos particulares y flotillas.
           </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <a href="#servicios" className="lp-btn lp-btn-navy">Ver el catálogo completo</a>
-            <a href="#contacto" className="lp-btn lp-btn-line">Cómo encontrarnos</a>
-          </div>
         </div>
         <ul className="grid gap-x-10 sm:grid-cols-2">
           {PILLARS.map((p, i) => (
-            <li key={p.title} data-reveal style={{ ["--d" as string]: `${(i % 2) * 90}ms` }} className="border-t border-[var(--lp-line)] py-6">
-              <p.icon className={cn("h-6 w-6", i === 5 ? "text-[var(--lp-red-ink)]" : "text-[var(--lp-electric-ink)]")} aria-hidden strokeWidth={1.8} />
-              <h3 className="lp-display lp-h3 mt-4 text-[var(--lp-navy)]">{p.title}</h3>
-              <p className="mt-2 text-[0.95rem] leading-relaxed text-[var(--lp-mute)]">{p.text}</p>
+            <li key={p.title} data-reveal style={{ ["--d" as string]: `${(i % 2) * 90}ms` }} className="flex gap-4 border-t border-[var(--lp-line)] py-6">
+              <p.icon className="mt-0.5 h-6 w-6 shrink-0 text-[var(--lp-electric-ink)]" aria-hidden strokeWidth={1.8} />
+              <div>
+                <h3 className="lp-display text-[1.08rem] leading-tight text-[var(--lp-navy)]">{p.title}</h3>
+                <p className="mt-1.5 text-[0.94rem] leading-relaxed text-[var(--lp-mute)]">{p.text}</p>
+              </div>
             </li>
           ))}
         </ul>

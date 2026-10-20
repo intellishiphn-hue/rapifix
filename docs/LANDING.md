@@ -30,11 +30,13 @@ apps/web/src/features/landing/
   LandingPage.tsx Composición, navegación, hero, "Nosotros", SEO (title, description, canonical, JSON-LD)
   Services.tsx    Catálogo: mosaico, buscador, filtros y detalle (<dialog> accesible)
   Sections.tsx    Flotillas, Tecnología y seguimiento, Proceso, Contacto, Footer
-  Art.tsx         Ilustraciones originales en SVG (vehículo del hero, flotilla, motivos)
+  HeroScene.tsx   Ilustración del hero (SUV en un taller). ARCHIVO GENERADO: no editar a mano
+  Art.tsx         Ilustraciones de apoyo en SVG (flotilla, motivos de las tarjetas)
   Brand.tsx       Logo oficial con respaldo (engrane del favicon + nombre)
   motion.ts       Revelado con IntersectionObserver, progreso de scroll con rAF, tilt de tarjetas
   landing.css     Estilos y animaciones bajo .lp (incluye prefers-reduced-motion)
 packages/shared/src/__tests__/landingCatalog.test.ts   Pruebas del catálogo y del buscador
+tools/hero-art/generate-suv.mjs   Generador de HeroScene.tsx (modelo 3D simple proyectado en perspectiva)
 apps/web/public/robots.txt, apps/web/public/sitemap.xml
 ```
 
@@ -70,9 +72,18 @@ Mensajes prellenados de WhatsApp: `WA_MESSAGES` en `business.ts` (servicios, flo
 - [ ] Opcional: confirmar si existe cuenta de TikTok.
 - [ ] Opcional: dominio propio (hoy el canonical y el sitemap usan el dominio de Firebase Hosting).
 
+## Hero: ilustración del SUV
+
+No hay fotos reales ni con licencia verificable, así que el hero usa arte original: un SUV moderno en vista de tres cuartos dentro de un taller (piso pulido con reflejo, luces lineales en el techo, muro con tira LED). No representa un modelo ni marca real y no se presenta como foto de las instalaciones (aria-label: "Ilustración de un vehículo en un taller automotriz").
+
+- Se genera con `node tools/hero-art/generate-suv.mjs` (escribe `apps/web/src/features/landing/HeroScene.tsx`; con `--preview archivo.svg` deja también un SVG suelto para revisarlo). Para cambiar la forma, colores o encuadre, edite el generador y vuelva a ejecutarlo.
+- Escritorio (1024 px o más): escena completa de fondo (`xMaxYMid slice`), texto a la izquierda con degradado para el contraste. Parallax por capas (fondo, vehículo, luces) solo con mouse; sin parallax en táctil ni con movimiento reducido.
+- Móvil y tablet: recorte centrado en el vehículo debajo de los botones, con bordes difuminados.
+- Foto real futura: `heroImage` en `business.ts` reemplaza la ilustración.
+
 ## Checklist del catálogo (13 categorías)
 
-Todas las categorías están en `catalog.ts`, se muestran en el mosaico de `#servicios`, en los filtros, en el buscador y en su detalle (diálogo). La categoría 12 también tiene su sección propia `#flotillas`.
+Cada tarjeta muestra solo nombre, descripción corta (máximo 2 líneas), conteo real y "Explorar servicios"; los trabajos completos se ven al abrir la categoría. Todas las categorías están en `catalog.ts`, se muestran en el mosaico de `#servicios`, en los filtros, en el buscador y en su detalle (diálogo). La categoría 12 también tiene su sección propia `#flotillas`.
 
 | # | Categoría | Trabajos | Ubicación en la web |
 |---|---|---|---|
@@ -96,7 +107,7 @@ Total: 118 trabajos. Verificado por prueba unitaria y por prueba en navegador (c
 
 - Seguimiento: el portal `/orden/:token` muestra estado, porcentaje y pasos (`PORTAL_STEPS`), última actualización e historial, diagnóstico, cotización para aprobar / rechazar / preguntar (y actualizaciones de cotización), cupones, pago en línea con tarjeta (ROKI, cuando está habilitado), comprobante de transferencia, efectivo en caja, recepción (kilometraje, combustible, objetos) y fotos por etapa. El enlace lo envía el taller por WhatsApp desde el panel; la landing no promete envíos automáticos.
 - Proceso: 6 etapas que agrupan los estados reales de `packages/shared/src/workOrderStatus.ts` (igual que las columnas del tablero) y muestran sus nombres reales.
-- Mockup del teléfono: datos ficticios marcados como ejemplo (placa ABC 1234, orden OT-0000).
+- Mockup del teléfono: etiqueta visible "Representación visual" y datos ficticios (placa ABC 1234, orden OT-0000). No hay una página pública genérica de seguimiento (los enlaces son por token), así que la llamada a la acción es "Pregunta por tu vehículo" por WhatsApp.
 - Datos estructurados: `AutoRepair` con nombre, nombre en Google, URL, logo, teléfono, dirección, horario, mapa y redes (solo datos confirmados). Se insertan mientras la landing está montada.
 
 ## Probar en local

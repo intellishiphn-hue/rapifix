@@ -50,7 +50,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 1,
     name: "Mantenimiento preventivo general",
     short: "Mantenimiento preventivo",
-    blurb: "Aceite, filtros, fluidos e inspección por kilometraje para que tu vehículo rinda como debe.",
+    blurb: "Aceite, filtros, fluidos e inspección por kilometraje.",
     keywords: ["servicio", "afinado", "kilometraje", "lubricacion"],
     featured: true,
     jobs: [
@@ -72,7 +72,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 2,
     name: "Sistema de frenos",
     short: "Frenos",
-    blurb: "Pastillas, discos, mordazas, bombas y diagnóstico ABS con escáner.",
+    blurb: "Pastillas, discos, mordazas y diagnóstico ABS.",
     keywords: ["freno", "abs", "pastillas", "discos", "caliper"],
     featured: true,
     jobs: [
@@ -93,7 +93,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 3,
     name: "Sistema de suspensión",
     short: "Suspensión",
-    blurb: "Amortiguadores, rótulas, bujes y brazos para una marcha firme.",
+    blurb: "Amortiguadores, rótulas, bujes y brazos.",
     keywords: ["amortiguador", "rotula", "buje", "tijera"],
     jobs: [
       "Cambio de amortiguadores delanteros y traseros.",
@@ -113,7 +113,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 4,
     name: "Sistema de dirección",
     short: "Dirección",
-    blurb: "Terminales, barras axiales, cremallera y dirección hidráulica.",
+    blurb: "Terminales, barras axiales y cremallera.",
     keywords: ["timon", "cremallera", "terminales", "hidraulica"],
     jobs: [
       "Cambio de terminales de dirección.",
@@ -131,7 +131,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 5,
     name: "Sistema de transmisión y tren motriz",
     short: "Transmisión",
-    blurb: "Aceites de caja y diferencial, semiejes, cardán y embrague.",
+    blurb: "Aceites, semiejes, cardán y embrague.",
     keywords: ["caja", "embrague", "clutch", "cardan", "diferencial"],
     jobs: [
       "Cambio de aceite de transmisión manual y automática.",
@@ -150,7 +150,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 6,
     name: "Sistema de enfriamiento",
     short: "Enfriamiento",
-    blurb: "Radiador, termostato, bomba de agua y control de temperatura.",
+    blurb: "Radiador, termostato y bomba de agua.",
     keywords: ["radiador", "temperatura", "calentamiento", "refrigerante"],
     jobs: [
       "Cambio de radiadores.",
@@ -169,7 +169,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 7,
     name: "Sistema eléctrico y electrónico",
     short: "Eléctrico y electrónico",
-    blurb: "Escáner, baterías, alternador, arranque, luces y sensores.",
+    blurb: "Escáner, baterías, alternador y luces.",
     keywords: ["electricidad", "bateria", "alternador", "luces", "escaner", "sensor"],
     jobs: [
       "Diagnóstico computarizado mediante escáner automotriz.",
@@ -190,7 +190,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 8,
     name: "Sistema de combustible y admisión",
     short: "Combustible y admisión",
-    blurb: "Filtros, cuerpo de aceleración y alimentación de combustible.",
+    blurb: "Filtros, cuerpo de aceleración y bombas.",
     keywords: ["gasolina", "diesel", "inyeccion", "aceleracion"],
     jobs: [
       "Cambio de filtros de combustible.",
@@ -207,7 +207,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 9,
     name: "Sistema de escape",
     short: "Escape",
-    blurb: "Tuberías, silenciadores, empaques y sensores de oxígeno.",
+    blurb: "Tuberías, silenciadores y sensores de oxígeno.",
     keywords: ["mofle", "silenciador", "tubo de escape"],
     jobs: [
       "Revisión de tuberías y componentes del sistema de escape.",
@@ -223,7 +223,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 10,
     name: "Rodamientos, ruedas y componentes relacionados",
     short: "Rodamientos y ruedas",
-    blurb: "Balineras, espárragos, holguras y desgaste de neumáticos.",
+    blurb: "Balineras, espárragos y desgaste de neumáticos.",
     keywords: ["balinera", "rueda", "llanta", "neumatico"],
     jobs: [
       "Cambio de rodamientos (balineras) de rueda.",
@@ -237,7 +237,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 11,
     name: "Inspección y diagnóstico automotriz",
     short: "Diagnóstico",
-    blurb: "Inspecciones antes de viajar, diagnóstico computarizado, informes técnicos y cotizaciones.",
+    blurb: "Inspecciones, diagnóstico computarizado e informes técnicos.",
     keywords: ["revision", "chequeo", "escaner", "informe", "viaje"],
     featured: true,
     jobs: [
@@ -258,7 +258,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 12,
     name: "Mantenimiento de flotillas institucionales",
     short: "Flotillas",
-    blurb: "Mantenimiento programado, historial por vehículo e informes para instituciones públicas y privadas.",
+    blurb: "Mantenimiento programado e historial por vehículo.",
     intro: "RAPIFIX ofrece servicios de mantenimiento para flotillas de vehículos pertenecientes a instituciones públicas y privadas.",
     keywords: ["flota", "empresa", "institucion", "corporativo"],
     featured: true,
@@ -277,7 +277,7 @@ export const CATALOG: readonly ServiceCategory[] = [
     order: 13,
     name: "Aire acondicionado y climatización automotriz",
     short: "Aire acondicionado",
-    blurb: "Diagnóstico, fugas, recarga de gas, compresor y todo el sistema de climatización.",
+    blurb: "Diagnóstico, fugas, recarga de gas y compresor.",
     keywords: ["ac", "clima", "climatizacion", "gas", "compresor"],
     featured: true,
     jobs: [

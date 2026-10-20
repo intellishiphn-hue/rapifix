@@ -1,0 +1,42 @@
+# RAPIFIX Centro Automotriz
+# Sitio público: / e /inicio. El panel y los enlaces personales de clientes no se indexan.
+User-agent: *
+Allow: /$
+Allow: /inicio
+Disallow: /login
+Disallow: /recuperar
+Disallow: /orden/
+Disallow: /lavado/
+Disallow: /aprobar/
+Disallow: /seguimiento/
+Disallow: /imprimir/
+Disallow: /clientes
+Disallow: /empresas
+Disallow: /cupones
+Disallow: /comisiones
+Disallow: /referidos
+Disallow: /vehiculos
+Disallow: /ordenes
+Disallow: /cotizaciones
+Disallow: /portal
+Disallow: /productos
+Disallow: /inventario
+Disallow: /servicios
+Disallow: /pos
+Disallow: /pagos
+Disallow: /configuracion
+Disallow: /usuarios
+Disallow: /agenda
+Disallow: /mantenimiento
+Disallow: /proveedores
+Disallow: /compras
+Disallow: /gastos
+Disallow: /gastos-fijos
+Disallow: /cuentas-por-cobrar
+Disallow: /empleados
+Disallow: /whatsapp
+Disallow: /finanzas
+Disallow: /reportes
+Disallow: /carwash
+
+Sitemap: https://rapifix-prod-a1b2c.web.app/sitemap.xml

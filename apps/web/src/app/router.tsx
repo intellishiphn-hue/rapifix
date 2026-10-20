@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
-import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
+import { createBrowserRouter, Navigate, useLocation, useParams } from "react-router-dom";
 import { PageLoader } from "@/components/ui/Feedback";
 import { AppShell } from "./layout/AppShell";
 import { RequireAuth, RequirePermission } from "./guards/Guards";
@@ -7,6 +7,8 @@ import { COMING_SOON } from "./navigation";
 import { useAuth } from "@/lib/auth/useAuth";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage";
+// Landing pública: chunk aparte, no importa módulos del panel ni Firestore
+const LandingPage = page(() => import("@/features/landing/LandingPage"), "LandingPage");
 const DashboardPage = page(() => import("@/features/dashboard/DashboardPage"), "DashboardPage");
 const CustomersPage = page(() => import("@/features/customers/CustomersPage"), "CustomersPage");
 const CustomerDetailPage = page(() => import("@/features/customers/CustomerDetailPage"), "CustomerDetailPage");
@@ -75,12 +77,37 @@ function RedirectToPortal({ suffix }: { suffix: string }) {
   const { token } = useParams();
   return <Navigate to={`/orden/${token}${suffix}`} replace />;
 }
+/**
+ * "/" sin sesión muestra la landing pública; con sesión, el panel como siempre.
+ * Las rutas hijas del panel sin sesión siguen yendo al login (RequireAuth).
+ */
+function RootRoute() {
+  const { status, user } = useAuth();
+  const { pathname } = useLocation();
+  // Con usuario pero sin claims leídos todavía (recién inició sesión): cargando, sin mostrar la landing
+  if (status === "loading" || (status === "signedOut" && user)) {
+    return <div className="flex h-screen items-center justify-center"><PageLoader label="Iniciando RAPIFIX..." /></div>;
+  }
+  if (status === "signedOut" && pathname === "/") return <LandingRoute />;
+  return (
+    <RequireAuth>
+      <AppShell />
+    </RequireAuth>
+  );
+}
+const LandingRoute = () => (
+  <Suspense fallback={<div className="min-h-screen bg-[#000a2b]" />}>
+    <LandingPage />
+  </Suspense>
+);
 const S = ({ children }: { children: ReactNode }) => <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 
 import { ComingSoonPage } from "@/features/placeholder/ComingSoonPage";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
+  // Sitio público (siempre visible, también con sesión)
+  { path: "/inicio", element: <LandingRoute /> },
   { path: "/recuperar", element: <ForgotPasswordPage /> },
   // Portal público del cliente (sin cuenta). /aprobar y /seguimiento redirigen al mismo link.
   { path: "/orden/:token", element: <S><PortalPage /></S> },
@@ -99,11 +126,7 @@ export const router = createBrowserRouter([
   { path: "/imprimir/lavado/:id", element: <RequireAuth><S><WashTicketPage /></S></RequireAuth> },
   {
     path: "/",
-    element: (
-      <RequireAuth>
-        <AppShell />
-      </RequireAuth>
-    ),
+    element: <RootRoute />,
     children: [
       { index: true, element: <HomeRoute /> },
       { path: "clientes", element: <RequirePermission permission="customers.read"><S><CustomersPage /></S></RequirePermission> },

@@ -104,6 +104,10 @@ export const WA_MESSAGES = {
   fleet: "Hola RAPIFIX, quisiera información sobre el mantenimiento de flotillas para mi empresa o institución.",
   contact: "Hola RAPIFIX, quisiera hacer una consulta.",
   tracking: "Hola RAPIFIX, tengo un vehículo con ustedes y quisiera el enlace de seguimiento de mi orden.",
+  carwash: "Hola, RAPIFIX. Quiero información sobre el servicio de Carwash.",
+  carwashPrices: "Hola, RAPIFIX. Quiero consultar los precios de Carwash.",
+  carwashPlans: "Hola, RAPIFIX. Quiero conocer las membresías disponibles de Carwash.",
+  carwashLink: "Hola, RAPIFIX. No encuentro el enlace de mi lavado, ¿me lo pueden reenviar?",
 } as const;
 
 export function waLink(text?: string): string | null {

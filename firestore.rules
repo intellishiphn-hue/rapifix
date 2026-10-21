@@ -51,6 +51,11 @@ service cloud.firestore {
       allow get: if true;
       allow list, write: if false;
     }
+    // Menú, planes y regla de lealtad del carwash para la página pública /lavado (sin precios; lo escribe el servidor)
+    match /publicCarwash/{tid} {
+      allow get: if true;
+      allow list, write: if false;
+    }
 
     // Preferencias personales (orden del Dashboard). Cada usuario solo la suya.
     match /userPrefs/{uid} {

@@ -263,7 +263,7 @@ function Grid({
                       className={cn("absolute z-20 overflow-hidden rounded-lg border-l-4 px-2 py-1 text-left text-xs shadow-sm ring-1 ring-slate-200 transition hover:z-30 hover:shadow-md", inactive(a) ? "bg-slate-50 opacity-60" : "bg-white")}
                       style={{ top: top + 1, height, left: `calc(${(lane / lanes) * 100}% + 2px)`, width: `calc(${100 / lanes}% - 4px)`, borderLeftColor: color }}
                     >
-                      <div className={cn("truncate font-semibold text-slate-900", a.status === "cancelled" && "line-through")}>{fmtTime(startMs(a))} {a.customerName}</div>
+                      <div className={cn("truncate font-semibold text-slate-900", a.status === "cancelled" && "line-through")}>{fmtTime(startMs(a))} {a.source === "web" && <span className="mr-1 rounded bg-brand-600 px-1 text-[10px] font-bold text-white">Web</span>}{a.customerName}</div>
                       {height > 34 && <div className="truncate text-slate-500">{a.plate ? `${a.plate} · ` : ""}{APPOINTMENT_TYPE_LABELS[a.type]}</div>}
                       {height > 50 && <div className="truncate text-slate-400">{APPOINTMENT_STATUS_LABELS[a.status]}</div>}
                     </button>
@@ -323,6 +323,7 @@ function MobileList({
                     <div className={cn("truncate font-semibold text-slate-900", a.status === "cancelled" && "line-through")}>{a.customerName}</div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                       {a.plate && <PlateTag plate={a.plate} className="text-[10px]" />}
+                      {a.source === "web" && <Badge tone="blue">Web</Badge>}
                       <span>{APPOINTMENT_TYPE_LABELS[a.type]}</span>
                       {a.technicianName && <span>· {a.technicianName}</span>}
                     </div>

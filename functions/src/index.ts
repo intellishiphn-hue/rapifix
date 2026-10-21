@@ -54,3 +54,7 @@ export { onWorkOrderCompanyWritten, onSaleCreatedCompany } from "./triggers/comp
 // Cupones / códigos de descuento (taller, carwash y punto de venta)
 export { saveCoupon, applyCoupon, removeCoupon, checkSaleCoupon } from "./callable/coupons";
 export { applyCouponPublic, removeCouponPublic } from "./public/coupons";
+// Copia pública del carwash para la página /lavado (sin precios)
+export { onCarwashServicePublic, onCarwashPlanPublic, onCarwashSettingsPublic, rebuildPublicCarwash } from "./triggers/publicCarwash";
+// Citas desde la web pública (/agendar): horas libres y solicitud (sin sesión)
+export { publicAppointmentSlots, requestAppointmentPublic } from "./public/appointments";

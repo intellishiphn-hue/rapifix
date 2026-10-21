@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  AirVent, ArrowRight, BatteryCharging, Check, CircleDot, CloudFog, Cog, Disc3, Droplets, Fuel, LifeBuoy, MessageCircle,
+  AirVent, ArrowRight, BatteryCharging, CalendarCheck, Check, CircleDot, CloudFog, Cog, Disc3, Droplets, Fuel, LifeBuoy, MessageCircle,
   MoveVertical, ScanSearch, Search, SearchX, Thermometer, Truck, X, type LucideIcon,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/cn";
 import { CATALOG, TOTAL_JOBS, categoryById, jobsLabel, type CategoryId, type ServiceCategory } from "./catalog";
 import { highlightRanges, queryTerms, searchCatalog } from "./search";
@@ -43,11 +44,32 @@ const BENTO: Array<{ id: CategoryId; span: string; variant: "hero" | "wide" | "s
   { id: "flotillas", span: "col-span-2", variant: "fleet" },
 ];
 
+/**
+ * Un solo diálogo de detalle de categoría para toda la landing (catálogo, revisión multipuntos, etc.).
+ */
+const CatalogDialogContext = createContext<(id: CategoryId, query?: string) => void>(() => undefined);
+export const useOpenCategory = () => useContext(CatalogDialogContext);
+
+export function CatalogDialogProvider({ children }: { children: ReactNode }) {
+  const [openId, setOpenId] = useState<CategoryId | null>(null);
+  const [dialogQuery, setDialogQuery] = useState("");
+  const open = useCallback((id: CategoryId, query = "") => {
+    setDialogQuery(query);
+    setOpenId(id);
+  }, []);
+  const close = useCallback(() => setOpenId(null), []);
+  return (
+    <CatalogDialogContext.Provider value={open}>
+      {children}
+      <CategoryDialog id={openId} query={dialogQuery} onClose={close} onNavigate={(id) => open(id)} />
+    </CatalogDialogContext.Provider>
+  );
+}
+
 export function ServicesSection() {
   const [query, setQuery] = useState("");
   const [only, setOnly] = useState<CategoryId | null>(null);
-  const [openId, setOpenId] = useState<CategoryId | null>(null);
-  const [dialogQuery, setDialogQuery] = useState("");
+  const openCategory = useOpenCategory();
   const inputId = useId();
   const statusId = useId();
 
@@ -56,10 +78,7 @@ export function ServicesSection() {
   const groups = useMemo(() => queryTerms(query), [query]);
   const jobCount = results.reduce((n, r) => n + r.jobs.length, 0);
 
-  const open = (id: CategoryId, withQuery = "") => {
-    setDialogQuery(withQuery);
-    setOpenId(id);
-  };
+  const open = (id: CategoryId, withQuery = "") => openCategory(id, withQuery);
 
   const status = !searching
     ? `${CATALOG.length} categorías y ${TOTAL_JOBS} trabajos en el catálogo.`
@@ -68,7 +87,7 @@ export function ServicesSection() {
       : `${jobsLabel(jobCount)} en ${results.length} ${results.length === 1 ? "categoría" : "categorías"}.`;
 
   return (
-    <section id="servicios" className="lp-section lp-light relative bg-white py-28 sm:py-36">
+    <section id="servicios" className="lp-section lp-light relative bg-[var(--lp-paper)] py-28 sm:py-36">
       <div className="lp-wrap">
         <div className="grid gap-8 lg:grid-cols-[1.25fr_1fr] lg:items-end" data-reveal>
           <h2 className="lp-display lp-h2 max-w-[15ch] text-[var(--lp-navy)]">Todo lo que tu vehículo necesita. En un solo lugar.</h2>
@@ -79,7 +98,7 @@ export function ServicesSection() {
 
         {/* Buscador */}
         <div className="mt-12" data-reveal>
-          <div role="search" className="lp-search flex items-center gap-3 rounded-2xl border border-[rgb(1_25_85/0.16)] bg-[var(--lp-paper)] px-4 sm:px-5">
+          <div role="search" className="lp-search flex items-center gap-3 rounded-2xl border border-[rgb(1_25_85/0.16)] bg-white px-4 sm:px-5">
             <Search className="h-5 w-5 shrink-0 text-[var(--lp-navy)]" aria-hidden />
             <label htmlFor={inputId} className="sr-only">Buscar un servicio en el catálogo</label>
             <input
@@ -128,7 +147,6 @@ export function ServicesSection() {
         )}
       </div>
 
-      <CategoryDialog id={openId} query={dialogQuery} onClose={() => setOpenId(null)} onNavigate={(id) => open(id)} />
     </section>
   );
 }
@@ -295,6 +313,14 @@ function CategoryDialog({ id, query, onClose, onNavigate }: { id: CategoryId | n
     return () => d.removeEventListener("close", onClosed);
   }, [onClose]);
 
+  // Si se navega a otra página con el diálogo abierto (p. ej. "Agendar"), se libera el scroll
+  useEffect(
+    () => () => {
+      document.documentElement.style.overflow = "";
+    },
+    [],
+  );
+
   const c = shown ? categoryById(shown) : null;
   const groups = queryTerms(query);
   const Icon = c ? CATEGORY_ICON[c.id] : null;
@@ -347,6 +373,9 @@ function CategoryDialog({ id, query, onClose, onNavigate }: { id: CategoryId | n
                 <MessageCircle className="h-4 w-4" aria-hidden /> {c.id === "flotillas" ? "Solicitar información" : "Consultar por WhatsApp"}
               </a>
             )}
+            <Link to={`/agendar?motivo=${c.id}`} className="lp-btn lp-btn-line">
+              <CalendarCheck className="h-4 w-4" aria-hidden /> Agendar
+            </Link>
             <div className="flex gap-2 sm:ml-auto">
               {prev && <button type="button" onClick={() => onNavigate(prev.id)} className="lp-btn lp-btn-line flex-1 !min-h-[44px] !px-4 text-sm" aria-label={`Categoría anterior: ${prev.name}`}>Anterior</button>}
               {next && <button type="button" onClick={() => onNavigate(next.id)} className="lp-btn lp-btn-line flex-1 !min-h-[44px] !px-4 text-sm" aria-label={`Categoría siguiente: ${next.name}`}>Siguiente</button>}

@@ -122,6 +122,7 @@ beforeEach(async () => {
     });
 
     await s.doc("publicPortal/tok-abc123").set({ orderNumber: 1, status: "in_progress" });
+    await s.doc("publicCarwash/rapifix").set({ services: [], plans: [], loyalty: { every: 10, startStamps: 0 } });
     await s.doc("publicWashes/LAVTOKEN23").set({ tid: "rapifix", washId: "w1", code: "LAV-0001", status: "ready", paid: false });
   });
 });
@@ -850,6 +851,31 @@ describe("portal público del cliente (publicPortal)", () => {
 });
 
 // ---------------------------------------------------------------------------
+describe("menú público del carwash (publicCarwash)", () => {
+  it("cualquiera lee el documento del taller", async () => {
+    await assertSucceeds(anon().doc("publicCarwash/rapifix").get());
+  });
+  it("nadie lista ni escribe", async () => {
+    await assertFails(anon().collection("publicCarwash").get());
+    await assertFails(anon().doc("publicCarwash/rapifix").set({ services: [] }));
+    await assertFails(db("admin").doc("publicCarwash/rapifix").update({ services: [] }));
+    await assertFails(db("admin").doc("publicCarwash/rapifix").delete());
+  });
+  it("los contadores de límite de intentos (rateLimits) están cerrados al navegador", async () => {
+    await assertFails(anon().doc("rateLimits/appt-ip_x").get());
+    await assertFails(anon().doc("rateLimits/appt-ip_x").set({ count: 0 }));
+    await assertFails(db("admin").doc("rateLimits/appt-ip_x").get());
+  });
+  it("la agenda no se lee ni escribe sin sesión (las citas web pasan por funciones)", async () => {
+    await assertFails(anon().collection(`${T}/appointments`).get());
+    await assertFails(anon().collection(`${T}/appointments`).add({ customerName: "x" }));
+  });
+  it("sin sesión no se leen servicios ni planes del carwash", async () => {
+    await assertFails(anon().collection(`${T}/carwashServices`).get());
+    await assertFails(anon().collection(`${T}/carwashPlans`).get());
+  });
+});
+
 describe("link de pago del lavado y comprobantes del cliente", () => {
   it("cualquiera (sin sesión) lee la página pública del lavado con el token exacto", async () => {
     await assertSucceeds(anon().doc("publicWashes/LAVTOKEN23").get());

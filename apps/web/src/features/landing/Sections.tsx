@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Camera, Check, CircleCheck, Clock, CreditCard, FileCheck2, MapPin, MessageCircle, Navigation, Phone, Wrench } from "lucide-react";
+import { ArrowRight, CalendarCheck, Camera, Check, CircleCheck, Clock, CreditCard, FileCheck2, MapPin, MessageCircle, Navigation, Phone, Wrench } from "lucide-react";
 import { PORTAL_STEPS, STATUS_META, type WorkOrderStatus } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { cn } from "@/lib/cn";
@@ -53,6 +53,42 @@ export function FleetSection() {
   );
 }
 
+/* ---------------------------------------------------------------- Banner del carwash (lleva a /lavado) */
+
+export function CarwashBanner() {
+  return (
+    <section id="carwash" aria-labelledby="cw-banner-t" className="lp-section lp-light bg-white py-20 sm:py-24">
+      <div className="lp-wrap">
+        <div className="relative overflow-hidden rounded-[32px] bg-[linear-gradient(135deg,#0b2a7a,#011955_55%,#000a2b)] px-7 py-12 text-white sm:px-12 sm:py-14" data-reveal>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 overflow-hidden" aria-hidden>
+            {Array.from({ length: 14 }, (_, i) => (
+              <span
+                key={i}
+                className="cw-bubble"
+                style={{ left: `${(i * 41) % 100}%`, width: `${10 + ((i * 11) % 34)}px`, height: `${10 + ((i * 11) % 34)}px`, bottom: `${-10 + ((i * 29) % 50)}%`, animationDelay: `${(i % 7) * 0.8}s` }}
+              />
+            ))}
+          </div>
+          <div className="relative grid items-center gap-8 lg:grid-cols-[1.4fr_1fr]">
+            <div>
+              <p className="flex items-center gap-3 text-sm font-semibold text-white/80">
+                <span className="h-[3px] w-7 rounded-full bg-[var(--lp-red)]" aria-hidden /> Carwash RAPIFIX
+              </p>
+              <h2 id="cw-banner-t" className="lp-display mt-4 text-[clamp(1.9rem,3.6vw,3rem)] leading-[1.02]">Tu carro limpio. Tu día más fácil.</h2>
+              <p className="mt-4 max-w-[32rem] text-[1.02rem] leading-relaxed text-[var(--lp-mute-dark)]">Lavados para todo tipo de vehículo, membresías y tarjeta de sellos.</p>
+            </div>
+            <div className="flex lg:justify-end">
+              <Link to="/lavado" className="lp-btn lp-btn-red">
+                Conocer el carwash <ArrowRight className="lp-arrow h-4 w-4" aria-hidden />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------------------------------------------------------------- Tecnología y seguimiento */
 
 const TRACK_FEATURES = [
@@ -66,7 +102,7 @@ export function TrackingSection() {
   const wa = waLink(WA_MESSAGES.tracking);
   return (
     <section id="tecnologia" className="lp-section lp-light relative overflow-hidden bg-[var(--lp-paper)] py-28 sm:py-36">
-      <div className="lp-wrap grid items-center gap-16 lg:grid-cols-[1.1fr_1fr] lg:gap-24">
+      <div className="lp-wrap grid [&>*]:min-w-0 items-center gap-16 lg:grid-cols-[1.1fr_1fr] lg:gap-24">
         <div>
           <div data-reveal>
             <h2 className="lp-display lp-h2 max-w-[16ch] text-[var(--lp-navy)]">Tu vehículo está en nuestras manos. Tú sigues al tanto.</h2>
@@ -169,7 +205,7 @@ export function ProcessSection() {
   const on = Math.floor(p * STAGES.length + 0.35);
   return (
     <section id="proceso" aria-labelledby="proceso-t" className="lp-section relative bg-[var(--lp-night)] py-28 text-white sm:py-36">
-      <div className="lp-wrap grid gap-14 lg:grid-cols-[1fr_1.2fr] lg:gap-24">
+      <div className="lp-wrap grid [&>*]:min-w-0 gap-14 lg:grid-cols-[1fr_1.2fr] lg:gap-24">
         <div className="lg:sticky lg:top-28 lg:self-start" data-reveal>
           <h2 id="proceso-t" className="lp-display lp-h2">Así cuidamos tu vehículo, paso a paso.</h2>
           <p className="lp-lead mt-7 max-w-[28rem] text-[var(--lp-mute-dark)]">Las mismas etapas que ves en tu enlace de seguimiento.</p>
@@ -236,6 +272,9 @@ export function ContactSection() {
                   <Phone className="h-4 w-4" aria-hidden /> Llamar
                 </a>
               )}
+              <Link to="/agendar" className="lp-btn lp-btn-red">
+                <CalendarCheck className="h-4 w-4" aria-hidden /> Agendar cita
+              </Link>
             </div>
             {quick.length > 0 && (
               <ul className="relative mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm" aria-label="Mensajes rápidos por WhatsApp">
@@ -337,7 +376,7 @@ function SocialIcon({ label }: { label: string }) {
   return <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" aria-hidden fill="currentColor"><path d="M16.5 3c.3 2.1 1.6 3.6 3.5 3.8v3c-1.3 0-2.5-.4-3.5-1v6.4A5.8 5.8 0 1 1 10.7 9.4v3.1a2.8 2.8 0 1 0 2.8 2.8V3h3z" /></svg>;
 }
 
-export function Footer() {
+export function Footer({ base = "" }: { base?: string }) {
   const { status } = useAuth();
   const signedIn = status === "ready" || status === "noRole";
   const wa = waLink(WA_MESSAGES.general);
@@ -366,11 +405,12 @@ export function Footer() {
           <nav aria-label="Pie de página">
             <p className="text-sm font-semibold text-white">Sitio</p>
             <ul className="mt-4 space-y-2.5 text-[0.95rem] text-[var(--lp-mute-dark)]">
-              <li><a className="hover:text-white" href="#nosotros">Nosotros</a></li>
-              <li><a className="hover:text-white" href="#servicios">Servicios</a></li>
-              <li><a className="hover:text-white" href="#flotillas">Flotillas</a></li>
-              <li><a className="hover:text-white" href="#tecnologia">Tecnología y seguimiento</a></li>
-              <li><a className="hover:text-white" href="#contacto">Contacto</a></li>
+              <li><a className="hover:text-white" href={`${base}#nosotros`}>Nosotros</a></li>
+              <li><a className="hover:text-white" href={`${base}#servicios`}>Servicios</a></li>
+              <li><a className="hover:text-white" href={`${base}#flotillas`}>Flotillas</a></li>
+              <li><a className="hover:text-white" href="/lavado">Carwash</a></li>
+              <li><a className="hover:text-white" href={`${base}#tecnologia`}>Tecnología y seguimiento</a></li>
+              <li><a className="hover:text-white" href={`${base}#contacto`}>Contacto</a></li>
             </ul>
           </nav>
           <div>

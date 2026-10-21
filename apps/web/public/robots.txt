@@ -3,6 +3,8 @@
 User-agent: *
 Allow: /$
 Allow: /inicio
+Allow: /lavado$
+Allow: /agendar
 Disallow: /login
 Disallow: /recuperar
 Disallow: /orden/

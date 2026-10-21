@@ -49,6 +49,10 @@ export interface Appointment extends BaseDoc {
   notes: string;
   reminderSentAt?: TimestampLike | null;
   confirmationSentAt?: TimestampLike | null;
+  /** "web": la pidió el cliente desde /agendar (sin vincular a cliente ni vehículo) */
+  source?: "web";
+  /** motivo elegido en la web (ver WEB_REASONS) */
+  webReason?: string;
 }
 
 export const saveAppointmentSchema = z.object({

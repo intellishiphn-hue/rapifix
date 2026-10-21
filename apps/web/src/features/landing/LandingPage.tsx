@@ -1,27 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, Gauge, Menu, MessageCircle, Wrench, X, Zap } from "lucide-react";
-import { useAuth } from "@/lib/auth/useAuth";
+import { ArrowRight, ClipboardCheck, Gauge, Wrench, Zap } from "lucide-react";
 import "./landing.css";
-import { BUSINESS, WA_MESSAGES, structuredData, waLink } from "./business";
-import { BrandLogo } from "./Brand";
+import { BUSINESS, structuredData } from "./business";
+import { Nav } from "./Nav";
 import { HERO_VIEWBOX_CAR, HeroScene } from "./HeroScene";
 import { finePointer, useReducedMotion, useRevealAll } from "./motion";
-import { ServicesSection } from "./Services";
-import { ContactSection, FleetSection, Footer, ProcessSection, TrackingSection } from "./Sections";
+import { CatalogDialogProvider, ServicesSection } from "./Services";
+import { MultipointSection } from "./Multipoint";
+import { CarwashBanner, ContactSection, FleetSection, Footer, ProcessSection, TrackingSection } from "./Sections";
 
 const TITLE = "RAPIFIX Centro Automotriz: mantenimiento, diagnóstico y reparación en Tegucigalpa";
 const DESCRIPTION =
   "Mantenimiento preventivo, frenos, suspensión, aire acondicionado, sistema eléctrico, diagnóstico computarizado y mantenimiento de flotillas en Tegucigalpa. Sigue el estado de tu vehículo desde el celular.";
 
-export const NAV_LINKS = [
-  { id: "inicio", label: "Inicio" },
-  { id: "nosotros", label: "Nosotros" },
-  { id: "servicios", label: "Servicios" },
-  { id: "flotillas", label: "Flotillas" },
-  { id: "tecnologia", label: "Tecnología" },
-  { id: "contacto", label: "Contacto" },
-] as const;
 
 /** Título, descripción, canonical y datos estructurados mientras la landing está montada */
 function useSeo() {
@@ -66,148 +58,26 @@ export function LandingPage() {
       <a href="#contenido" className="sr-only z-[60] rounded-full bg-white px-4 py-2 font-semibold text-[var(--lp-navy)] focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
         Saltar al contenido
       </a>
-      <Nav />
-      <main id="contenido">
-        <Hero />
-        <About />
-        <ServicesSection />
-        <FleetSection />
-        <TrackingSection />
-        <ProcessSection />
-        <ContactSection />
-      </main>
-      <Footer />
+      <CatalogDialogProvider>
+        <Nav />
+        <main id="contenido">
+          <Hero />
+          <MultipointSection />
+          <About />
+          <ServicesSection />
+          <FleetSection />
+          <CarwashBanner />
+          <TrackingSection />
+          <ProcessSection />
+          <ContactSection />
+        </main>
+        <Footer />
+      </CatalogDialogProvider>
     </div>
   );
 }
 
 /* ---------------------------------------------------------------- Navegación */
-
-function Nav() {
-  const { status } = useAuth();
-  const signedIn = status === "ready" || status === "noRole";
-  const [solid, setSolid] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState<string>("inicio");
-  const menuBtn = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let raf = 0;
-    const on = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        setSolid(window.scrollY > 24);
-      });
-    };
-    on();
-    window.addEventListener("scroll", on, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", on);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  // Sección activa
-  useEffect(() => {
-    const els = NAV_LINKS.map((l) => document.getElementById(l.id)).filter((x): x is HTMLElement => !!x);
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) if (e.isIntersecting) setActive(e.target.id);
-      },
-      { rootMargin: "-45% 0px -50% 0px" },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
-
-  // Menú móvil: Esc cierra, el foco entra al menú y vuelve al botón
-  useEffect(() => {
-    if (!open) return;
-    const first = menu.current?.querySelector<HTMLElement>("a,button");
-    first?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        menuBtn.current?.focus();
-      }
-    };
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  const wa = waLink(WA_MESSAGES.general);
-  const access = signedIn ? { to: "/", label: "Ir al panel" } : { to: "/login", label: "Acceso" };
-
-  return (
-    <header className="lp-nav fixed inset-x-0 top-0 z-50" data-solid={solid || open}>
-      <div className="lp-wrap flex h-[68px] items-center gap-6">
-        <a href="#inicio" className="shrink-0" aria-label="RAPIFIX, ir al inicio">
-          <BrandLogo />
-        </a>
-        <nav aria-label="Principal" className="ml-auto hidden lg:block">
-          <ul className="flex items-center gap-7 text-[0.94rem] font-medium">
-            {NAV_LINKS.map((l) => (
-              <li key={l.id}>
-                <a href={`#${l.id}`} className="lp-navlink" aria-current={active === l.id ? "true" : undefined}>{l.label}</a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="ml-auto flex items-center gap-2 lg:ml-2">
-          <Link to={access.to} className="hidden rounded-full px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:text-white sm:inline-flex">
-            {access.label}
-          </Link>
-          {wa && (
-            <a href={wa} target="_blank" rel="noopener noreferrer" className="lp-btn lp-btn-red hidden !min-h-[42px] !px-4 text-sm sm:inline-flex">
-              <MessageCircle className="h-4 w-4" aria-hidden /> Escríbenos
-            </a>
-          )}
-          <button
-            ref={menuBtn}
-            type="button"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white hover:bg-white/10 lg:hidden"
-            aria-expanded={open}
-            aria-controls="lp-menu"
-            aria-label={open ? "Cerrar menú" : "Abrir menú"}
-            onClick={() => setOpen((o) => !o)}
-          >
-            {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
-        </div>
-      </div>
-      <div
-        id="lp-menu"
-        ref={menu}
-        className="lp-menu absolute inset-x-0 top-[68px] h-[calc(100dvh-68px)] overflow-y-auto bg-[#010f3c] lg:hidden"
-        data-open={open}
-        inert={!open}
-      >
-        <nav aria-label="Menú móvil" className="lp-wrap flex flex-col py-6">
-          {NAV_LINKS.map((l) => (
-            <a key={l.id} href={`#${l.id}`} onClick={() => setOpen(false)} className="lp-display border-b border-white/10 py-4 text-[1.7rem] text-white" aria-current={active === l.id ? "true" : undefined}>
-              {l.label}
-            </a>
-          ))}
-          <div className="mt-8 grid gap-3">
-            {wa && (
-              <a href={wa} target="_blank" rel="noopener noreferrer" className="lp-btn lp-btn-red w-full">
-                <MessageCircle className="h-5 w-5" aria-hidden /> Escríbenos por WhatsApp
-              </a>
-            )}
-            <Link to={access.to} className="lp-btn lp-btn-ghost w-full" onClick={() => setOpen(false)}>{access.label === "Acceso" ? "Acceso del personal" : access.label}</Link>
-          </div>
-        </nav>
-      </div>
-    </header>
-  );
-}
 
 /* ---------------------------------------------------------------- Hero */
 
@@ -297,7 +167,7 @@ function Hero() {
             <a href="#servicios" className="lp-btn lp-btn-red">
               Explorar servicios <ArrowRight className="lp-arrow h-4 w-4" aria-hidden />
             </a>
-            <a href="#nosotros" className="lp-btn lp-btn-ghost">Conocer RAPIFIX</a>
+            <Link to="/agendar" className="lp-btn lp-btn-ghost">Agendar cita</Link>
           </div>
         </div>
 
@@ -325,8 +195,8 @@ const PILLARS = [
 
 function About() {
   return (
-    <section id="nosotros" className="lp-section lp-light relative bg-[var(--lp-paper)] py-28 sm:py-36">
-      <div className="lp-wrap grid gap-14 lg:grid-cols-[1fr_1.1fr] lg:items-end lg:gap-24">
+    <section id="nosotros" className="lp-section lp-light relative bg-white py-28 sm:py-36">
+      <div className="lp-wrap grid [&>*]:min-w-0 gap-14 lg:grid-cols-[1fr_1.1fr] lg:items-end lg:gap-24">
         <div data-reveal>
           <h2 className="lp-display lp-h2 max-w-[14ch] text-[var(--lp-navy)]">Más que mantenimiento. Confianza en cada recorrido.</h2>
           <p className="lp-lead mt-7 max-w-[32rem] text-[var(--lp-mute)]">

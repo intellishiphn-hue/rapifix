@@ -46,10 +46,12 @@
 .lp-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem;
   min-height: 48px; padding: 0 1.35rem; border-radius: 999px;
-  font-weight: 650; font-size: 0.97rem; white-space: nowrap;
+  font-weight: 650; font-size: 0.97rem; white-space: nowrap; max-width: 100%;
   transition: background-color 0.25s var(--lp-ease), color 0.25s var(--lp-ease), border-color 0.25s var(--lp-ease), transform 0.25s var(--lp-ease), box-shadow 0.25s var(--lp-ease);
 }
 .lp-btn:active { transform: scale(0.98); }
+@media (max-width: 639px) { .lp-btn { white-space: normal; text-align: center; padding-block: 0.65rem; line-height: 1.25; } }
+.lp fieldset { min-width: 0; }
 .lp-btn-red { background: var(--lp-red); color: #fff; box-shadow: 0 10px 30px -12px rgb(234 1 1 / 0.7); }
 .lp-btn-red:hover { background: #ff1a1a; box-shadow: 0 14px 36px -12px rgb(234 1 1 / 0.85); }
 .lp-btn-ghost { color: #fff; border: 1px solid rgb(255 255 255 / 0.28); background: rgb(255 255 255 / 0.04); }
@@ -175,6 +177,84 @@
 .lp-js .lp-phone-bar { transform: scaleX(0); transform-origin: left; }
 .lp-js .is-in .lp-phone-bar { animation: lp-bar 1.4s var(--lp-ease) 0.4s forwards; }
 
+
+/* ===== Revisión multipuntos ===== */
+.mp-backdrop { background: radial-gradient(60% 55% at 55% 58%, rgb(59 140 255 / 0.12), transparent 70%); }
+@media (max-width: 639px) { .mp-dot { width: 13px; height: 13px; box-shadow: 0 0 0 3px #fff, 0 4px 12px -4px rgb(234 1 1 / 0.8); } }
+.mp-svg { overflow: hidden; }
+.mp-spot-mini { width: 20px; height: 20px; margin: -10px 0 0 -10px; pointer-events: none !important; cursor: default; }
+.mp-spot-mini .mp-dot { width: 10px; height: 10px; box-shadow: 0 0 0 2.5px #fff, 0 3px 8px -2px rgb(234 1 1 / 0.8); }
+.mp-spot-mini .mp-dot::after { display: none; }
+.mp-spot-mini.is-open .mp-dot::after { display: block; inset: -3px; }
+.mp-svg * { transform-box: view-box; }
+/* Entrada del vehículo y escáner (una vez) */
+.lp-js .mp-truck { opacity: 0; transform: translateX(-60px); transition: opacity 0.9s var(--lp-ease), transform 1.2s var(--lp-ease); }
+.lp-js .mp-stage.is-scanned .mp-truck { opacity: 1; transform: none; }
+.mp-scan { opacity: 0; }
+.lp-js .mp-stage.is-scanned .mp-scan { animation: mp-scan 1.9s cubic-bezier(0.45, 0, 0.25, 1) 0.35s 1 both; }
+@keyframes mp-scan { 0% { opacity: 0; transform: translateX(80px); } 8% { opacity: 1; } 90% { opacity: 1; } 100% { opacity: 0; transform: translateX(1420px); } }
+/* Puntos interactivos */
+.mp-spot {
+  position: absolute; z-index: 10; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 999px;
+  display: grid; place-items: center; cursor: pointer; background: transparent;
+  transition: transform 0.3s var(--lp-ease), opacity 0.5s var(--lp-ease);
+}
+.lp-js .mp-spot { opacity: 0; transform: scale(0.4); pointer-events: none; }
+.lp-js .mp-stage.is-scanned .mp-spot { opacity: 1; transform: none; pointer-events: auto; transition-delay: var(--spot-delay, 0ms), var(--spot-delay, 0ms); }
+.mp-dot { position: relative; width: 16px; height: 16px; border-radius: 999px; background: var(--lp-red); box-shadow: 0 0 0 4px #fff, 0 6px 16px -4px rgb(234 1 1 / 0.8); transition: transform 0.25s var(--lp-ease); }
+.mp-dot::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; border: 2px solid var(--lp-red); animation: mp-pulse 2s ease-out infinite; }
+@keyframes mp-pulse { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(2.6); opacity: 0; } }
+.mp-spot:hover .mp-dot, .mp-spot:focus-visible .mp-dot, .mp-spot.is-open .mp-dot { transform: scale(1.25); }
+.mp-spot.is-open .mp-dot { background: var(--lp-navy); box-shadow: 0 0 0 4px #fff, 0 0 0 7px var(--lp-red); }
+.mp-spot:focus-visible { outline: 3px solid var(--lp-electric-ink); outline-offset: 2px; }
+.mp-card { background: #fff; }
+/* Reacción de cada parte */
+.mp-hood { transform-origin: 942px 318px; transition: transform 0.7s var(--lp-ease); }
+.mp-engine { opacity: 0; transition: opacity 0.4s ease; }
+.mp-stage[data-active="hood"] .mp-hood { transform: rotate(-13deg); }
+.mp-stage[data-active="hood"] .mp-engine { opacity: 1; }
+.mp-caliper { transition: filter 0.3s, opacity 0.3s; }
+.mp-stage[data-active="wheels"] .mp-caliper { filter: drop-shadow(0 0 6px #ff3030) drop-shadow(0 0 12px #ff3030); }
+.mp-stage[data-active="wheels"] .mp-rim { animation: mp-spin 1.6s cubic-bezier(0.2, 0.7, 0.3, 1) 1; }
+@keyframes mp-spin { to { transform: rotate(360deg); } }
+.mp-beam, .mp-led-halo { transition: opacity 0.4s ease; }
+.mp-stage[data-active="lights"] .mp-beam { opacity: 0.85 !important; }
+.mp-stage[data-active="lights"] .mp-led-halo { opacity: 1; }
+.mp-air { opacity: 0; transition: opacity 0.4s ease; }
+.mp-stage[data-active="cabin"] .mp-air { opacity: 1; }
+.mp-stage[data-active="cabin"] .mp-wave { animation: mp-wave 1.8s ease-in-out infinite; }
+.mp-wave-2 { animation-delay: 0.3s !important; }
+.mp-wave-3 { animation-delay: 0.6s !important; }
+@keyframes mp-wave { 0%, 100% { transform: translateX(0); opacity: 0.35; } 50% { transform: translateX(-16px); opacity: 1; } }
+.mp-mist { opacity: 0; transition: opacity 0.4s ease; }
+.mp-stage[data-active="exhaust"] .mp-mist { opacity: 0.9; }
+.mp-stage[data-active="exhaust"] .mp-puff { animation: mp-puff 2.2s ease-out infinite; }
+.mp-puff-2 { animation-delay: 0.5s !important; }
+.mp-puff-3 { animation-delay: 1s !important; }
+@keyframes mp-puff { 0% { transform: translate(0, 0) scale(0.6); opacity: 0; } 30% { opacity: 0.9; } 100% { transform: translate(-60px, -16px) scale(1.5); opacity: 0; } }
+.mp-under-glow { opacity: 0; transition: opacity 0.4s ease; }
+.mp-stage[data-active="under"] .mp-under-glow { opacity: 1; }
+
+/* ===== Agendar cita ===== */
+.bk-input { display: block; width: 100%; min-height: 48px; border-radius: 14px; border: 1px solid rgb(1 25 85 / 0.18); background: #fff; padding: 0 14px; font-size: 1rem; color: var(--lp-ink); transition: border-color 0.2s, box-shadow 0.2s; }
+.bk-input:focus { outline: none; border-color: var(--lp-electric-ink); box-shadow: 0 0 0 4px rgb(0 82 224 / 0.12); }
+.bk-input[aria-invalid="true"] { border-color: var(--lp-red-ink); }
+.lp [role="radio"][aria-checked="true"] { box-shadow: 0 8px 20px -12px rgb(1 25 85 / 0.8); }
+
+/* ===== Carwash: espuma y brillo sutiles ===== */
+.cw-bubble {
+  position: absolute; border-radius: 999px; pointer-events: none;
+  background:
+    radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.95) 0 9%, transparent 13%),
+    radial-gradient(circle, rgb(190 220 255 / 0.04) 52%, rgb(190 220 255 / 0.5) 68%, rgb(255 255 255 / 0.7) 72%, transparent 74%);
+  animation: cw-rise 7s ease-in infinite;
+  opacity: 0;
+}
+@keyframes cw-rise { 0% { transform: translateY(0) scale(0.8); opacity: 0; } 15% { opacity: 0.9; } 100% { transform: translateY(-240px) scale(1.1); opacity: 0; } }
+.cw-sweep { background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.22) 48%, transparent 60%); background-size: 250% 100%; animation: cw-sweep 4.5s ease-in-out 1.2s infinite; mix-blend-mode: screen; }
+@keyframes cw-sweep { 0% { background-position: 120% 0; } 55%, 100% { background-position: -40% 0; } }
+.cw-foam { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%); mask-image: linear-gradient(to bottom, transparent, #000 30%); }
+
 @media (prefers-reduced-motion: no-preference) {
   html:has(.lp) { scroll-behavior: smooth; }
 }
@@ -185,5 +265,9 @@
   .lp-js .lp-phone-bar { transform: none; animation: none; }
   .lp-tile, .lp-scene .lp-layer-bg, .lp-scene .lp-layer-car, .lp-scene .lp-layer-lights { transform: none !important; }
   .lp-step .lp-step-body { opacity: 1; }
+  .lp-js .mp-truck, .lp-js .mp-spot { opacity: 1 !important; transform: none !important; pointer-events: auto !important; }
+  .mp-scan, .mp-dot::after { display: none; }
+  .mp-hood { transform: none !important; }
+  .cw-bubble, .cw-sweep { display: none; }
   .lp-rail-fill { transform: none; }
 }

@@ -8,6 +8,9 @@ Sitio público de RAPIFIX Centro Automotriz integrado en la misma app web (`apps
 |---|---|---|
 | `/` | Landing pública | Panel (Dashboard o carwash, igual que antes) |
 | `/inicio` | Landing pública | Landing pública (para que el equipo la vea) |
+| `/lavado` | Página pública del carwash | Igual |
+| `/agendar` (`?motivo=frenos`, `?motivo=carwash`, `?motivo=<categoría>`) | Formulario de cita | Igual |
+| `/lavado/:token` | Link privado de cada lavado (sin cambios; distinto de `/lavado`) | Igual |
 | `/login`, `/recuperar` | Login y recuperación (rediseñados, misma lógica) | Redirige al destino permitido |
 | `/clientes`, `/ordenes`, ... (rutas hijas del panel) | Redirige a `/login` (como antes) | Panel con permisos por rol |
 | `/orden/:token`, `/orden/:token/cotizacion`, `/lavado/:token`, `/aprobar/:token`, `/seguimiento/:token` | Sin cambios | Sin cambios |
@@ -71,6 +74,7 @@ Mensajes prellenados de WhatsApp: `WA_MESSAGES` en `business.ts` (servicios, flo
 - [ ] Fotos reales del taller para el hero y secciones (hoy se usan ilustraciones SVG originales, sin presentarlas como fotos del taller).
 - [ ] Opcional: confirmar si existe cuenta de TikTok.
 - [ ] Opcional: dominio propio (hoy el canonical y el sitemap usan el dominio de Firebase Hosting).
+- [ ] Publicar el menú del carwash tras el despliegue (servicios, planes y lealtad).
 
 ## Hero: ilustración del SUV
 
@@ -80,6 +84,56 @@ No hay fotos reales ni con licencia verificable, así que el hero usa arte origi
 - Escritorio (1024 px o más): escena completa de fondo (`xMaxYMid slice`), texto a la izquierda con degradado para el contraste. Parallax por capas (fondo, vehículo, luces) solo con mouse; sin parallax en táctil ni con movimiento reducido.
 - Móvil y tablet: recorte centrado en el vehículo debajo de los botones, con bordes difuminados.
 - Foto real futura: `heroImage` en `business.ts` reemplaza la ilustración.
+
+## Revisión multipuntos (debajo del hero)
+
+- `TruckArt.tsx`: camioneta 4x4 original en perfil (diseño propio, sin rasgos de modelos ni marcas), con partes separadas: capó (gira en la bisagra y deja ver el motor), ruedas (el rin gira y el caliper se ilumina), faros (haz de luz), cabina (ondas de aire frío), escape (bruma) y bajos (tren motriz resaltado).
+- `Multipoint.tsx`: al entrar la sección, el vehículo entra y una línea de escáner lo recorre una vez (IntersectionObserver); los puntos rojos aparecen detrás del escáner.
+- Escritorio (1024 px o más): dos columnas. A la izquierda, el título y la lista de zonas (o la tarjeta de la zona activa); a la derecha, la camioneta. Nada tapa el vehículo. Los puntos son botones de 44 px con aria-label: hover o clic abre la tarjeta; teclado: Tab entre puntos, Enter o Espacio abre y lleva el foco a la tarjeta, Esc cierra y devuelve el foco.
+- Móvil y tablet: la camioneta cabe completa dentro del margen; los puntos son solo indicadores y el menú táctil son los botones de zonas (44 px) debajo del vehículo; la tarjeta aparece debajo. Tocar fuera o "Cerrar" la cierra.
+- La tarjeta lista las categorías de cada zona con el conteo real de `catalog.ts` y "Ver servicios" abre el mismo diálogo del catálogo (`CatalogDialogProvider` en `Services.tsx`, un solo diálogo para toda la landing). Pie de sección: diagnóstico completo.
+- Movimiento reducido: sin escáner ni animaciones de partes; los puntos se ven y funcionan.
+
+## Carwash
+
+### En la landing
+Banner "Carwash RAPIFIX" después de Flotillas que lleva a `/lavado`, y enlace "Carwash" en la navegación y el pie.
+
+### Página `/lavado`
+`CarwashPage.tsx` (lazy, sin módulos del panel). Secciones: hero, tipos de vehículo (los 4 de `VEHICLE_SIZES`, `VEHICLE_SIZE_LABELS` y `VEHICLE_SIZE_HINTS`), "Nuestros servicios" (con selector de tipo de vehículo), "Tu carro siempre limpio" (membresías), "Cada lavado cuenta" (lealtad) y "Consulta tu Carwash". Sin precios. Todo el contacto es por WhatsApp de RAPIFIX con mensajes prellenados ("Hola, RAPIFIX. ...").
+
+### De dónde salen los datos (sin duplicar el módulo)
+- Servicios, planes y lealtad viven en `carwashServices`, `carwashPlans` y `settings/carwash` (panel). El servidor publica una copia sin precios en **`publicCarwash/{tid}`** (mismo patrón que `publicBranding`): servicios activos (nombre, descripción, si es extra, tipos de vehículo con tarifa y cuáles son "a convenir" = "Requiere evaluación"), planes activos (nombre, tipo de vehículo, lavados al mes, servicios incluidos por nombre) y lealtad (cada cuántos lavados pagados se gana uno, sellos de regalo). Nada de precios, comisiones ni clientes. Lógica: `packages/shared/src/publicCarwash.ts` (con pruebas).
+- Triggers `onCarwashServicePublic`, `onCarwashPlanPublic`, `onCarwashSettingsPublic` la regeneran al cambiar el menú, un plan o la configuración. Callable `rebuildPublicCarwash` (admin y gerencia) para publicarla la primera vez.
+- **Después de desplegar:** guardar una vez cualquier servicio del menú del carwash (o llamar `rebuildPublicCarwash`). Mientras el documento no exista, la página muestra un estado vacío con WhatsApp (no inventa servicios).
+- La página lee el documento con la API REST de Firestore (`fetch`), sin cargar el SDK de Firestore. Estados: cargando, con datos, vacío (404) y error. Si se activa App Check con enforcement en Firestore, esta lectura REST necesitaría token; hoy no está activado.
+- Reglas: `publicCarwash/{tid}` permite `get` público; `list` y escritura cerrados. Probado en `tests/rules`.
+
+### Consulta de lavados y pagos
+No hay login de clientes (no se creó). Cada lavado tiene su link privado `/lavado/:token` (lo envía el taller por WhatsApp) donde el cliente ve su lavado, los sellos de su tarjeta, puede pagar con tarjeta (ROKI) o subir comprobante (queda pendiente hasta que caja lo valida) y puede incluir fotos. **Trabajo futuro:** portal de cliente con historial completo e inicio de sesión.
+
+### Analítica
+El proyecto no tiene Firebase Analytics ni gtag; no se agregó ninguna herramienta.
+
+## Agendar cita (`/agendar`)
+
+- Formulario público (`BookingPage.tsx`): motivo (Mantenimiento, Frenos, Diagnóstico, Aire acondicionado, Carwash, Otro; se preselecciona con `?motivo=`), día (desde mañana hasta 30 días), hora (bloques libres), nombre, teléfono (validación internacional existente, +504 por defecto), placa y marca/modelo opcionales, comentario (máx. 500). Pantalla de éxito con resumen opcional por WhatsApp. No se envía WhatsApp automático.
+- Botones "Agendar": navegación (principal), hero, contacto, diálogo de cada categoría (`?motivo=<categoría>`), tarjetas de la revisión multipuntos, diagnóstico y `/lavado` ("Agendar lavado").
+- Lógica pura y probada en `packages/shared/src/publicAppointment.ts`: horario (lun a vie 8:00 a 17:00, sáb 8:00 a 15:00, dom cerrado, hora de Honduras), bloques de 30 min (el último empieza 1 h antes del cierre), capacidad `SLOT_CAPACITY = 2` por bloque (citas no canceladas), `MAX_ACTIVE_PER_PHONE = 2`, schema estricto con campo trampa.
+- Callables públicas (`functions/src/public/appointments.ts`): `publicAppointmentSlots({ date })` devuelve solo las horas libres; `requestAppointmentPublic` crea la cita en **la misma colección de la agenda** (`tenants/{tid}/appointments`) como "Agendada", `source: "web"`, `customerId` y `vehicleId` en null, contacto tal cual y "Cita web: motivo" en notas. Capacidad y límite por teléfono en transacción; límite por IP (5 por hora) con `rateLimits` existente.
+- Panel: distintivo "Web" en la agenda y "Pedida en la web" en el detalle; recepción la vincula editando la cita (flujo existente) y la confirma como siempre.
+
+## Despliegue (cuando se autorice)
+
+1. `npm run deploy:rules` (reglas: `publicCarwash`).
+2. `npm run deploy:functions` (triggers y callables nuevas).
+3. `npm run deploy:hosting`.
+4. Publicar el menú del carwash una vez (ver arriba).
+5. Callables públicas: `publicAppointmentSlots` y `requestAppointmentPublic` (y `rebuildPublicCarwash`, que valida el rol adentro) deben aceptar llamadas sin cuenta de Google Cloud, igual que las demás callables. Firebase lo configura al desplegar; si la página muestra error al cargar horas (403 o CORS), ejecutar:
+   ```
+   gcloud run services add-iam-policy-binding publicappointmentslots --region=us-central1 --member=allUsers --role=roles/run.invoker --project=rapifix-prod-a1b2c
+   gcloud run services add-iam-policy-binding requestappointmentpublic --region=us-central1 --member=allUsers --role=roles/run.invoker --project=rapifix-prod-a1b2c
+   ```
 
 ## Checklist del catálogo (13 categorías)
 

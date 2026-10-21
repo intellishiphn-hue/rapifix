@@ -21,3 +21,5 @@ export * from "./orderHistory";
 export * from "./orderFinance";
 export * from "./companies";
 export * from "./coupons";
+export * from "./publicCarwash";
+export * from "./publicAppointment";

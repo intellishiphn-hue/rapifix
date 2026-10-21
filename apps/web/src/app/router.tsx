@@ -9,6 +9,8 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage";
 // Landing pública: chunk aparte, no importa módulos del panel ni Firestore
 const LandingPage = page(() => import("@/features/landing/LandingPage"), "LandingPage");
+const BookingPage = page(() => import("@/features/landing/BookingPage"), "BookingPage");
+const CarwashPublicPage = page(() => import("@/features/landing/CarwashPage"), "CarwashPage");
 const DashboardPage = page(() => import("@/features/dashboard/DashboardPage"), "DashboardPage");
 const CustomersPage = page(() => import("@/features/customers/CustomersPage"), "CustomersPage");
 const CustomerDetailPage = page(() => import("@/features/customers/CustomerDetailPage"), "CustomerDetailPage");
@@ -108,6 +110,10 @@ export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   // Sitio público (siempre visible, también con sesión)
   { path: "/inicio", element: <LandingRoute /> },
+  // Cita desde la web (pública, se comparte con ?motivo=)
+  { path: "/agendar", element: <Suspense fallback={<div className="min-h-screen bg-[#000a2b]" />}><BookingPage /></Suspense> },
+  // Página pública del carwash (sin token). El link de cada lavado sigue siendo /lavado/:token
+  { path: "/lavado", element: <Suspense fallback={<div className="min-h-screen bg-[#000a2b]" />}><CarwashPublicPage /></Suspense> },
   { path: "/recuperar", element: <ForgotPasswordPage /> },
   // Portal público del cliente (sin cuenta). /aprobar y /seguimiento redirigen al mismo link.
   { path: "/orden/:token", element: <S><PortalPage /></S> },

@@ -85,6 +85,7 @@ export function AppointmentDetailDialog({
           <span className="h-3 w-3 rounded-full" style={{ background: color }} />
           {APPOINTMENT_TYPE_LABELS[a.type]}
           <Badge tone={STATUS_TONE[a.status]}>{APPOINTMENT_STATUS_LABELS[a.status]}</Badge>
+          {a.source === "web" && <Badge tone="blue">Pedida en la web</Badge>}
         </span>
       }
       description={<span className="capitalize">{fmtLongDay(start)} · {fmtTime(start)} – {fmtTime(end)}</span>}
@@ -94,7 +95,7 @@ export function AppointmentDetailDialog({
           <div className="flex items-center gap-2.5">
             <User className="h-4 w-4 shrink-0 text-slate-400" />
             {a.customerId ? <Link to={`/clientes/${a.customerId}`} className="font-semibold text-slate-900 hover:text-brand-700">{a.customerName}</Link> : <span className="font-semibold">{a.customerName}</span>}
-            {!a.customerId && <Badge>No registrado</Badge>}
+            {!a.customerId && <Badge>{a.source === "web" ? "Sin vincular: edite la cita para elegir el cliente" : "No registrado"}</Badge>}
           </div>
           {a.phone && (
             <div className="flex items-center gap-2.5">

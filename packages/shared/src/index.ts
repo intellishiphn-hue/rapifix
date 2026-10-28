@@ -10,6 +10,7 @@ export * from "./workOrder";
 export * from "./templates";
 export * from "./quote";
 export * from "./quoteCosts";
+export * from "./techPay";
 export * from "./catalog";
 export * from "./operations";
 export * from "./finance";

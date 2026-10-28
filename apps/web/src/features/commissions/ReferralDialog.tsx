@@ -96,7 +96,7 @@ export function ReferralDialog({ open, onClose, target, targetId, targetName, cu
               <Button variant="secondary" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)} aria-label="Nuevo referido" title="Nuevo referido" />
             </div>
           </Field>
-          <Field label="Comisión (% de la utilidad)" hint="Se calcula sobre la utilidad de cada orden (ingreso sin ISV menos costo), al quedar pagada completa.">
+          <Field label="Comisión (% de la utilidad)" hint="Se calcula sobre la utilidad de cada orden (ingreso sin ISV menos costo y pago a técnicos), al quedar pagada completa.">
             <Input type="number" min={0.1} max={50} step="0.5" value={pct} onChange={(e) => setPct(e.target.value)} />
           </Field>
           <div className="grid grid-cols-2 gap-3">

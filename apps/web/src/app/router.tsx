@@ -65,6 +65,8 @@ const CouponDetailPage = page(() => import("@/features/coupons/CouponDetailPage"
 const ReferrerDetailPage = page(() => import("@/features/commissions/ReferrerDetailPage"), "ReferrerDetailPage");
 const PrintStatementPage = page(() => import("@/features/print/CompanyPrints"), "PrintStatementPage");
 const PrintCommissionPage = page(() => import("@/features/print/CompanyPrints"), "PrintCommissionPage");
+const PrintTechPayoutPage = page(() => import("@/features/print/TechPayPrint"), "PrintTechPayoutPage");
+const TechPayPage = page(() => import("@/features/tech-pay/TechPayPage"), "TechPayPage");
 const WashTicketPage = page(() => import("@/features/carwash/WashTicketPage"), "WashTicketPage");
 /** Inicio: el lavador (sin Dashboard) entra directo a la cola del carwash. */
 function HomeRoute() {
@@ -129,6 +131,7 @@ export const router = createBrowserRouter([
   { path: "/imprimir/cotizacion/:id", element: <RequireAuth><S><PrintQuotePage /></S></RequireAuth> },
   { path: "/imprimir/estado-cuenta/:id", element: <RequireAuth><RequirePermission permission="payments.read"><S><PrintStatementPage /></S></RequirePermission></RequireAuth> },
   { path: "/imprimir/comision/:id", element: <RequireAuth><RequirePermission permission="commissions.manage"><S><PrintCommissionPage /></S></RequirePermission></RequireAuth> },
+  { path: "/imprimir/pago-tecnico/:id", element: <RequireAuth><RequirePermission permission="techpay.manage"><S><PrintTechPayoutPage /></S></RequirePermission></RequireAuth> },
   { path: "/imprimir/lavado/:id", element: <RequireAuth><S><WashTicketPage /></S></RequireAuth> },
   {
     path: "/",
@@ -143,6 +146,7 @@ export const router = createBrowserRouter([
       { path: "cupones/:code", element: <RequirePermission permission="coupons.manage"><S><CouponDetailPage /></S></RequirePermission> },
       { path: "comisiones", element: <RequirePermission permission="commissions.manage"><S><CommissionsPage /></S></RequirePermission> },
       { path: "referidos/:id", element: <RequirePermission permission="commissions.manage"><S><ReferrerDetailPage /></S></RequirePermission> },
+      { path: "pagos-tecnicos", element: <RequirePermission permission="techpay.manage"><S><TechPayPage /></S></RequirePermission> },
       { path: "vehiculos", element: <RequirePermission permission="vehicles.read"><S><VehiclesPage /></S></RequirePermission> },
       { path: "vehiculos/:id", element: <RequirePermission permission="vehicles.read"><S><VehicleDetailPage /></S></RequirePermission> },
       { path: "ordenes", element: <RequirePermission permission="orders.read"><S><WorkOrdersPage /></S></RequirePermission> },

@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, Flag, Target, Wallet } from "lucide-react";
-import { addMonths, formatMoney, hnDayKey, type Expense } from "@rapifix/shared";
+import { addMonths, formatMoney, hnDayKey, isOperatingExpense, type Expense } from "@rapifix/shared";
 import { cn } from "@/lib/cn";
 import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
@@ -54,7 +54,7 @@ const PL: PLRow[] = [
   { key: "counter", label: "Mostrador (ventas del POS)", get: (f) => f.counterRevenue },
   { key: "carwash", label: "Carwash", get: (f) => f.carwashRevenue, hideIfZero: true },
   { key: "revenue", label: "Total ingresos", get: (f) => f.revenue, level: "strong" },
-  { key: "cost", label: "(−) Costo de lo vendido", hint: "Repuestos y productos que se vendieron", get: (f) => -f.cost, negative: true },
+  { key: "cost", label: "(−) Costo de lo vendido", hint: "Repuestos, productos y pago a técnicos por trabajo", get: (f) => -f.cost, negative: true },
   { key: "gross", label: "Utilidad bruta", hint: "Lo que queda después de pagar lo vendido", get: (f) => f.gross, level: "strong" },
   { key: "grossM", label: "Margen bruto", get: (f) => f.grossMargin, isPct: true },
   { key: "fixed", label: "(−) Gastos fijos", hint: "Alquiler, salarios, servicios (pagados y pendientes)", get: (f) => -f.fixed, negative: true },
@@ -87,7 +87,7 @@ export function ClosingTab(props: FinTabProps) {
     })).sort((a, b) => b.paid + b.pending - (a.paid + a.pending));
 
     // Gastos variables por categoría contra presupuesto
-    const varList = data.validExpenses.filter((e) => !e.fixedCostId && e.date?.toMillis && hnDayKey(e.date.toMillis()).slice(0, 7) === month);
+    const varList = data.validExpenses.filter((e) => !e.fixedCostId && isOperatingExpense(e) && e.date?.toMillis && hnDayKey(e.date.toMillis()).slice(0, 7) === month);
     const cats = new Set([...varList.map((e) => e.category || "Otros"), ...Object.keys(data.budget)]);
     const varCats = [...cats].map((category) => {
       const items = varList.filter((e) => (e.category || "Otros") === category);

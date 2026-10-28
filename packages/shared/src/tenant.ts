@@ -78,6 +78,16 @@ export const companyCol = {
   companyPayments: (tid: string) => `tenants/${tid}/companyPayments`,
 } as const;
 
+/** Pago a técnicos por trabajo: configuración por empleado, ganancias por orden y pagos. Todo lo escribe el servidor. */
+export const techPayCol = {
+  /** employeePay/{employeeId}: configuración por defecto (solo admin y gerencia la leen) */
+  config: (tid: string) => `tenants/${tid}/employeePay`,
+  /** techEarnings/{orderId}__{employeeId} */
+  earnings: (tid: string) => `tenants/${tid}/techEarnings`,
+  /** techPayouts/{id}: pagos PT-0001 */
+  payouts: (tid: string) => `tenants/${tid}/techPayouts`,
+} as const;
+
 export const carwashCol = {
   services: (tid: string) => `tenants/${tid}/carwashServices`,
   washes: (tid: string) => `tenants/${tid}/carwashWashes`,

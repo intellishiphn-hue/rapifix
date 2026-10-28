@@ -30,6 +30,7 @@ import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { applyCoupon, removeCoupon } from "@/features/coupons/api";
 import { CouponField } from "@/features/coupons/CouponField";
 import { CostOnlyHint, EditCostsButton } from "./EditCostsDialog";
+import { useTechPayEmployees } from "@/features/tech-pay/api";
 import { blankLine, DecisionInfo, DiscardRevisionDialog, ModifyQuoteDialog, QuoteHistory, QuoteLinesEditor, QuoteView, RecordDecisionDialog, RevisionChanges, versionLabel } from "./parts";
 
 const quoteLink = (q: Pick<Quote, "publicToken">) => (q.publicToken ? `${window.location.origin}/orden/${q.publicToken}` : "");
@@ -116,6 +117,9 @@ export function DirectQuotePage() {
   const { data: versions } = useQuoteVersions(quote?.number);
   const showCost = can("dashboard.financials");
   const manage = can("quotes.manage");
+  // Pago a técnicos: la cotización directa aún no tiene técnicos asignados; se elige en cada línea
+  const tpe = useTechPayEmployees();
+  const techPay = tpe.enabled ? { employees: tpe.employees, defaults: [] } : undefined;
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [lines, setLines] = useState<QuoteItemInput[]>([blankLine("labor")]);
@@ -273,7 +277,7 @@ export function DirectQuotePage() {
             <CardHeader title={isNew ? "2. Cotización" : "Editar borrador"} description={`ISV ${settings.taxRate}% · los totales finales los calcula el sistema al guardar`} />
             <div className="p-5">
               <QuoteLinesEditor
-                lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost}
+                lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost} techPay={techPay}
                 notes={notes} onNotes={(v) => { setNotes(v); setDirty(true); }} validDays={validDays} onValidDays={(v) => { setValidDays(v); setDirty(true); }} taxRate={settings.taxRate}
                 couponCode={draftCoupon?.code}
                 couponSlot={
@@ -320,7 +324,7 @@ export function DirectQuotePage() {
               <DecisionInfo quote={quote} />
               {isRevision && base && <RevisionChanges base={base} next={quote} />}
               <QuoteView
-                quote={quote} showCost={showCost}
+                quote={quote} showCost={showCost} showTechPay={tpe.enabled}
                 couponSlot={(quote.coupon || (manage && ["sent", "viewed"].includes(quote.status))) && (
                   <CouponField applied={quote.coupon} disabled={!manage || !["sent", "viewed"].includes(quote.status)} onApply={applySentCoupon} onRemove={() => dropCoupon(quote.id)} />
                 )}

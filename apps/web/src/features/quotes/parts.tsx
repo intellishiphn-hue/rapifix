@@ -1,13 +1,16 @@
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, HelpCircle, Minus, PencilLine, Plus, Search, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HardHat, HelpCircle, Minus, PencilLine, Plus, Search, Trash2, Wand2, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { CatalogPicker, type CatalogPick } from "@/features/catalog/CatalogPicker";
 import { fetchCost } from "@/features/catalog/api";
 import {
-  balanceAfter, consumedByItem, lineBeforeCoupon, DECISION_CHANNEL_LABELS, diffQuotes, formatMoney, QUOTE_ITEM_LABELS, QUOTE_ITEM_TYPES, stockImpact, stockNoticeText,
-  type DiffItem, type Quote, type QuoteItemInput, type QuoteItemType, type Totals,
+  balanceAfter, computeTechPay, consumedByItem, lineBeforeCoupon, DECISION_CHANNEL_LABELS, diffQuotes, formatMoney, QUOTE_ITEM_LABELS, QUOTE_ITEM_TYPES, quoteProfit, stockImpact, stockNoticeText,
+  techPayBase, techPayEligible,
+  type DiffItem, type Quote, type QuoteItemInput, type QuoteItemType, type TechPayShare, type Totals,
 } from "@rapifix/shared";
+import { TechPayLineEditor } from "@/features/tech-pay/TechPayLineEditor";
+import type { TechPayEmployee } from "@/features/tech-pay/api";
 import { errorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
 import { newId } from "@/lib/storage";
@@ -19,7 +22,17 @@ import { discardQuoteRevision, newQuoteVersion, recordQuoteDecision } from "./ap
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { MoneyInput } from "./MoneyInput";
 
-export const blankLine = (type: QuoteItemType = "labor"): QuoteItemInput => ({ id: newId(), type, description: "", qty: 1, unitCost: 0, unitPrice: 0, discount: 0, taxable: true });
+export const blankLine = (type: QuoteItemType = "labor", techPay?: TechPayShare[]): QuoteItemInput => ({
+  id: newId(), type, description: "", qty: 1, unitCost: 0, unitPrice: 0, discount: 0, taxable: true,
+  ...(techPay?.length && techPayEligible(type) ? { techPay } : {}),
+});
+
+/** Pago a técnicos en el editor de líneas (solo para quien tiene permiso "techpay.manage"). */
+export interface TechPayEditing {
+  employees: TechPayEmployee[];
+  /** repartos por defecto: los técnicos de la orden con su configuración */
+  defaults: TechPayShare[];
+}
 
 export function TotalsBox({ totals, taxRate, couponCode }: { totals: Totals; taxRate: number; couponCode?: string | null }) {
   const coupon = totals.couponDiscount ?? 0;
@@ -35,8 +48,10 @@ export function TotalsBox({ totals, taxRate, couponCode }: { totals: Totals; tax
   );
 }
 
-export function QuoteView({ quote, showCost, couponSlot }: { quote: Quote; showCost: boolean; couponSlot?: ReactNode }) {
-  const margin = quote.items.reduce((a, it) => a + it.lineTotal - Math.round(it.qty * it.unitCost), 0);
+export function QuoteView({ quote, showCost, couponSlot, showTechPay = false }: { quote: Quote; showCost: boolean; couponSlot?: ReactNode; showTechPay?: boolean }) {
+  // Margen: venta sin ISV − costo interno − pago a técnicos (misma regla que Finanzas)
+  const margin = quoteProfit(quote.items);
+  const tp = showTechPay ? computeTechPay(quote.items) : null;
   return (
     <div className="space-y-4">
       <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -61,7 +76,13 @@ export function QuoteView({ quote, showCost, couponSlot }: { quote: Quote; showC
       <div className="flex flex-col gap-4 sm:flex-row">
         <div className="flex-1 space-y-2 text-sm">
           {quote.notes && <p className="whitespace-pre-line rounded-xl bg-slate-50 p-3 text-slate-700">{quote.notes}</p>}
-          {showCost && <p className="text-xs text-slate-500">Margen estimado (sin ISV): <b className="tabular text-slate-800">{formatMoney(margin)}</b></p>}
+          {showCost && <p className="text-xs text-slate-500">Margen estimado (sin ISV): <b className="tabular text-slate-800">{formatMoney(margin)}</b>{tp?.total ? <> · ya resta {formatMoney(tp.total)} de pago a técnicos</> : null}</p>}
+          {tp && tp.byEmployee.length > 0 && (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500" data-testid="quote-techpay">
+              <HardHat className="h-3.5 w-3.5 text-slate-400" /> Pago a técnicos:
+              {tp.byEmployee.map((e) => <span key={e.employeeId} className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{e.employeeName} <span className="tabular">{formatMoney(e.total)}</span></span>)}
+            </p>
+          )}
           {couponSlot}
         </div>
         <TotalsBox totals={quote.totals} taxRate={quote.taxRate} couponCode={quote.coupon?.code} />
@@ -72,8 +93,10 @@ export function QuoteView({ quote, showCost, couponSlot }: { quote: Quote; showC
 
 /** Editor de líneas (controlado). */
 export function QuoteLinesEditor({
-  lines, onLines, preview, showCost, notes, onNotes, validDays, onValidDays, taxRate, couponSlot, couponCode,
+  lines, onLines, preview, showCost, notes, onNotes, validDays, onValidDays, taxRate, couponSlot, couponCode, techPay,
 }: {
+  /** pago a técnicos (solo admin/gerencia); sin esto no se muestra ni se cambia */
+  techPay?: TechPayEditing;
   /** campo de cupón (debajo de las notas) */
   couponSlot?: ReactNode;
   couponCode?: string | null;
@@ -89,21 +112,41 @@ export function QuoteLinesEditor({
 }) {
   const edit = (id: string, patch: Partial<QuoteItemInput>) => onLines(lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const [picking, setPicking] = useState(false);
+  const defaults = techPay?.defaults ?? [];
+  const newLine = (type: QuoteItemType) => blankLine(type, techPay ? defaults : undefined);
   const addFromCatalog = async (pick: CatalogPick) => {
     if (pick.kind === "product") {
       const cost = showCost ? await fetchCost(pick.item.id) : 0;
-      onLines([...lines.filter((l) => l.description.trim()), { ...blankLine("part"), productId: pick.item.id, description: pick.item.name, unitPrice: pick.item.price, unitCost: cost, taxable: pick.item.taxable }]);
+      onLines([...lines.filter((l) => l.description.trim()), { ...newLine("part"), productId: pick.item.id, description: pick.item.name, unitPrice: pick.item.price, unitCost: cost, taxable: pick.item.taxable }]);
     } else {
-      onLines([...lines.filter((l) => l.description.trim()), { ...blankLine("service"), serviceId: pick.item.id, description: pick.item.name, unitPrice: pick.item.price, taxable: pick.item.taxable }]);
+      onLines([...lines.filter((l) => l.description.trim()), { ...newLine("service"), serviceId: pick.item.id, description: pick.item.name, unitPrice: pick.item.price, taxable: pick.item.taxable }]);
     }
   };
+  /** Cambiar el tipo: un repuesto u "otro cargo" no lleva pago a técnico; un trabajo nuevo toma el de la orden. */
+  const changeType = (l: QuoteItemInput, type: QuoteItemType) => {
+    const { techPay: tp, ...rest } = l;
+    if (!techPayEligible(type)) return replace({ ...rest, type });
+    edit(l.id, { type, ...(tp?.length ? {} : techPay && defaults.length ? { techPay: defaults } : {}) });
+  };
+  const replace = (next: QuoteItemInput) => onLines(lines.map((x) => (x.id === next.id ? next : x)));
+  /** Pone o quita el pago a técnico de una línea (sin dejar la llave vacía). */
+  const setTechPay = (l: QuoteItemInput, v: TechPayShare[]) => {
+    const { techPay: _old, ...rest } = l;
+    replace(v.length ? { ...rest, techPay: v } : rest);
+  };
+  const eligible = lines.filter((l) => techPayEligible(l.type));
+  const applyAll = () => {
+    onLines(lines.map((l) => (techPayEligible(l.type) ? { ...l, techPay: defaults } : l)));
+    toast.success(`Pago a técnico aplicado a ${eligible.length} ${eligible.length === 1 ? "trabajo" : "trabajos"}`);
+  };
+  const techPayTotal = techPay && preview ? computeTechPay(lines.map((l, i) => ({ ...l, couponDiscount: preview.items[i]?.couponDiscount }))).total : 0;
   return (
     <div className="space-y-3">
       <CatalogPicker open={picking} onClose={() => setPicking(false)} onPick={(p) => void addFromCatalog(p)} />
       {lines.map((l, i) => (
         <div key={l.id} className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-12 sm:items-end">
           <Field label={i === 0 ? "Tipo" : ""} className="sm:col-span-2">
-            <Select value={l.type} onChange={(e) => edit(l.id, { type: e.target.value as QuoteItemType })}>
+            <Select value={l.type} onChange={(e) => changeType(l, e.target.value as QuoteItemType)}>
               {QUOTE_ITEM_TYPES.map((t) => <option key={t} value={t}>{QUOTE_ITEM_LABELS[t]}</option>)}
             </Select>
           </Field>
@@ -125,14 +168,34 @@ export function QuoteLinesEditor({
             {showCost && <span className="inline-flex items-center gap-2">Costo interno <MoneyInput value={l.unitCost} onChange={(v) => edit(l.id, { unitCost: v })} className="w-28" /></span>}
             <span className="tabular ml-auto hidden font-semibold text-slate-800 sm:inline">{formatMoney(preview?.items[i] ? lineBeforeCoupon(preview.items[i]) : 0)}</span>
           </div>
+          {techPay && techPayEligible(l.type) && (
+            <div className="col-span-2 sm:col-span-12">
+              <TechPayLineEditor
+                value={l.techPay}
+                onChange={(v) => setTechPay(l, v)}
+                base={techPayBase({ ...l, couponDiscount: preview?.items[i]?.couponDiscount })}
+                employees={techPay.employees}
+                suggested={defaults}
+              />
+            </div>
+          )}
         </div>
       ))}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" icon={<Search className="h-3.5 w-3.5" />} onClick={() => setPicking(true)}>Del catálogo</Button>
         {QUOTE_ITEM_TYPES.map((t) => (
-          <Button key={t} size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => onLines([...lines, blankLine(t)])}>{QUOTE_ITEM_LABELS[t]}</Button>
+          <Button key={t} size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => onLines([...lines, newLine(t)])}>{QUOTE_ITEM_LABELS[t]}</Button>
         ))}
+        {techPay && eligible.length > 0 && (
+          <Button
+            size="sm" variant="ghost" icon={<Wand2 className="h-3.5 w-3.5" />} className="sm:ml-auto"
+            disabled={!defaults.length}
+            title={defaults.length ? `Pone a ${defaults.map((d) => d.employeeName).join(" y ")} con su pago por defecto en cada mano de obra y servicio` : "Los técnicos de la orden no tienen pago por trabajo configurado (Técnicos y empleados)"}
+            onClick={applyAll}
+          >Aplicar a todos los trabajos</Button>
+        )}
       </div>
+      {techPay && techPayTotal > 0 && <p className="text-right text-xs text-slate-500">Pago a técnicos de esta cotización: <b className="tabular text-slate-800">{formatMoney(techPayTotal)}</b> (costo interno, el cliente no lo ve)</p>}
       <div className="grid gap-4 pt-2 sm:grid-cols-[1fr_auto]">
         <div className="space-y-3">
           <Field label="Notas para el cliente"><Textarea value={notes} onChange={(e) => onNotes(e.target.value)} rows={3} placeholder="Garantía, tiempo estimado, condiciones..." /></Field>

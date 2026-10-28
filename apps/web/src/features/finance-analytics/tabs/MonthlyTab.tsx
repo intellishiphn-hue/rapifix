@@ -5,7 +5,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { useLoader } from "@/features/reports/data";
 import type { ColKind, ReportCell } from "@/features/reports/table";
 import { TabActions, TabError, TabHeader, TabSkeleton } from "@/features/reports/ui";
-import { loadCore, loadExpenses, loadPayments, pct } from "../data";
+import { loadCore, loadExpenses, loadPayments, operating, pct } from "../data";
 import { last12Months, monthKeys, monthLabel } from "../period";
 import { fmtPct, KpiCard, marginTone, MoneyChart, RichTable, Segmented, toReportTable, type Col } from "../components";
 import type { FinTabProps } from "./common";
@@ -55,7 +55,8 @@ export function MonthlyTab(props: FinTabProps) {
       m.revenue += s.revenue;
       m.cost += s.cost;
     }
-    for (const e of data.expenses) {
+    // Gastos operativos: el pago a técnicos ya está en el costo de las órdenes
+    for (const e of operating(data.expenses)) {
       const m = map.get(mk(toDate(e.date)));
       if (m) m.expenses += e.amount;
     }

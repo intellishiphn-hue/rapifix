@@ -408,6 +408,23 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // ---------- Pago a técnicos por trabajo ----------
+      // Configuración por empleado, ganancias por orden y pagos: solo administración y gerencia los leen
+      // (permiso techpay.manage). El técnico no ve sus montos. Todo lo escriben Cloud Functions
+      // (saveEmployeeProfile, payTechEarnings, reviewTechEarning y el trigger de órdenes).
+      match /employeePay/{id} {
+        allow read: if hasRole(tid, managers());
+        allow write: if false;
+      }
+      match /techEarnings/{id} {
+        allow read: if hasRole(tid, managers());
+        allow write: if false;
+      }
+      match /techPayouts/{id} {
+        allow read: if hasRole(tid, managers());
+        allow write: if false;
+      }
+
       // ---------- CUPONES ----------
       // Todo lo escriben Cloud Functions (saveCoupon, applyCoupon, removeCoupon, createSale, chargeWash,
       // applyCouponPublic...) en transacción: contadores de usos y límite por cliente.

@@ -2,10 +2,10 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { limit, where } from "firebase/firestore";
 import { toast } from "sonner";
-import { ArrowRight, HardHat, Info, Pencil, Phone, RefreshCw, Users, Wrench } from "lucide-react";
+import { ArrowRight, HandCoins, HardHat, Info, Pencil, Phone, RefreshCw, UserPlus, Users, Wrench } from "lucide-react";
 import {
-  EMPLOYEE_COLORS, formatMoney, formatPhone, orderCol, ROLE_LABELS, saveEmployeeSchema, isRole,
-  type EmployeeProfile, type Role, type StaffEntry, type WorkOrder,
+  EMPLOYEE_COLORS, formatMoney, formatPhone, NO_TECH_PAY, orderCol, ROLE_LABELS, saveEmployeeSchema, saveStaffMemberSchema, isRole, techPayDefaultLabel, techPayDefaultSchema,
+  type EmployeeProfile, type Role, type SaveStaffMemberInput, type StaffEntry, type TechPayDefault, type WorkOrder,
 } from "@rapifix/shared";
 import { TENANT_ID } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth/useAuth";
@@ -17,7 +17,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
-import { Field, Input } from "@/components/ui/Field";
+import { Field, Input, Select } from "@/components/ui/Field";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { useStaffDirectory } from "@/features/work-orders/api";
@@ -26,6 +26,9 @@ import { PlateTag } from "@/features/vehicles/VehicleCard";
 import { fetchAll, fetchApprovedQuotes, fetchRange, techStats, useLoader, type TechStats } from "@/features/reports/data";
 import { hnDate, hnParts } from "@/features/reports/period";
 import { saveEmployeeProfile, useEmployeeProfiles } from "./api";
+import { saveStaffMember, useTechPayConfig } from "@/features/tech-pay/api";
+import { PercentInput } from "@/features/tech-pay/TechPayLineEditor";
+import { MoneyInput } from "@/features/quotes/MoneyInput";
 
 type Profile = Partial<EmployeeProfile> & { id: string };
 
@@ -33,7 +36,12 @@ interface Row {
   staff: StaffEntry;
   profile: Profile | undefined;
   stats: TechStats | undefined;
+  /** pago por trabajo por defecto (solo si quien mira tiene permiso) */
+  techPay?: TechPayDefault | null;
 }
+
+/** Roles que puede tener un empleado sin acceso al panel. */
+const NO_ACCESS_ROLES: SaveStaffMemberInput["role"][] = ["technician", "washer", "warehouse", "seller", "reception"];
 
 const ROLE_ORDER: Role[] = ["technician", "washer", "reception", "warehouse", "seller", "manager", "admin"];
 
@@ -55,8 +63,11 @@ export function EmployeesPage() {
   const { can } = useAuth();
   const canEdit = can("employees.manage");
   const showMoney = can("reports.financial");
+  const canTechPay = can("techpay.manage");
   const staff = useStaffDirectory();
   const profiles = useEmployeeProfiles();
+  const payConfig = useTechPayConfig(canTechPay);
+  const [creating, setCreating] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const stats = useLoader(loadStats, `employees-stats|${refresh}`);
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
@@ -69,13 +80,13 @@ export function EmployeesPage() {
     return staff.data
       .filter((s) => showInactive || s.active)
       .filter((s) => roleFilter === "all" || s.role === roleFilter)
-      .map((s) => ({ staff: s, profile: byId.get(s.id), stats: stats.data?.get(s.id) }))
+      .map((s) => ({ staff: s, profile: byId.get(s.id), stats: stats.data?.get(s.id), techPay: canTechPay ? payConfig.map.get(s.id) ?? null : undefined }))
       .sort((a, b) => {
         const ra = ROLE_ORDER.indexOf(isRole(a.staff.role) ? a.staff.role : "admin");
         const rb = ROLE_ORDER.indexOf(isRole(b.staff.role) ? b.staff.role : "admin");
         return Number(b.staff.active) - Number(a.staff.active) || ra - rb || a.staff.displayName.localeCompare(b.staff.displayName);
       });
-  }, [staff.data, profiles.data, stats.data, roleFilter, showInactive]);
+  }, [staff.data, profiles.data, stats.data, roleFilter, showInactive, canTechPay, payConfig.map]);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -90,7 +101,12 @@ export function EmployeesPage() {
       <PageHeader
         title="Técnicos y empleados"
         description="Personal del taller, carga de trabajo y productividad del mes."
-        actions={<Button variant="secondary" icon={<RefreshCw className="h-4 w-4" />} onClick={() => setRefresh((n) => n + 1)} loading={stats.loading}>Actualizar</Button>}
+        actions={
+          <>
+            <Button variant="secondary" icon={<RefreshCw className="h-4 w-4" />} onClick={() => setRefresh((n) => n + 1)} loading={stats.loading}>Actualizar</Button>
+            {canEdit && <Button icon={<UserPlus className="h-4 w-4" />} onClick={() => setCreating(true)}>Empleado sin acceso</Button>}
+          </>
+        }
       />
 
       <div className="mb-5 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
@@ -98,7 +114,8 @@ export function EmployeesPage() {
         <p>
           Los usuarios (nombre, correo, rol y acceso) se crean y se desactivan en{" "}
           {can("users.manage") ? <Link to="/usuarios" className="font-semibold underline">Usuarios y permisos</Link> : <b>Usuarios y permisos</b>}.
-          Aquí se completa el perfil de cada persona: teléfono, especialidad y color en la agenda.
+          Aquí se completa el perfil de cada persona: teléfono, especialidad y color en la agenda{canTechPay ? ", y su pago por trabajo" : ""}.
+          {canEdit && <> Si alguien no usa el sistema (por ejemplo un técnico que solo trabaja en el taller), regístrelo con <b>Empleado sin acceso</b>: aparece en las órdenes y en el pago a técnicos, pero no puede entrar al panel.</>}
         </p>
       </div>
 
@@ -151,7 +168,8 @@ export function EmployeesPage() {
         Horas facturadas = cantidad de las líneas de "Mano de obra" en la cotización aprobada de las órdenes entregadas este mes. Si una orden tiene varios técnicos, se reparten en partes iguales.
       </p>
 
-      <EditEmployeeDialog row={editing} onClose={() => setEditing(null)} />
+      <EditEmployeeDialog row={editing} onClose={() => setEditing(null)} canTechPay={canTechPay} />
+      {creating && <EditForm row={null} onClose={() => setCreating(false)} canTechPay={canTechPay} />}
       <OrdersDialog row={viewing} onClose={() => setViewing(null)} />
     </>
   );
@@ -174,6 +192,7 @@ function EmployeeCard({ row, statsLoading, showMoney, monthLabel, onEdit, onView
           <div className="truncate font-semibold text-slate-900">{s.displayName}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge tone={isTech ? "blue" : "gray"}>{isRole(s.role) ? ROLE_LABELS[s.role] : s.role}</Badge>
+            {s.noAccess && <Badge tone="amber">Sin acceso al panel</Badge>}
             {!s.active && <Badge tone="red">Inactivo</Badge>}
           </div>
           <div className="mt-2 space-y-0.5 text-sm text-slate-600">
@@ -182,6 +201,9 @@ function EmployeeCard({ row, statsLoading, showMoney, monthLabel, onEdit, onView
               <a href={`tel:${p.phone}`} className="flex items-center gap-1.5 hover:text-brand-700"><Phone className="h-3.5 w-3.5 text-slate-400" />{formatPhone(p.phone)}</a>
             ) : null}
             {!p?.specialty && !p?.phone && <div className="text-xs text-slate-400">Perfil sin completar</div>}
+            {row.techPay !== undefined && (isTech || (row.techPay && row.techPay.mode !== "none")) && (
+              <div className="flex items-center gap-1.5" data-testid="employee-techpay"><HandCoins className="h-3.5 w-3.5 text-slate-400" /><span className={row.techPay && row.techPay.mode !== "none" ? "font-medium text-slate-800" : "text-slate-400"}>{techPayDefaultLabel(row.techPay)}</span></div>
+            )}
           </div>
         </div>
         {onEdit && (
@@ -242,30 +264,44 @@ function OrdersDialog({ row, onClose }: { row: Row | null; onClose: () => void }
   );
 }
 
-function EditEmployeeDialog({ row, onClose }: { row: Row | null; onClose: () => void }) {
-  return row ? <EditForm key={row.staff.id} row={row} onClose={onClose} /> : null;
+function EditEmployeeDialog({ row, onClose, canTechPay }: { row: Row | null; onClose: () => void; canTechPay: boolean }) {
+  return row ? <EditForm key={row.staff.id} row={row} onClose={onClose} canTechPay={canTechPay} /> : null;
 }
 
-function EditForm({ row, onClose }: { row: Row; onClose: () => void }) {
-  const [phone, setPhone] = useState(row.profile?.phone ?? "");
-  const [specialty, setSpecialty] = useState(row.profile?.specialty ?? "");
-  const [color, setColor] = useState(row.profile?.color || EMPLOYEE_COLORS[0]);
+/**
+ * Editar el perfil de un empleado, o registrar uno nuevo SIN acceso al panel (row = null).
+ * En un empleado sin acceso también se cambian nombre, rol y si está activo; en un usuario del panel eso se
+ * cambia en Usuarios y permisos. El pago por trabajo solo lo ven y cambian administración y gerencia.
+ */
+function EditForm({ row, onClose, canTechPay }: { row: Row | null; onClose: () => void; canTechPay: boolean }) {
+  const isNew = !row;
+  const noAccess = isNew || !!row?.staff.noAccess;
+  const [name, setName] = useState(row?.staff.displayName ?? "");
+  const [role, setRole] = useState<SaveStaffMemberInput["role"]>(() => (row && (NO_ACCESS_ROLES as string[]).includes(row.staff.role) ? (row.staff.role as SaveStaffMemberInput["role"]) : "technician"));
+  const [active, setActive] = useState(row?.staff.active ?? true);
+  const [phone, setPhone] = useState(row?.profile?.phone ?? "");
+  const [specialty, setSpecialty] = useState(row?.profile?.specialty ?? "");
+  const [color, setColor] = useState(row?.profile?.color || EMPLOYEE_COLORS[0]);
+  const [pay, setPay] = useState<TechPayDefault>(row?.techPay ?? NO_TECH_PAY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = saveEmployeeSchema.safeParse({ uid: row.staff.id, phone, specialty, color });
-    if (!parsed.success) {
-      const errs: Record<string, string> = {};
-      for (const i of parsed.error.issues) errs[String(i.path[0])] = i.message;
-      setErrors(errs);
-      return;
-    }
+    const errs: Record<string, string> = {};
+    const staffParsed = noAccess ? saveStaffMemberSchema.safeParse({ employeeId: row?.staff.id ?? null, displayName: name, role, active }) : null;
+    if (staffParsed && !staffParsed.success) for (const i of staffParsed.error.issues) errs[i.path[0] === "displayName" ? "name" : String(i.path[0])] = i.message;
+    const payParsed = canTechPay ? techPayDefaultSchema.safeParse(pay) : null;
+    if (payParsed && !payParsed.success) errs.techPay = payParsed.error.issues[0]?.message ?? "Revise el pago por trabajo";
+    const profile = saveEmployeeSchema.safeParse({ uid: row?.staff.id ?? "nuevo", phone, specialty, color, ...(canTechPay ? { techPay: pay } : {}) });
+    if (!profile.success) for (const i of profile.error.issues) errs[String(i.path[0])] = i.message;
+    if (Object.keys(errs).length) return setErrors(errs);
     setSaving(true);
     try {
-      await saveEmployeeProfile(parsed.data);
-      toast.success("Perfil actualizado");
+      let uid = row?.staff.id ?? "";
+      if (staffParsed?.success) uid = (await saveStaffMember(staffParsed.data)).employeeId;
+      await saveEmployeeProfile({ ...profile.data!, uid });
+      toast.success(isNew ? `${name.trim()} quedó registrado (sin acceso al panel)` : "Perfil actualizado");
       onClose();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -278,18 +314,37 @@ function EditForm({ row, onClose }: { row: Row; onClose: () => void }) {
     <Dialog
       open
       onClose={onClose}
-      title="Editar perfil"
-      description={`${row.staff.displayName} · ${isRole(row.staff.role) ? ROLE_LABELS[row.staff.role] : row.staff.role}`}
+      title={isNew ? "Empleado sin acceso al panel" : "Editar perfil"}
+      description={isNew ? "Para quien trabaja en el taller pero no usa el sistema. No tiene correo ni contraseña." : `${row!.staff.displayName} · ${isRole(row!.staff.role) ? ROLE_LABELS[row!.staff.role] : row!.staff.role}${row!.staff.noAccess ? " · sin acceso al panel" : ""}`}
       size="sm"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button type="submit" form="employee-form" loading={saving}>Guardar</Button>
+          <Button type="submit" form="employee-form" loading={saving}>{isNew ? "Registrar" : "Guardar"}</Button>
         </>
       }
     >
       <form id="employee-form" onSubmit={submit} className="space-y-4">
-        <Field label="Teléfono" error={errors.phone}>
+        {noAccess && (
+          <>
+            <Field label="Nombre" required error={errors.name}>
+              <Input value={name} onChange={(e) => setName(e.target.value)} invalid={!!errors.name} maxLength={80} autoFocus={isNew} placeholder="Ej. Anthony Martínez" />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Puesto" error={errors.role}>
+                <Select value={role} onChange={(e) => setRole(e.target.value as SaveStaffMemberInput["role"])}>
+                  {NO_ACCESS_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                </Select>
+              </Field>
+              {!isNew && (
+                <Field label="Estado">
+                  <label className="flex h-10 items-center gap-2 text-sm"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 rounded border-slate-300" /> Activo</label>
+                </Field>
+              )}
+            </div>
+          </>
+        )}
+        <Field label="Teléfono" error={errors.phone} hint={canTechPay ? "Para mandarle por WhatsApp el resumen de sus pagos." : undefined}>
           <PhoneInput value={phone} onChange={setPhone} invalid={!!errors.phone} />
         </Field>
         <Field label="Especialidad" error={errors.specialty} hint="Ej.: Motor y transmisión, electricidad, frenos">
@@ -309,7 +364,31 @@ function EditForm({ row, onClose }: { row: Row; onClose: () => void }) {
             ))}
           </div>
         </Field>
-        <p className="text-xs text-slate-500">El nombre, el correo y el rol se cambian en Usuarios y permisos.</p>
+        {canTechPay && (
+          <div className="space-y-3 rounded-xl border border-slate-200 p-3" data-testid="techpay-default">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Pago por trabajo</div>
+              <p className="text-xs text-slate-500">Se propone en cada mano de obra y servicio de sus órdenes. Se gana cuando la orden se cobra completa. El técnico no ve estos montos.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-1 rounded-[10px] bg-slate-200/70 p-1">
+              {([["none", "Sin pago"], ["percent", "Porcentaje"], ["fixed", "Monto fijo"]] as const).map(([m, l]) => (
+                <button key={m} type="button" onClick={() => setPay((p) => ({ ...p, mode: m }))} className={cn("rounded-lg px-2 py-1.5 text-sm font-medium", pay.mode === m ? "bg-white shadow-sm" : "text-slate-600 hover:text-slate-900")}>{l}</button>
+              ))}
+            </div>
+            {pay.mode === "percent" && (
+              <Field label="Porcentaje de cada trabajo" hint="Del monto que paga el cliente por la línea, sin ISV y después de descuentos. Admite decimales (12.5).">
+                <PercentInput value={pay.percent} onChange={(v) => setPay((p) => ({ ...p, percent: v }))} className="max-w-[140px]" ariaLabel="Porcentaje por defecto" />
+              </Field>
+            )}
+            {pay.mode === "fixed" && (
+              <Field label="Monto fijo por trabajo" hint="Por cada línea de trabajo, no por unidad.">
+                <MoneyInput value={pay.fixedAmount} onChange={(v) => setPay((p) => ({ ...p, fixedAmount: v }))} className="max-w-[180px]" />
+              </Field>
+            )}
+            {errors.techPay && <p className="text-xs text-red-600">{errors.techPay}</p>}
+          </div>
+        )}
+        {!noAccess && <p className="text-xs text-slate-500">El nombre, el correo y el rol se cambian en Usuarios y permisos.</p>}
       </form>
     </Dialog>
   );

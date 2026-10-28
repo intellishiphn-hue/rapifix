@@ -1,5 +1,5 @@
 import {
-  addMonths, allocateByShare, breakEvenRevenue, coverageDay, daysInMonth, hnDayKey,
+  addMonths, allocateByShare, breakEvenRevenue, coverageDay, daysInMonth, hnDayKey, isOperatingExpense,
   type Expense, type Payment, type SupplierPayment,
 } from "@rapifix/shared";
 import { toDate } from "@/lib/format";
@@ -76,7 +76,8 @@ export function monthFigures(core: Core, month: string, fixedExpenses: Expense[]
   const fx = fixedExpenses.filter((e) => e.period === month);
   const fixedPaid = fx.filter((e) => e.status === "valid").reduce((a, e) => a + e.amount, 0);
   const fixedPending = fx.filter((e) => e.status === "pending").reduce((a, e) => a + e.amount, 0);
-  const variable = validExpenses.filter((e) => !e.fixedCostId && monthOf(toDate(e.date)) === month).reduce((a, e) => a + e.amount, 0);
+  // Gastos variables operativos: sin el pago a técnicos (ya está en el costo de cada orden; no se cuenta dos veces)
+  const variable = validExpenses.filter((e) => !e.fixedCostId && isOperatingExpense(e) && monthOf(toDate(e.date)) === month).reduce((a, e) => a + e.amount, 0);
   const revenue = shopRevenue + counterRevenue + carwashRevenue;
   const cost = shopCost + carwashCost;
   const gross = revenue - cost;
@@ -148,7 +149,7 @@ export interface UnitFigures {
 
 export function unitFigures(f: MonthFigures, fixedExpenses: Expense[], validExpenses: Expense[]): { rows: UnitFigures[]; general: number; hasCarwash: boolean } {
   const fx = fixedExpenses.filter((e) => e.period === f.month);
-  const vx = validExpenses.filter((e) => !e.fixedCostId && monthOf(toDate(e.date)) === f.month);
+  const vx = validExpenses.filter((e) => !e.fixedCostId && isOperatingExpense(e) && monthOf(toDate(e.date)) === f.month);
   const sum = (l: Expense[]) => l.reduce((a, e) => a + e.amount, 0);
   const general = sum(fx.filter(isGeneral)) + sum(vx.filter(isGeneral));
   const shopRev = f.shopRevenue + f.counterRevenue;
@@ -172,6 +173,7 @@ export interface CashFlow {
   net: number;
 }
 
+/** Flujo de caja: aquí SÍ entran todos los gastos pagados, también el pago a técnicos (es dinero que salió). */
 export function cashFlow(month: string, payments: Payment[], validExpenses: Expense[], supplierPayments: SupplierPayment[]): CashFlow {
   const collected = payments.filter((p) => monthOf(toDate(p.at)) === month).reduce((a, p) => a + p.amount, 0);
   const expensesPaid = validExpenses.filter((e) => monthOf(toDate(e.date)) === month).reduce((a, e) => a + e.amount, 0);

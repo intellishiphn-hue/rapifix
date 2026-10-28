@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { catalogCol, formatMoney, normalizeText, orderCol, QUOTE_ITEM_LABELS, type ProductCost, type Sale, type WorkOrder } from "@rapifix/shared";
+import { catalogCol, computeTechPay, formatMoney, normalizeText, orderCol, QUOTE_ITEM_LABELS, type ProductCost, type Sale, type WorkOrder } from "@rapifix/shared";
 import { TENANT_ID } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth/useAuth";
 import { cn } from "@/lib/cn";
@@ -44,7 +44,8 @@ export function ServicesTab(props: TabProps) {
     if (!data) return null;
     const services = new Map<string, Agg>();
     const parts = new Map<string, Agg>();
-    const add = (map: Map<string, Agg>, key: string, name: string, kind: string, qty: number, revenue: number, cost: number | null, pos: boolean) => {
+    /** `extra`: costo adicional de la línea completa (pago a técnicos), en centavos */
+    const add = (map: Map<string, Agg>, key: string, name: string, kind: string, qty: number, revenue: number, cost: number | null, pos: boolean, extra = 0) => {
       let a = map.get(key);
       if (!a) {
         a = { name, kind, qty: 0, qtyOrders: 0, qtyPos: 0, revenue: 0, cost: 0, missingCost: false };
@@ -56,15 +57,18 @@ export function ServicesTab(props: TabProps) {
       a.revenue += revenue;
       if (cost === null) a.missingCost = true;
       else a.cost += Math.round(cost * qty);
+      a.cost += extra;
     };
 
     for (const o of data.delivered) {
       const q = data.quotes.get(o.id);
+      // Pago a técnicos: costo de la mano de obra y los servicios (misma regla que Finanzas)
+      const tp = showCosts ? computeTechPay(q?.items ?? []).byItem : {};
       for (const it of q?.items ?? []) {
         const isPart = it.type === "part";
         const key = isPart ? `p:${it.productId || normalizeText(it.description)}` : `s:${it.serviceId || `${it.type}:${normalizeText(it.description)}`}`;
         const cost = isPart ? (it.unitCost || data.costs.get(it.productId ?? "") || null) : it.unitCost || 0;
-        add(isPart ? parts : services, key, it.description, QUOTE_ITEM_LABELS[it.type], it.qty, it.lineTotal, cost, false);
+        add(isPart ? parts : services, key, it.description, QUOTE_ITEM_LABELS[it.type], it.qty, it.lineTotal, cost, false, tp[it.id] ?? 0);
       }
     }
     for (const s of data.sales) {

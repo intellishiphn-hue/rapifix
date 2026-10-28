@@ -7,7 +7,7 @@ import { toDate } from "@/lib/format";
 import { useLoader } from "@/features/reports/data";
 import type { ColKind, ReportCell } from "@/features/reports/table";
 import { TabActions, TabError, TabHeader, TabSkeleton } from "@/features/reports/ui";
-import { aggregateTypes, loadBalances, loadCouponDiscounts, loadCore, loadExpenses, loadPayments, loadPendingExpenses, orderMargin, pct, type Core } from "../data";
+import { aggregateTypes, loadBalances, loadCouponDiscounts, loadCore, loadExpenses, loadPayments, loadPendingExpenses, operating, orderMargin, pct, type Core } from "../data";
 import { buckets, effectiveEnd } from "../period";
 import { Delta, fmtPct, KpiCard, MoneyChart, Note, ProfitWaterfall, RichTable, toReportTable, type Col } from "../components";
 import { finKey, type FinTabProps } from "./common";
@@ -56,7 +56,9 @@ interface Figures {
   sales: number;
 }
 
-function figures(core: Core, payments: Payment[], expenses: Expense[]): Figures {
+function figures(core: Core, payments: Payment[], allExpenses: Expense[]): Figures {
+  // El pago a técnicos ya está en el costo de cada orden: no se resta otra vez como gasto
+  const expenses = operating(allExpenses);
   const exp = expenses.reduce((a, e) => a + e.amount, 0);
   const fixedPaid = expenses.filter((e) => e.fixedCostId).reduce((a, e) => a + e.amount, 0);
   return {
@@ -146,6 +148,9 @@ export function SummaryTab(props: FinTabProps) {
         ? [{ label: `Descuentos por cupones (${data.coupons.uses} usos, ya restados de los ingresos)`, cur: -data.coupons.total, old: -data.couponsPrev.total }]
         : []),
       { label: "(−) Costo de ventas", cur: -f.cost, old: -o.cost },
+      ...(data.cur.techPay || data.old.techPay
+        ? [{ label: "De eso, pago a técnicos por trabajo", cur: -data.cur.techPay, old: -data.old.techPay }]
+        : []),
       { label: "Utilidad bruta", cur: f.profit, old: o.profit, strong: true },
       { label: "Margen bruto", cur: f.margin, old: o.margin, isPct: true },
       { label: "(−) Gastos fijos pagados", cur: -f.fixedPaid, old: -o.fixedPaid },

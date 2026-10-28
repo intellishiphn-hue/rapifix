@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { limit, where } from "firebase/firestore";
-import { formatMoney, orderCol, type StaffEntry, type WorkOrder } from "@rapifix/shared";
+import { computeTechPay, formatMoney, orderCol, type StaffEntry, type WorkOrder } from "@rapifix/shared";
+import { useAuth } from "@/lib/auth/useAuth";
 import { TENANT_ID } from "@/lib/firebase";
 import { fetchAll, fetchApprovedQuotes, fetchRange, techStats, useLoader, type TechStats } from "../data";
 import type { ColKind, ReportCell, ReportTable } from "../table";
@@ -15,11 +16,18 @@ async function load(p: TabProps) {
     fetchRange<WorkOrder>(path, "deliveredAt", p.period.start, p.period.end).then((l) => l.filter((o) => o.status === "DELIVERED")),
   ]);
   const quotes = await fetchApprovedQuotes(delivered);
-  return { staff, stats: techStats(open, delivered, quotes), delivered };
+  // Pago por trabajo de cada empleado en las órdenes entregadas del período (según la cotización aprobada)
+  const techPay = new Map<string, number>();
+  for (const o of delivered) {
+    for (const e of computeTechPay(quotes.get(o.id)?.items ?? []).byEmployee) techPay.set(e.employeeId, (techPay.get(e.employeeId) ?? 0) + e.total);
+  }
+  return { staff, stats: techStats(open, delivered, quotes), delivered, techPay };
 }
 
 export function TechniciansTab(props: TabProps) {
   const { data, loading, error } = useLoader(() => load(props), loaderKey("techs", props));
+  // El pago a técnicos solo lo ven administración y gerencia
+  const showPay = useAuth().can("techpay.manage");
 
   const r = useMemo(() => {
     if (!data) return null;
@@ -27,8 +35,9 @@ export function TechniciansTab(props: TabProps) {
     const seen = new Set<string>();
     for (const s of data.staff) {
       const st = data.stats.get(s.id);
-      if (s.role !== "technician" && !st) continue;
-      if (!s.active && !st) continue;
+      const paid = data.techPay.get(s.id) ?? 0;
+      if (s.role !== "technician" && !st && !paid) continue;
+      if (!s.active && !st && !paid) continue;
       seen.add(s.id);
       list.push(st ? { ...st, name: s.displayName || st.name } : { id: s.id, name: s.displayName, open: 0, delivered: 0, hours: 0, laborIncome: 0, serviceIncome: 0, orders: [] });
     }
@@ -41,13 +50,14 @@ export function TechniciansTab(props: TabProps) {
       columns: [
         { label: "Técnico" }, { label: "Órdenes abiertas", kind: "number" }, { label: "Entregadas", kind: "number" },
         { label: "Horas MO facturadas", kind: "hours" }, { label: "Ingreso mano de obra", kind: "money" }, { label: "Ingreso servicios", kind: "money" },
+        ...(showPay ? [{ label: "Pago por trabajo", kind: "money" as const }] : []),
       ],
-      rows: list.map((t) => [t.name, t.open, t.delivered, Math.round(t.hours * 100) / 100, t.laborIncome, t.serviceIncome]),
-      total: ["Total", null, null, Math.round(sum((t) => t.hours) * 100) / 100, sum((t) => t.laborIncome), sum((t) => t.serviceIncome)],
+      rows: list.map((t) => [t.name, t.open, t.delivered, Math.round(t.hours * 100) / 100, t.laborIncome, t.serviceIncome, ...(showPay ? [data.techPay.get(t.id) ?? 0] : [])]),
+      total: ["Total", null, null, Math.round(sum((t) => t.hours) * 100) / 100, sum((t) => t.laborIncome), sum((t) => t.serviceIncome), ...(showPay ? [[...data.techPay.values()].reduce((a, b) => a + b, 0)] : [])],
       empty: "No hay técnicos registrados. Créelos en Usuarios y permisos.",
     };
     return { table, hours: sum((t) => t.hours), labor: sum((t) => t.laborIncome), techs: list.length };
-  }, [data]);
+  }, [data, showPay]);
 
   if (error) return <TabError message={error} />;
   if (loading || !r || !data) return <TabSkeleton />;

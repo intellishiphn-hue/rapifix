@@ -52,6 +52,9 @@ const SERVER_ONLY = [
   "referrers",
   "commissions",
   "commissionPayouts",
+  "employeePay",
+  "techEarnings",
+  "techPayouts",
   "coupons",
   "couponRedemptions",
   "couponUsage",
@@ -499,6 +502,14 @@ describe("lecturas restringidas por rol", () => {
     for (const c of ["referrers", "commissions", "commissionPayouts"]) await canRead(`${T}/${c}/x1`, ["admin", "manager"]);
     await assertFails(db("reception").collection(`${T}/commissions`).where("status", "==", "pending").get());
     await assertSucceeds(db("manager").collection(`${T}/commissions`).where("status", "==", "pending").get());
+  });
+
+  it("pago a técnicos (configuración, ganancias y pagos): solo admin y gerente; el técnico no ve sus montos", async () => {
+    for (const c of ["employeePay", "techEarnings", "techPayouts"]) await canRead(`${T}/${c}/x1`, ["admin", "manager"]);
+    await assertFails(db("technician").collection(`${T}/techEarnings`).where("employeeId", "==", uidOf("technician")).get());
+    await assertFails(db("reception").collection(`${T}/techEarnings`).where("status", "==", "pending").get());
+    await assertSucceeds(db("manager").collection(`${T}/techEarnings`).where("status", "==", "pending").get());
+    await assertSucceeds(db("admin").collection(`${T}/techPayouts`).where("employeeId", "==", "e1").get());
   });
 
   it("cupones y canjes: solo admin y gerente; el índice de usos por cliente: nadie", async () => {

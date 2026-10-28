@@ -73,6 +73,7 @@ export function ExpensesPage() {
                           <span className={cn("font-semibold text-slate-900", voided && "line-through")}>{e.description}</span>
                           {voided && <Badge tone="gray">{e.fixedCostId ? "No aplicó" : "Anulado"}</Badge>}
                           {e.fixedCostId && !voided && <Badge tone="blue">Fijo</Badge>}
+                          {e.techPayoutId && !voided && <span title="Ya está en el costo de las órdenes: Finanzas no lo resta otra vez de la utilidad"><Badge tone="amber">Pago a técnicos</Badge></span>}
                         </div>
                         <div className="text-xs text-slate-500">
                           {[e.code, formatDate(e.date), e.category, e.unit && e.unit !== "general" ? EXPENSE_UNIT_LABELS[e.unit] : "", PAYMENT_METHOD_LABELS[e.method], e.bank, e.reference, e.supplierName].filter(Boolean).join(" · ")}

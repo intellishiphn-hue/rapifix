@@ -62,6 +62,8 @@ export const PERMISSIONS = [
   "companies.write",
   "commissions.manage",
   "coupons.manage",
+  /** ver y editar pagos a técnicos por trabajo (y pagarles) */
+  "techpay.manage",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

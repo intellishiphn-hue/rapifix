@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  applyCostChanges, col, COST_EDITABLE_STATUSES, costChangesText, computeQuote, convertQuoteSchema, updateQuoteCostsSchema, diffQuotes, discardRevisionSchema, formatMoney, newVersionSchema, OPEN_QUOTE_STATUSES, orderCol, quoteCol, recordDecisionSchema, saveQuoteSchema, sendQuoteSchema,
+  applyCostChanges, applyTechPayChanges, col, COST_EDITABLE_STATUSES, costChangesText, computeQuote, techPayChangesText, techPayKey, convertQuoteSchema, updateQuoteCostsSchema, diffQuotes, discardRevisionSchema, formatMoney, newVersionSchema, OPEN_QUOTE_STATUSES, orderCol, quoteCol, recordDecisionSchema, saveQuoteSchema, sendQuoteSchema,
   type Role, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
@@ -16,6 +16,7 @@ import { applyDecision } from "../lib/quoteDecision";
 import { insertWorkOrder } from "../lib/orders";
 import { secureToken } from "../lib/token";
 import { syncOrderCommission } from "../lib/companies";
+import { fillTechPayNames, resolveTechPayItems, syncOrderTechPay, TECHPAY_ROLES } from "../lib/techPay";
 
 const DESK: Role[] = ["admin", "manager", "reception"];
 /** Estados en los que enviar una cotización mueve la orden a "Cotización enviada". */
@@ -46,12 +47,17 @@ export const saveQuote = onCall({ region: REGION }, async (request) => {
   const tid = caller.tid;
   const settings = await db.doc(`${col.settings(tid)}/general`).get();
   const taxRate = Number(settings.get("taxRate") ?? 15);
-  const { items, totals } = computeQuote(input.items, taxRate);
   const now = FieldValue.serverTimestamp();
 
   // Contexto: orden existente o cotización directa (vehículo sin orden)
   const existing = input.quoteId ? await db.doc(`${quoteCol.quotes(tid)}/${input.quoteId}`).get() : null;
   if (existing && !existing.exists) throw new HttpsError("not-found", "La cotización no existe.");
+  // Pago a técnicos: solo administración y gerencia lo cambian (recepción conserva el que ya tenía cada línea)
+  const lines = await resolveTechPayItems(tid, input.items, {
+    canEdit: TECHPAY_ROLES.includes(caller.role),
+    previous: existing?.exists ? ((existing.get("items") as QuoteItem[]) ?? []) : null,
+  });
+  const { items, totals } = computeQuote(lines, taxRate);
   let ctx: Record<string, unknown>;
   if (input.orderId) {
     const order = await db.doc(`${orderCol.workOrders(tid)}/${input.orderId}`).get();
@@ -92,7 +98,7 @@ export const saveQuote = onCall({ region: REGION }, async (request) => {
           tx.update(ref, { ...ctx, items, totals, taxRate, notes: input.notes, validDays: input.validDays, couponNotice: null, updatedAt: now, updatedBy: caller.uid });
           return null;
         }
-        const w = writeDraftCoupon(tx, tid, read, input.items, taxRate, { id: ref.id, code: versionLabel(cur.data()!) });
+        const w = writeDraftCoupon(tx, tid, read, lines, taxRate, { id: ref.id, code: versionLabel(cur.data()!) });
         tx.update(ref, {
           ...ctx, items: w.computed.items, totals: w.computed.totals, coupon: w.coupon, couponNotice: w.notice,
           taxRate, notes: input.notes, validDays: input.validDays, updatedAt: now, updatedBy: caller.uid,
@@ -465,21 +471,32 @@ export const convertQuoteToOrder = onCall({ region: REGION }, async (request) =>
 const COST_ROLES: Role[] = ["admin", "manager"];
 
 /**
- * Corrige el costo interno (unitCost) de líneas existentes, también en cotizaciones enviadas o aprobadas.
- * El cliente no ve el costo: no cambian precios, totales ni el link del cliente, y no hace falta volver a aprobar.
- * - Si la cotización aprobada tiene una modificación abierta (borrador/enviada), el mismo costo se aplica a sus
- *   líneas con el mismo id, siempre que esa línea siga con el costo anterior (si la modificación ya le puso
- *   otro costo, se respeta). Así la corrección no se pierde cuando el cliente apruebe la modificación.
+ * Corrige lo interno de líneas existentes: el costo (unitCost) y/o el pago a técnicos (techPay), también en
+ * cotizaciones enviadas o aprobadas. El cliente no ve ninguno de los dos: no cambian precios, totales ni el
+ * link del cliente, y no hace falta volver a aprobar.
+ * - Si la cotización aprobada tiene una modificación abierta (borrador/enviada), el mismo cambio se aplica a sus
+ *   líneas con el mismo id, siempre que esa línea siga con el valor anterior (si la modificación ya le puso
+ *   otro, se respeta). Así la corrección no se pierde cuando el cliente apruebe la modificación.
  * - Queda en el historial interno de la orden y en auditoría.
- * - La comisión por referido pendiente se recalcula; si ya se pagó, queda marcada para revisión.
+ * - Se recalculan el pago a técnicos de la orden y la comisión por referido pendientes; si ya se pagaron,
+ *   quedan marcados para revisión.
  */
 export const updateQuoteCosts = onCall({ region: REGION }, async (request) => {
   const caller = requireRole(request, COST_ROLES);
   const input = parseInput(updateQuoteCostsSchema, request.data);
   const tid = caller.tid;
+  if (input.costs.some((c) => c.techPay !== undefined) && !TECHPAY_ROLES.includes(caller.role)) {
+    throw new HttpsError("permission-denied", "No tiene permiso para cambiar el pago a técnicos.");
+  }
   const name = await actorName(caller.uid, caller.email);
   const quotes = db.collection(quoteCol.quotes(tid));
   const ref = quotes.doc(input.quoteId);
+  // Empleados del pago a técnicos: deben existir; el nombre sale del directorio del personal
+  const costs = await Promise.all(input.costs.map(async (c) => {
+    if (!c.techPay?.length) return c;
+    const [it] = await fillTechPayNames(tid, [{ type: "labor" as const, techPay: c.techPay }]);
+    return { ...c, techPay: it!.techPay };
+  }));
 
   const res = await db.runTransaction(async (tx) => {
     const q = await tx.get(ref);
@@ -492,12 +509,14 @@ export const updateQuoteCosts = onCall({ region: REGION }, async (request) => {
     }
     const items = (d.items as QuoteItem[]) ?? [];
     let applied: ReturnType<typeof applyCostChanges<QuoteItem>>;
+    let pay: ReturnType<typeof applyTechPayChanges<QuoteItem>>;
     try {
-      applied = applyCostChanges(items, input.costs, { strict: true });
+      applied = applyCostChanges(items, costs, { strict: true });
+      pay = applyTechPayChanges(applied.items, costs, { strict: true });
     } catch (err) {
       throw new HttpsError("failed-precondition", (err as Error).message);
     }
-    if (!applied.changes.length) return { changed: 0, revisionChanged: 0, orderId: null as string | null, approved: false };
+    if (!applied.changes.length && !pay.changes.length) return { changed: 0, techPayChanged: 0, revisionChanged: 0, orderId: null as string | null, approved: false };
 
     // Modificación abierta hecha a partir de esta cotización (lecturas antes de escribir)
     const openId = (d.openRevisionId as string | null | undefined) ?? null;
@@ -507,26 +526,29 @@ export const updateQuoteCosts = onCall({ region: REGION }, async (request) => {
     const order = orderRef ? await tx.get(orderRef) : null;
 
     const now = FieldValue.serverTimestamp();
-    tx.update(ref, { items: applied.items, costsUpdatedAt: now, costsUpdatedBy: caller.uid, costsUpdatedByName: name, updatedAt: now, updatedBy: caller.uid });
+    tx.update(ref, { items: pay.items, costsUpdatedAt: now, costsUpdatedBy: caller.uid, costsUpdatedByName: name, updatedAt: now, updatedBy: caller.uid });
 
     let revisionChanged = 0;
     let revLabel = "";
     if (rev?.exists && rev.get("revisionOf") === ref.id && isOpenQuote(rev.get("status"))) {
       const prevCost = Object.fromEntries(applied.changes.map((c) => [c.itemId, c.before]));
-      const r = applyCostChanges((rev.get("items") as QuoteItem[]) ?? [], input.costs, { onlyIfCost: prevCost });
-      if (r.changes.length) {
-        tx.update(rev.ref, { items: r.items, costsUpdatedAt: now, costsUpdatedBy: caller.uid, costsUpdatedByName: name, updatedAt: now, updatedBy: caller.uid });
-        revisionChanged = r.changes.length;
+      const prevPay = Object.fromEntries(pay.changes.map((c) => [c.itemId, techPayKey(c.before)]));
+      const r1 = applyCostChanges((rev.get("items") as QuoteItem[]) ?? [], costs.filter((c) => c.itemId in prevCost), { onlyIfCost: prevCost });
+      const r2 = applyTechPayChanges(r1.items, costs.filter((c) => c.itemId in prevPay), { onlyIfTechPay: prevPay });
+      if (r1.changes.length || r2.changes.length) {
+        tx.update(rev.ref, { items: r2.items, costsUpdatedAt: now, costsUpdatedBy: caller.uid, costsUpdatedByName: name, updatedAt: now, updatedBy: caller.uid });
+        revisionChanged = r1.changes.length + r2.changes.length;
         revLabel = versionLabel(rev.data()!);
       }
     }
 
     const label = versionLabel(d);
-    const detail = costChangesText(applied.changes);
+    const detail = [costChangesText(applied.changes), techPayChangesText(pay.changes)].filter(Boolean).join("; ");
+    const what = applied.changes.length && pay.changes.length ? "Costos internos y pago a técnicos" : pay.changes.length ? "Pago a técnicos" : "Costos internos";
     if (orderRef && order?.exists) {
       tx.set(orderRef.collection("events").doc(), {
         type: "note",
-        text: `Costos internos actualizados en ${label} por ${name}: ${detail}${revisionChanged ? ` (también en la modificación ${revLabel})` : ""}`,
+        text: `${what} actualizados en ${label} por ${name}: ${detail}${revisionChanged ? ` (también en la modificación ${revLabel})` : ""}`,
         visibleToCustomer: false, channels: [], fromStatus: null, toStatus: null,
         actorId: caller.uid, actorName: name, at: now,
       });
@@ -534,20 +556,34 @@ export const updateQuoteCosts = onCall({ region: REGION }, async (request) => {
     tx.set(db.collection(col.auditLogs(tid)).doc(), {
       action: "update", entity: "quotes", entityId: ref.id, path: ref.path,
       actorId: caller.uid, actorName: name, actorType: "user",
-      before: { code: label, costs: Object.fromEntries(applied.changes.map((c) => [c.itemId, c.before])) },
-      after: { code: label, costs: Object.fromEntries(applied.changes.map((c) => [c.itemId, c.after])) },
-      changedFields: ["items.unitCost"],
-      reason: `Costos internos: ${detail}`,
+      before: {
+        code: label,
+        ...(applied.changes.length ? { costs: Object.fromEntries(applied.changes.map((c) => [c.itemId, c.before])) } : {}),
+        ...(pay.changes.length ? { techPay: Object.fromEntries(pay.changes.map((c) => [c.itemId, c.before])) } : {}),
+      },
+      after: {
+        code: label,
+        ...(applied.changes.length ? { costs: Object.fromEntries(applied.changes.map((c) => [c.itemId, c.after])) } : {}),
+        ...(pay.changes.length ? { techPay: Object.fromEntries(pay.changes.map((c) => [c.itemId, c.after])) } : {}),
+      },
+      changedFields: [...(applied.changes.length ? ["items.unitCost"] : []), ...(pay.changes.length ? ["items.techPay"] : [])],
+      reason: `${what}: ${detail}`,
       at: now,
     });
-    return { changed: applied.changes.length, revisionChanged, orderId: order?.exists ? orderId : null, approved: d.status === "approved" };
+    return { changed: applied.changes.length, techPayChanged: pay.changes.length, revisionChanged, orderId: order?.exists ? orderId : null, approved: d.status === "approved" };
   });
 
-  // Comisión por referido: usa la cotización aprobada vigente, así que se recalcula con el costo nuevo
+  // Pago a técnicos y comisión por referido: usan la cotización aprobada vigente, así que se recalculan
   if (res.orderId && res.approved) {
-    await syncOrderCommission(tid, res.orderId, {
-      flagNote: "Se corrigieron costos internos de la cotización después de pagar la comisión. Revise si corresponde un ajuste.",
-    }).catch((err) => console.error("[comisiones] no se pudo recalcular tras corregir costos", tid, res.orderId, err));
+    const orderId = res.orderId;
+    await Promise.all([
+      syncOrderTechPay(tid, orderId, {
+        flagNote: "Se cambió el pago a técnicos de la cotización después de pagarle al técnico. Revise si corresponde un ajuste.",
+      }).catch((err) => console.error("[pago a técnicos] no se pudo recalcular tras editar costos", tid, orderId, err)),
+      syncOrderCommission(tid, orderId, {
+        flagNote: "Se corrigieron costos internos o el pago a técnicos de la cotización después de pagar la comisión. Revise si corresponde un ajuste.",
+      }).catch((err) => console.error("[comisiones] no se pudo recalcular tras corregir costos", tid, orderId, err)),
+    ]);
   }
-  return { changed: res.changed, revisionChanged: res.revisionChanged };
+  return { changed: res.changed, techPayChanged: res.techPayChanged, revisionChanged: res.revisionChanged };
 });

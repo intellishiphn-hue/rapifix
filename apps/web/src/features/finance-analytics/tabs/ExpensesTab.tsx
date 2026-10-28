@@ -5,7 +5,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { useLoader } from "@/features/reports/data";
 import type { ColKind, ReportCell } from "@/features/reports/table";
 import { TabActions, TabError, TabHeader, TabSkeleton } from "@/features/reports/ui";
-import { loadExpenses, pct } from "../data";
+import { loadExpenses, operating, pct, techPayExpenses } from "../data";
 import { Delta, DonutChart, fmtPct, KpiCard, PALETTE, RichTable, toReportTable, type Col } from "../components";
 import { finKey, type FinTabProps } from "./common";
 
@@ -24,7 +24,8 @@ export function ExpensesTab(props: FinTabProps) {
         loadExpenses(props.period.start, props.period.end, props.refresh),
         loadExpenses(props.prev.start, props.prev.end, props.refresh),
       ]);
-      return { cur, prev };
+      // Gastos operativos: el pago a técnicos queda fuera (ya es costo de cada orden); se informa aparte
+      return { cur: operating(cur), prev: operating(prev), techPaid: techPayExpenses(cur).reduce((a, e) => a + e.amount, 0) };
     },
     finKey("expenses", props),
   );
@@ -119,7 +120,10 @@ export function ExpensesTab(props: FinTabProps) {
         />
       </div>
       <RichTable title="Los 10 gastos más grandes" cols={topCols} rows={r.top} rowKey={(e) => e.id} empty="No hay gastos en este período." />
-      <p className="text-xs text-slate-500">Las compras de repuestos para inventario no son gastos: se reflejan como costo cuando el repuesto se vende.</p>
+      <p className="text-xs text-slate-500">
+        Las compras de repuestos para inventario no son gastos: se reflejan como costo cuando el repuesto se vende.
+        {" "}Los pagos a técnicos por trabajo{data.techPaid ? ` (${formatMoney(data.techPaid)} pagados en el período)` : ""} tampoco se suman aquí: ya están en el costo de cada orden. Sí aparecen en Gastos y en el flujo de caja.
+      </p>
     </div>
   );
 }

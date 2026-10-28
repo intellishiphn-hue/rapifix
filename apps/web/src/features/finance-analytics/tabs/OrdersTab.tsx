@@ -52,6 +52,7 @@ export function OrdersTab(props: FinTabProps) {
     { label: "Técnico(s)", value: (o) => (o.order.technicians ?? []).map((t) => t.name).join(", ") || "Sin asignar" },
     { label: "Ingresos", kind: "money", value: (o) => o.revenue },
     { label: "Costo", kind: "money", value: (o) => o.cost, tone: (o) => (o.missingLines ? "text-amber-700" : undefined) },
+    { label: "Pago a técnicos", kind: "money", value: (o) => o.techPay || null },
     { label: "Utilidad", kind: "money", value: (o) => o.profit },
     { label: "Margen", kind: "percent", value: orderMargin, tone: (o) => marginTone(orderMargin(o), 15) },
     { label: "Pagado", kind: "money", value: (o) => o.order.paid ?? 0 },
@@ -60,7 +61,7 @@ export function OrdersTab(props: FinTabProps) {
   const s = (f: (o: OrderFin) => number) => data.orders.reduce((a, o) => a + f(o), 0);
   const revenue = s((o) => o.revenue);
   const profit = s((o) => o.profit);
-  const total: ReportCell[] = [`Total (${data.orders.length})`, "", "", "", "", revenue, s((o) => o.cost), profit, pct(profit, revenue), s((o) => o.order.paid ?? 0), s((o) => o.order.balance ?? 0)];
+  const total: ReportCell[] = [`Total (${data.orders.length})`, "", "", "", "", revenue, s((o) => o.cost), s((o) => o.techPay), profit, pct(profit, revenue), s((o) => o.order.paid ?? 0), s((o) => o.order.balance ?? 0)];
   const low = data.orders.filter((o) => o.revenue > 0 && (orderMargin(o) ?? 100) < 15);
   const withBalance = data.orders.filter((o) => (o.order.balance ?? 0) > 0);
   const sortLabel = SORTS.find((x) => x[0] === sortBy)?.[1] ?? "";

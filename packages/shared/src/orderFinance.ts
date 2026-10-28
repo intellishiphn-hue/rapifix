@@ -1,10 +1,14 @@
 import type { TimestampLike } from "./types";
 import type { QuoteItem, Totals } from "./quote";
+import { computeTechPay } from "./techPay";
 
 /**
  * Ingresos, costo de ventas y utilidad de una orden del taller. Lógica pura, la usan Finanzas
  * (navegador) y las comisiones por referido (Cloud Functions), para que den lo mismo.
  * Dinero en centavos. Los ingresos van SIN ISV y con descuento (lineTotal de la cotización aprobada).
+ * El pago a técnicos por trabajo (techPay de las líneas de mano de obra y servicio) es COSTO de la orden:
+ * va sumado en `cost` (y aparte en `techPay` para mostrarlo). Por eso el gasto que se registra al
+ * pagarle al técnico (techPayoutId) NO se vuelve a restar como gasto operativo (ver isOperatingExpense).
  */
 
 /** Costo unitario de un repuesto: el de la línea; si no, el promedio de sus salidas de inventario; si no, el costo promedio actual. */
@@ -43,8 +47,10 @@ export function movementCostMap(
 
 export interface OrderFinanceLine {
   item: QuoteItem;
-  /** costo de la línea (centavos, redondeado) */
+  /** costo de la línea (centavos, redondeado), INCLUYE el pago a técnicos de la línea */
   cost: number;
+  /** pago a técnicos de la línea (ya incluido en `cost`) */
+  techPay: number;
   missing: boolean;
   estimated: boolean;
 }
@@ -52,7 +58,10 @@ export interface OrderFinanceLine {
 export interface OrderFinanceResult {
   revenue: number;
   tax: number;
+  /** costo total: repuestos y costo interno + pago a técnicos */
   cost: number;
+  /** pago a técnicos de la orden (ya incluido en `cost`) */
+  techPay: number;
   profit: number;
   hasQuote: boolean;
   /** líneas de repuesto sin costo registrado (o la orden sin cotización con monto) */
@@ -73,8 +82,9 @@ export function computeOrderFinance(
 ): OrderFinanceResult {
   if (!quote) {
     const revenue = (order.totals?.subtotal ?? 0) - (order.totals?.discount ?? 0);
-    return { revenue, tax: order.totals?.tax ?? 0, cost: 0, profit: revenue, hasQuote: false, missingLines: revenue > 0 ? 1 : 0, lines: [] };
+    return { revenue, tax: order.totals?.tax ?? 0, cost: 0, techPay: 0, profit: revenue, hasQuote: false, missingLines: revenue > 0 ? 1 : 0, lines: [] };
   }
+  const tp = computeTechPay(quote.items ?? []);
   let revenue = 0;
   let cost = 0;
   let missing = 0;
@@ -86,13 +96,14 @@ export function computeOrderFinance(
       : isPart
         ? resolvePartCost(it.unitCost, null, null, null)
         : { unit: it.unitCost || 0, missing: false, estimated: false };
-    const c = Math.round(r.unit * it.qty);
+    const pay = tp.byItem[it.id] ?? 0;
+    const c = Math.round(r.unit * it.qty) + pay;
     revenue += it.lineTotal;
     cost += c;
     if (r.missing) missing++;
-    lines.push({ item: it, cost: c, missing: r.missing, estimated: r.estimated });
+    lines.push({ item: it, cost: c, techPay: pay, missing: r.missing, estimated: r.estimated });
   }
-  return { revenue, tax: quote.totals?.tax ?? 0, cost, profit: revenue - cost, hasQuote: true, missingLines: missing, lines };
+  return { revenue, tax: quote.totals?.tax ?? 0, cost, techPay: tp.total, profit: revenue - cost, hasQuote: true, missingLines: missing, lines };
 }
 
 /**

@@ -170,10 +170,21 @@ export interface Expense extends BaseDoc {
   employeeName?: string;
   /** Pago de comisiones a un referido que generó este gasto */
   commissionPayoutId?: string | null;
+  /**
+   * Pago a un técnico por trabajos (techPayouts) que generó este gasto. Ese monto YA está en el costo
+   * de las órdenes (utilidad bruta), así que no cuenta como gasto operativo; sí es salida de caja.
+   */
+  techPayoutId?: string | null;
   /** el monto de este mes se cambió a mano: ya no se actualiza desde la plantilla */
   adjusted?: boolean;
   paidAt?: TimestampLike | null;
 }
+
+/**
+ * ¿El gasto se resta de la utilidad como gasto operativo? Todos los gastos válidos, menos el pago a
+ * técnicos por trabajo (techPayoutId), que ya se restó como costo de cada orden. En flujo de caja sí cuenta.
+ */
+export const isOperatingExpense = (e: Pick<Expense, "techPayoutId">) => !e.techPayoutId;
 
 export const expenseReceiptPathRe = /^tenants\/[a-z0-9-]+\/expenses\/[A-Za-z0-9_-]+\.(jpg|png|webp|pdf)$/;
 

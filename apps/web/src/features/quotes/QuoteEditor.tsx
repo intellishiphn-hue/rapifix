@@ -23,6 +23,7 @@ import { consumeOrderPart } from "@/features/catalog/api";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { useCompany } from "@/features/companies/api";
 import { CostOnlyHint, EditCostsButton } from "./EditCostsDialog";
+import { useTechPayEmployees } from "@/features/tech-pay/api";
 import { blankLine, DecisionInfo, DiscardRevisionDialog, ModifyQuoteDialog, QuoteHistory, QuoteLinesEditor, QuoteView, RecordDecisionDialog, RevisionChanges, versionLabel } from "./parts";
 
 const REVISION_STATE: Record<string, string> = { draft: "Borrador", sent: "Enviada al cliente", viewed: "Vista por el cliente" };
@@ -43,6 +44,12 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
   const manage = can("quotes.manage") && (order.isOpen || closedOk);
   const showCost = can("dashboard.financials");
   const company = useCompany(order.companyId, can("companies.read"));
+  // Pago a técnicos (solo admin/gerencia): por defecto, los técnicos de la orden con su configuración
+  const tpe = useTechPayEmployees();
+  const techPay = useMemo(
+    () => (tpe.enabled ? { employees: tpe.employees, defaults: tpe.defaultsFor(order.technicianIds ?? []) } : undefined),
+    [tpe, order.technicianIds],
+  );
 
   const [lines, setLines] = useState<QuoteItemInput[] | null>(null);
   const [notes, setNotes] = useState("");
@@ -123,7 +130,7 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
         icon={<FileText className="h-7 w-7" />}
         title="Sin cotización"
         description={manage ? "Arme la cotización con mano de obra, repuestos y servicios. El cliente la aprueba desde su link, o usted la registra si lo confirma por teléfono." : "Recepción todavía no ha creado la cotización."}
-        action={manage && <Button icon={<Plus className="h-4 w-4" />} onClick={() => { setLines([blankLine("labor")]); setDirty(true); }}>Crear cotización</Button>}
+        action={manage && <Button icon={<Plus className="h-4 w-4" />} onClick={() => { setLines([blankLine("labor", techPay?.defaults)]); setDirty(true); }}>Crear cotización</Button>}
       />
     );
   }
@@ -169,7 +176,7 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
               </div>
             ) : null}
             <QuoteLinesEditor
-              lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost}
+              lines={lines} onLines={(l) => { setLines(l); setDirty(true); }} preview={preview} showCost={showCost} techPay={techPay}
               notes={notes} onNotes={(v) => { setNotes(v); setDirty(true); }} validDays={validDays} onValidDays={(v) => { setValidDays(v); setDirty(true); }} taxRate={settings.taxRate}
               couponCode={draftCoupon?.code}
               couponSlot={
@@ -224,7 +231,7 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
             <DecisionInfo quote={current} />
             {isRevision && approved && <RevisionChanges base={approved} next={current} paid={order.paid ?? 0} consumed={order.consumed} />}
             <QuoteView
-              quote={current} showCost={showCost}
+              quote={current} showCost={showCost} showTechPay={tpe.enabled}
               couponSlot={(current.coupon || (manage && ["sent", "viewed"].includes(current.status))) && (
                 <CouponField
                   applied={current.coupon} compact={false}
@@ -253,7 +260,7 @@ export function QuoteEditor({ order }: { order: WorkOrder }) {
           </summary>
           <div className="mt-4 space-y-4">
             <DecisionInfo quote={approved} />
-            <QuoteView quote={approved} showCost={showCost} />
+            <QuoteView quote={approved} showCost={showCost} showTechPay={tpe.enabled} />
             <div className="flex flex-wrap gap-2">
               <Link to={`/imprimir/cotizacion/${approved.id}`} target="_blank"><Button size="sm" variant="ghost" icon={<Printer className="h-4 w-4" />}>Imprimir</Button></Link>
               {showCost && <EditCostsButton quote={approved} />}

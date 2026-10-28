@@ -162,10 +162,13 @@ export interface OrderPhoto {
 }
 
 export interface StaffEntry {
-  id: string; // uid
+  /** uid del usuario; en un empleado sin acceso al panel, un id generado */
+  id: string;
   displayName: string;
   role: string;
   active: boolean;
+  /** empleado registrado sin usuario del panel (no inicia sesión) */
+  noAccess?: boolean;
 }
 
 // ---------------- Validaciones ----------------

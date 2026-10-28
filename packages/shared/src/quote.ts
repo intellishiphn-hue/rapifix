@@ -4,6 +4,7 @@ import type { WorkOrderStatus } from "./workOrderStatus";
 import type { PublicProof } from "./catalog";
 import type { OdometerUnit } from "./odometer";
 import { couponAmount, couponLineEligible, distributeDiscount, quoteTypeToCouponKind, type AppliedCoupon, type CouponRule, type PublicCoupon } from "./coupons";
+import { techPaySharesSchema, type TechPayShare } from "./techPay";
 
 export const QUOTE_ITEM_TYPES = ["labor", "part", "service", "other"] as const;
 export type QuoteItemType = (typeof QUOTE_ITEM_TYPES)[number];
@@ -44,6 +45,11 @@ export interface QuoteItem {
   taxable: boolean;
   /** total de la línea sin ISV, después del descuento y del cupón */
   lineTotal: number;
+  /**
+   * Pago a técnicos por este trabajo (interno, como el costo: el cliente nunca lo ve).
+   * Solo en líneas "labor" y "service"; hasta 3 técnicos. Ver techPay.ts.
+   */
+  techPay?: TechPayShare[] | null;
 }
 
 export interface Totals {
@@ -326,6 +332,8 @@ export const quoteItemInput = z.object({
   unitPrice: cents,
   discount: cents,
   taxable: z.boolean(),
+  /** pago a técnicos (solo mano de obra y servicio; en otras líneas se ignora) */
+  techPay: techPaySharesSchema.nullish(),
 });
 export type QuoteItemInput = z.infer<typeof quoteItemInput>;
 

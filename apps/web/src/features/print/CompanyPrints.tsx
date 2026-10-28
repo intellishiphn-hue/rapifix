@@ -165,7 +165,7 @@ export function PrintCommissionPage() {
             </tbody>
           </table>
         ) : <p className="text-slate-600">Órdenes: {p.orderCodes.join(", ")}.</p>}
-        <p className="mt-1 text-[11px] text-slate-500">Comisión calculada como porcentaje de la utilidad de cada orden (ingreso sin ISV menos costo), al quedar pagada completa.</p>
+        <p className="mt-1 text-[11px] text-slate-500">Comisión calculada como porcentaje de la utilidad de cada orden (ingreso sin ISV menos costo y pago a técnicos), al quedar pagada completa.</p>
       </Box>
       <div className="rounded-lg bg-slate-100 p-4 text-center">
         <div className="text-[11px] uppercase tracking-wide text-slate-500">Monto pagado</div>

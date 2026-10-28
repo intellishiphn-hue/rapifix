@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { BaseDoc, TimestampLike } from "./types";
 import { isValidPhone, PHONE_ERROR } from "./phone";
 import { fromKm, odometerUnitSchema, toKm, type OdometerUnit } from "./odometer";
+import { techPayDefaultSchema, type TechPayDefault } from "./techPay";
 
 const text = (max: number) => z.string().trim().max(max, `Máximo ${max} caracteres`);
 const id = z.string().min(1).max(128);
@@ -150,13 +151,19 @@ export const maintenanceActionSchema = z.object({
 
 // ---------------- Personal / técnicos ----------------
 export interface EmployeeProfile {
-  id: string; // uid del usuario
+  /** uid del usuario del panel; en un empleado sin acceso, un id generado (sin usuario de Auth) */
+  id: string;
   displayName: string;
   role: string;
   phone: string;
   specialty: string;
   color: string; // color en la agenda
   active: boolean;
+  /**
+   * Pago por trabajo por defecto. NO se guarda en employees/ (lo lee todo el personal): vive en
+   * employeePay/{id}, que solo leen administración y gerencia; la interfaz lo une al perfil.
+   */
+  techPay?: TechPayDefault | null;
   updatedAt?: TimestampLike;
 }
 
@@ -167,6 +174,8 @@ export const saveEmployeeSchema = z.object({
   phone: text(30).refine((v) => v === "" || isValidPhone(v), PHONE_ERROR),
   specialty: text(80),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color no válido"),
+  /** pago por trabajo por defecto (si no viene, no se cambia) */
+  techPay: techPayDefaultSchema.nullish(),
 });
 
 /** "YYYY-MM-DD" en hora de Honduras (UTC-6, sin horario de verano). */

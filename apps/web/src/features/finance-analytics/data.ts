@@ -1,6 +1,6 @@
 import { doc, getDoc, where, limit } from "firebase/firestore";
 import {
-  catalogCol, computeOrderFinance, couponCol, financeCol, FINANCE_META_DOCS, movementCostMap, normalizeText, orderCol, QUOTE_ITEM_LABELS, resolvePartCost,
+  catalogCol, computeOrderFinance, couponCol, financeCol, FINANCE_META_DOCS, isOperatingExpense, movementCostMap, normalizeText, orderCol, QUOTE_ITEM_LABELS, resolvePartCost,
   type CouponRedemption, type Expense, type FinanceBudget, type InventoryMovement, type SupplierPayment, type Payment, type ProductCost, type Purchase, type QuoteItemType, type Sale, type WorkOrder,
 } from "@rapifix/shared";
 import { db, TENANT_ID } from "@/lib/firebase";
@@ -59,7 +59,10 @@ export interface OrderFin {
   at: Date | null;
   revenue: number;
   tax: number;
+  /** incluye el pago a técnicos */
   cost: number;
+  /** pago a técnicos de la orden (ya incluido en cost) */
+  techPay: number;
   profit: number;
   hasQuote: boolean;
   missingLines: number;
@@ -85,6 +88,8 @@ export interface Core {
   cost: number;
   profit: number;
   tax: number;
+  /** pago a técnicos de las órdenes (ya incluido en cost) */
+  techPay: number;
   missingLines: number;
   estimatedLines: number;
   ordersWithoutQuote: number;
@@ -145,7 +150,7 @@ export function loadCore(start: Date, end: Date, refresh: number): Promise<Core>
           name: it.description, type: it.type, qty: it.qty, revenue: it.lineTotal, cost: l.cost, missingCost: l.missing, estimatedCost: l.estimated,
         });
       }
-      return { order: o, at, revenue: f.revenue, tax: f.tax, cost: f.cost, profit: f.profit, hasQuote: f.hasQuote, missingLines: f.missingLines };
+      return { order: o, at, revenue: f.revenue, tax: f.tax, cost: f.cost, techPay: f.techPay, profit: f.profit, hasQuote: f.hasQuote, missingLines: f.missingLines };
     });
 
     const saleFins: SaleFin[] = sales.map((s) => {
@@ -183,6 +188,7 @@ export function loadCore(start: Date, end: Date, refresh: number): Promise<Core>
       cost,
       profit: revenue - cost,
       tax: orders.reduce((a, x) => a + x.tax, 0) + saleFins.reduce((a, x) => a + x.tax, 0),
+      techPay: orders.reduce((a, x) => a + x.techPay, 0),
       missingLines: orders.reduce((a, x) => a + x.missingLines, 0) + saleFins.reduce((a, x) => a + x.missingLines, 0),
       estimatedLines: lines.filter((l) => l.estimatedCost).length,
       ordersWithoutQuote: orders.filter((x) => !x.hasQuote).length,
@@ -190,12 +196,21 @@ export function loadCore(start: Date, end: Date, refresh: number): Promise<Core>
   });
 }
 
+/** Solo gastos operativos: sin el pago a técnicos (ya restado como costo de cada orden). */
+export const operating = (list: Expense[]) => list.filter(isOperatingExpense);
+/** Gastos de pago a técnicos (para mostrar que se excluyen y por qué). */
+export const techPayExpenses = (list: Expense[]) => list.filter((e) => !isOperatingExpense(e));
+
 export function loadPayments(start: Date, end: Date, refresh: number): Promise<Payment[]> {
   return cached(rk("payments", start, end, refresh), () =>
     fetchRange<Payment>(catalogCol.payments(TENANT_ID), "at", start, end).then((l) => l.filter((p) => p.status === "valid")),
   );
 }
 
+/**
+ * Gastos pagados (válidos) en [start, end), TODOS: incluye el pago a técnicos (techPayoutId), que es salida
+ * de caja. Para la utilidad use `operating()`: ese pago ya está en el costo de las órdenes.
+ */
 export function loadExpenses(start: Date, end: Date, refresh: number): Promise<Expense[]> {
   return cached(rk("expenses", start, end, refresh), () =>
     fetchRange<Expense>(financeCol.expenses(TENANT_ID), "date", start, end).then((l) => l.filter((e) => e.status === "valid")),

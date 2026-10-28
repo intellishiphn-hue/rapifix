@@ -2,7 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
   appointmentStatusSchema, col, hnDayKey, maintenanceActionSchema, opsCol, orderCol, saveAppointmentSchema,
-  normalizePhone, normalizeUnit, saveEmployeeSchema, saveMaintenanceSchema, type Role,
+  normalizePhone, normalizeUnit, saveEmployeeSchema, saveMaintenanceSchema, techPayCol, type Role,
 } from "@rapifix/shared";
 import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
@@ -138,16 +138,29 @@ export const maintenanceAction = onCall({ region: REGION }, async (request) => {
   return { ok: true };
 });
 
-/** Datos del técnico o empleado (teléfono, especialidad, color en la agenda). */
+/**
+ * Datos del técnico o empleado (teléfono, especialidad, color en la agenda) y, si viene, su pago por trabajo
+ * por defecto. El pago va en employeePay/{id} (solo lo leen administración y gerencia), no en employees/.
+ * Sirve para usuarios del panel y para empleados sin acceso (los dos están en el directorio del personal).
+ */
 export const saveEmployeeProfile = onCall({ region: REGION }, async (request) => {
   const caller = requireRole(request, ["admin", "manager"]);
   const input = parseInput(saveEmployeeSchema, request.data);
   const staff = await db.doc(`${orderCol.staff(caller.tid)}/${input.uid}`).get();
   if (!staff.exists) throw new HttpsError("not-found", "El usuario no existe.");
-  await db.doc(`${opsCol.employees(caller.tid)}/${input.uid}`).set({
+  const batch = db.batch();
+  batch.set(db.doc(`${opsCol.employees(caller.tid)}/${input.uid}`), {
     phone: input.phone ? normalizePhone(input.phone) : "", specialty: input.specialty, color: input.color,
     updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
   }, { merge: true });
+  if (input.techPay) {
+    const t = input.techPay;
+    batch.set(db.doc(`${techPayCol.config(caller.tid)}/${input.uid}`), {
+      techPay: { mode: t.mode, percent: t.mode === "percent" ? t.percent : 0, fixedAmount: t.mode === "fixed" ? t.fixedAmount : 0 },
+      updatedAt: FieldValue.serverTimestamp(), updatedBy: caller.uid,
+    }, { merge: true });
+  }
+  await batch.commit();
   return { ok: true };
 });
 

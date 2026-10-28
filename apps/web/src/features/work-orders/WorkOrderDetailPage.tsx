@@ -26,6 +26,7 @@ import { daysInShop } from "./OrderCard";
 import { ScheduleButton } from "@/features/agenda/AppointmentDialog";
 import { DeleteOrderButton } from "./DeleteOrderButton";
 import { ReceivedNotice } from "./ReceivedNotice";
+import { OrderTechPay } from "@/features/tech-pay/OrderTechPay";
 
 type Tab = "resumen" | "diagnostico" | "cotizacion" | "servicios" | "repuestos" | "fotos" | "historial" | "comunicacion" | "pagos" | "documentos";
 const UPCOMING: Partial<Record<Tab, { phase: number; text: string }>> = {};
@@ -134,7 +135,12 @@ export function WorkOrderDetailPage() {
         {tab === "historial" && <EventTimeline events={events.data} loading={events.loading} error={events.error} />}
         {tab === "comunicacion" && <OrderCommunication order={order} events={events} />}
         {tab === "cotizacion" && <QuoteEditor order={order} />}
-        {tab === "servicios" && <ApprovedItems order={order} types={["labor", "service", "other"]} empty="Sin servicios aprobados" />}
+        {tab === "servicios" && (
+          <>
+            {can("techpay.manage") && <OrderTechPay order={order} />}
+            <ApprovedItems order={order} types={["labor", "service", "other"]} empty="Sin servicios aprobados" />
+          </>
+        )}
         {tab === "repuestos" && (
           <>
             <ApprovedItems order={order} types={["part"]} empty="Sin repuestos aprobados" />

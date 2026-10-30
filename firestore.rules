@@ -85,7 +85,7 @@ service cloud.firestore {
         return d.keys().hasOnly([
             'firstName', 'lastName', 'fullName', 'phone', 'whatsapp', 'email', 'idNumber', 'rtn',
             'address', 'city', 'notes', 'status', 'vehicleCount', 'openOrders', 'balanceDue',
-            'lastVisitAt', 'referral', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+            'lastVisitAt', 'referral', 'history', 'searchKeywords', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
           ])
           && isStr(d.firstName, 1, 60)
           && isStr(d.lastName, 1, 60)
@@ -110,14 +110,17 @@ service cloud.firestore {
           && incoming().vehicleCount == 0
           && incoming().openOrders == 0
           && incoming().balanceDue == 0
-          && !('referral' in incoming());
+          && !('referral' in incoming())
+          && !('history' in incoming());
         // Contadores, saldos y la comisión por referido (setReferral) solo los cambian Cloud Functions
         allow update: if hasRole(tid, writers())
           && validCustomer(incoming())
           && validUpdateMeta()
           && unchanged('vehicleCount') && unchanged('openOrders')
           && unchanged('balanceDue') && unchanged('lastVisitAt')
-          && unchanged('referral');
+          && unchanged('referral')
+          // Link del historial (token): solo lo cambian enableHistoryLink / regenerate / disable
+          && unchanged('history');
         allow delete: if false; // se desactivan, nunca se borran
       }
 
@@ -533,6 +536,14 @@ service cloud.firestore {
     // ---------- Página pública del lavado (/lavado/:token) ----------
     // Copia mínima del lavado. Solo con el token exacto; nadie lista ni escribe (la arma el servidor).
     match /publicWashes/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ---------- "Mi historial RAPIFIX" (/historial/:token) ----------
+    // Copia mínima del historial de un cliente o empresa. Se lee solo con el token exacto; nadie lista; escribe el servidor.
+    match /publicHistory/{token} {
       allow get: if true;
       allow list: if false;
       allow write: if false;

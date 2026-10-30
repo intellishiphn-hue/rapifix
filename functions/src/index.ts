@@ -60,3 +60,9 @@ export { applyCouponPublic, removeCouponPublic } from "./public/coupons";
 export { onCarwashServicePublic, onCarwashPlanPublic, onCarwashSettingsPublic, rebuildPublicCarwash } from "./triggers/publicCarwash";
 // Citas desde la web pública (/agendar): horas libres y solicitud (sin sesión)
 export { publicAppointmentSlots, requestAppointmentPublic } from "./public/appointments";
+// "Mi historial RAPIFIX": link privado del cliente y de la empresa (/historial/:token)
+export { enableHistoryLink, regenerateHistoryLink, disableHistoryLink } from "./callable/history";
+export {
+  onWorkOrderHistory, onQuoteHistory, onMaintenanceHistory, onWashHistory, onLoyaltyHistory, onMembershipHistory, onVehicleHistory,
+  onCustomerHistory, onCompanyHistory,
+} from "./triggers/history";

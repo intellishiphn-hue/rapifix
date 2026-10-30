@@ -1,6 +1,7 @@
 import type { Role } from "./roles";
 import type { OdometerUnit } from "./odometer";
 import type { Referral } from "./companies";
+import type { HistoryLink } from "./history";
 
 /**
  * Timestamp genérico: en el cliente es firebase/firestore Timestamp y en Functions es
@@ -53,6 +54,8 @@ export interface Customer extends BaseDoc {
   lastVisitAt?: TimestampLike | null;
   /** Comisión por referido (la escribe solo setReferral) */
   referral?: Referral | null;
+  /** Link privado "Mi historial" (lo escriben solo las funciones enable/regenerate/disableHistoryLink) */
+  history?: HistoryLink | null;
   searchKeywords: string[];
 }
 

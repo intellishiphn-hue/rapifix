@@ -24,3 +24,4 @@ export * from "./companies";
 export * from "./coupons";
 export * from "./publicCarwash";
 export * from "./publicAppointment";
+export * from "./history";

@@ -21,6 +21,7 @@ import { CarwashCustomerHistory } from "@/features/carwash/CarwashCustomerHistor
 import { useCustomer } from "./api";
 import { CustomerFormDialog } from "./CustomerFormDialog";
 import { ReferralCard } from "@/features/commissions/ReferralDialog";
+import { HistoryLinkCard } from "@/features/history/HistoryLinkCard";
 
 type Tab = "vehicles" | "orders" | "carwash" | "quotes" | "payments" | "changes";
 
@@ -101,6 +102,7 @@ export function CustomerDetailPage() {
             </div>
             {customer.notes && <div className="border-t border-slate-100 px-5 py-4 text-sm whitespace-pre-line text-slate-600">{customer.notes}</div>}
           </Card>
+          <HistoryLinkCard kind="customer" id={customer.id} name={customer.fullName} history={customer.history} phone={customer.whatsapp || customer.phone} recipientName={customer.fullName} />
           <ReferralCard target="customer" targetId={customer.id} targetName={customer.fullName} referral={customer.referral} />
           <Card className="grid grid-cols-2 divide-x divide-slate-100">
             <div className="p-4">

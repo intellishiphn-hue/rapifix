@@ -287,6 +287,8 @@ export interface Company extends BaseDoc, CompanyTerms {
   approverName: string;
   approverPhone: string;
   referral: Referral | null;
+  /** Link privado "Mi historial" de la flotilla (lo escriben solo las funciones del historial) */
+  history?: import("./history").HistoryLink | null;
   /** los mantiene el servidor */
   vehicleCount: number;
   balanceDue: number;

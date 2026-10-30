@@ -11,6 +11,8 @@ import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage";
 const LandingPage = page(() => import("@/features/landing/LandingPage"), "LandingPage");
 const BookingPage = page(() => import("@/features/landing/BookingPage"), "BookingPage");
 const CarwashPublicPage = page(() => import("@/features/landing/CarwashPage"), "CarwashPage");
+// "Mi historial RAPIFIX": link privado del cliente o de la empresa (sin SDK de Firestore)
+const HistoryPublicPage = page(() => import("@/features/landing/HistoryPage"), "HistoryPage");
 const DashboardPage = page(() => import("@/features/dashboard/DashboardPage"), "DashboardPage");
 const CustomersPage = page(() => import("@/features/customers/CustomersPage"), "CustomersPage");
 const CustomerDetailPage = page(() => import("@/features/customers/CustomerDetailPage"), "CustomerDetailPage");
@@ -117,6 +119,8 @@ export const router = createBrowserRouter([
   // Página pública del carwash (sin token). El link de cada lavado sigue siendo /lavado/:token
   { path: "/lavado", element: <Suspense fallback={<div className="min-h-screen bg-[#000a2b]" />}><CarwashPublicPage /></Suspense> },
   { path: "/recuperar", element: <ForgotPasswordPage /> },
+  // Historial privado del cliente o de la empresa (el documento dice si es cliente o flotilla)
+  { path: "/historial/:token", element: <Suspense fallback={<div className="min-h-screen bg-[#f1f4fa]" />}><HistoryPublicPage /></Suspense> },
   // Portal público del cliente (sin cuenta). /aprobar y /seguimiento redirigen al mismo link.
   { path: "/orden/:token", element: <S><PortalPage /></S> },
   { path: "/orden/:token/cotizacion", element: <S><PortalPage /></S> },

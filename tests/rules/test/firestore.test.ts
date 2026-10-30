@@ -127,6 +127,10 @@ beforeEach(async () => {
     await s.doc("publicPortal/tok-abc123").set({ orderNumber: 1, status: "in_progress" });
     await s.doc("publicCarwash/rapifix").set({ services: [], plans: [], loyalty: { every: 10, startStamps: 0 } });
     await s.doc("publicWashes/LAVTOKEN23").set({ tid: "rapifix", washId: "w1", code: "LAV-0001", status: "ready", paid: false });
+    await s.doc("publicHistory/HISTTOKEN234567890ABCDEFG").set({ v: 1, kind: "customer", active: true, name: "Juan Pérez", vehicles: [] });
+    await s.doc(`${T}/customers/c-hist`).set({
+      ...newCustomer("admin1"), ...meta, history: { token: "HISTTOKEN234567890ABCDEFG", enabled: true, createdAt: fixedTs(), updatedAt: fixedTs(), updatedBy: "admin1" },
+    });
   });
 });
 
@@ -884,6 +888,39 @@ describe("menú público del carwash (publicCarwash)", () => {
   it("sin sesión no se leen servicios ni planes del carwash", async () => {
     await assertFails(anon().collection(`${T}/carwashServices`).get());
     await assertFails(anon().collection(`${T}/carwashPlans`).get());
+  });
+});
+
+describe("Mi historial RAPIFIX (publicHistory y el link en el cliente)", () => {
+  const TOKEN = "HISTTOKEN234567890ABCDEFG";
+  it("cualquiera (sin sesión) lee el historial con el token exacto", async () => {
+    await assertSucceeds(anon().doc(`publicHistory/${TOKEN}`).get());
+  });
+  it("nadie lista los historiales (ni sin sesión ni admin)", async () => {
+    await assertFails(anon().collection("publicHistory").get());
+    await assertFails(anon().collection("publicHistory").where("kind", "==", "customer").get());
+    await assertFails(db("admin").collection("publicHistory").get());
+  });
+  it("nadie escribe historiales desde el navegador", async () => {
+    await assertFails(anon().doc(`publicHistory/${TOKEN}`).update({ name: "x" }));
+    await assertFails(anon().doc("publicHistory/NUEVOTOKEN").set({ v: 1 }));
+    for (const r of ["admin", "manager", "reception"] as const) {
+      await assertFails(db(r).doc(`publicHistory/${TOKEN}`).set({ v: 1, name: "x" }));
+      await assertFails(db(r).doc(`publicHistory/${TOKEN}`).delete());
+    }
+  });
+  it("el personal no puede crear un cliente con link de historial", async () => {
+    await assertFails(db("reception").doc(`${T}/customers/nuevo-h`).set(newCustomer("reception1", { history: { token: "X", enabled: true } })));
+  });
+  it("el personal edita el cliente pero no puede tocar el link (lo cambian las funciones)", async () => {
+    const c = db("reception").doc(`${T}/customers/c-hist`);
+    await assertSucceeds(c.update({ city: "Comayagüela", updatedBy: "reception1", updatedAt: serverTs() }));
+    await assertFails(c.update({ history: { token: "OTRO", enabled: true }, updatedBy: "reception1", updatedAt: serverTs() }));
+    await assertFails(c.update({ "history.enabled": false, updatedBy: "reception1", updatedAt: serverTs() }));
+    await assertFails(db("admin").doc(`${T}/customers/c1`).update({ history: { token: "X", enabled: true }, updatedBy: "admin1", updatedAt: serverTs() }));
+  });
+  it("las empresas (y su link) siguen siendo solo del servidor", async () => {
+    await assertFails(db("admin").doc(`${T}/companies/x1`).set({ name: "x", history: { token: "X", enabled: true } }));
   });
 });
 

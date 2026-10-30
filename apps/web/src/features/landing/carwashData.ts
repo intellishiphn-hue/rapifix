@@ -5,7 +5,7 @@
  */
 import { DEFAULT_TENANT_ID, PUBLIC_CARWASH, type PublicCarwash, type PublicCarwashPlan, type PublicCarwashService, type VehicleSize, VEHICLE_SIZES } from "@rapifix/shared";
 
-type FsValue = {
+export type FsValue = {
   stringValue?: string;
   integerValue?: string;
   doubleValue?: number;
@@ -66,10 +66,15 @@ export function parsePublicCarwash(raw: unknown): PublicCarwash {
   };
 }
 
-export function publicCarwashUrl(): string {
+/** URL REST de un documento público (lectura con get; las reglas no dejan listar). */
+export function publicDocUrl(collection: string, id: string): string {
   const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined;
+  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collection}/${encodeURIComponent(id)}`;
+}
+
+export function publicCarwashUrl(): string {
   const tid = (import.meta.env.VITE_TENANT_ID as string | undefined) || DEFAULT_TENANT_ID;
-  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${PUBLIC_CARWASH}/${tid}`;
+  return publicDocUrl(PUBLIC_CARWASH, tid);
 }
 
 export type CarwashLoad = { state: "loading" } | { state: "ready"; data: PublicCarwash } | { state: "empty" } | { state: "error" };

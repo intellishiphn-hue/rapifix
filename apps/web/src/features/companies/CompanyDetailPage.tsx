@@ -12,6 +12,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { EmptyState, ErrorState, PageLoader } from "@/components/ui/Feedback";
 import { Tabs } from "@/components/ui/Tabs";
 import { ReferralCard } from "@/features/commissions/ReferralDialog";
+import { HistoryLinkCard } from "@/features/history/HistoryLinkCard";
 import { useCompany, useCompanyOrders, useCompanyPayments, useCompanyPaymentsReceived, useCompanySales, useCompanyVehicles } from "./api";
 import { TermsBadge } from "./CompaniesPage";
 import { CompanyFormDialog } from "./CompanyFormDialog";
@@ -134,6 +135,10 @@ export function CompanyDetailPage() {
               {c.notes && <Info icon={<FileText className="h-4 w-4" />} label="Notas"><span className="whitespace-pre-line font-normal text-slate-700">{c.notes}</span></Info>}
             </div>
           </Card>
+          <HistoryLinkCard
+            kind="company" id={c.id} name={c.name} history={c.history}
+            phone={c.contactPhone || c.approverPhone} recipientName={c.contactPhone ? c.contactName || c.name : c.approverName || c.name}
+          />
           <ReferralCard target="company" targetId={c.id} targetName={c.name} referral={c.referral} />
         </div>
       </div>

@@ -67,7 +67,16 @@ export function BookingPage() {
   const [date, setDate] = useState<string>(days[0] ?? "");
   const [slots, setSlots] = useState<{ state: "loading" | "ready" | "error"; list: string[] }>({ state: "loading", list: [] });
   const [time, setTime] = useState("");
-  const [form, setForm] = useState({ name: "", phone: "", plate: "", vehicle: "", comment: "", website: "" });
+  // Desde "Mi historial" llegan la placa, el vehículo y el servicio que toca (?placa=&vehiculo=&detalle=)
+  const [form, setForm] = useState(() => {
+    const detalle = (params.get("detalle") ?? "").trim().slice(0, 200);
+    return {
+      name: "", phone: "", website: "",
+      plate: (params.get("placa") ?? "").trim().slice(0, 12),
+      vehicle: (params.get("vehiculo") ?? "").trim().slice(0, 60),
+      comment: detalle ? `Servicio: ${detalle}` : "",
+    };
+  });
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<PublicAppointmentResult | null>(null);

@@ -9,6 +9,7 @@ Disallow: /login
 Disallow: /recuperar
 Disallow: /orden/
 Disallow: /lavado/
+Disallow: /historial/
 Disallow: /aprobar/
 Disallow: /seguimiento/
 Disallow: /imprimir/

@@ -11,11 +11,13 @@ const AUDITED = new Set(["customers", "vehicles", "settings", "companies", "refe
 const SYSTEM_FIELDS = new Set([
   "vehicleCount", "photoCount", "openOrders", "balanceDue", "lastVisitAt",
   "searchKeywords", "updatedAt", "updatedBy", "customer",
+  // link del historial: lo registra la función que lo cambia (sin el token)
+  "history",
 ]);
 
 function strip(data: Record<string, unknown> | undefined | null) {
   if (!data) return null;
-  const { searchKeywords: _k, ...rest } = data;
+  const { searchKeywords: _k, history: _h, ...rest } = data;
   return rest;
 }
 

@@ -33,6 +33,7 @@ const SAMPLE = (taller: string) => ({
   orden: "OT-1024",
   total: formatMoney(1955_00),
   link: `${window.location.origin}/orden/ABCD2345EF`,
+  historial: `${window.location.origin}/historial/ABCDEFGHJKMNPQRSTUVWXYZ2`,
   taller,
   servicio: "su cambio de aceite",
   ultimo: "Su último servicio con nosotros fue el 5 jun 2026 a los 80,000 km.",

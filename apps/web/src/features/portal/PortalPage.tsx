@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
-import { Banknote, Check, CheckCircle2, Clock, CreditCard, HelpCircle, Phone, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
+import { Banknote, Check, CheckCircle2, ChevronRight, Clock, CreditCard, HelpCircle, History, Phone, Loader2, MapPin, MessageCircle, ShieldCheck, Wrench, XCircle } from "lucide-react";
 import { formatMoney, formatOdometer, normalizePhone, odometerNoun, QUOTE_ITEM_LABELS, whatsappLink, type PublicPortal } from "@rapifix/shared";
 
 /** Número de RAPIFIX (9285-4852) si en Configuración no se ha puesto otro */
@@ -42,6 +42,11 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
   }, [returnState, token]);
 
   useEffect(() => {
+    // Desde "Mi historial" (botón Pagar): /orden/TOKEN#pago baja directo a esta sección
+    if (window.location.hash === "#pago") setTimeout(() => document.getElementById("pago")?.scrollIntoView({ behavior: "smooth" }), 300);
+  }, []);
+
+  useEffect(() => {
     // Limpia ?pago= de la barra para que al recargar no se repita el aviso
     if (returnState) window.history.replaceState(null, "", window.location.pathname);
   }, [returnState]);
@@ -64,7 +69,7 @@ function OnlinePaySection({ portal, token }: { portal: PublicPortal; token: stri
   };
 
   return (
-    <section className={card}>
+    <section id="pago" className={cn(card, "scroll-mt-4")}>
       <h2 className="flex items-center gap-2 font-bold"><CreditCard className="h-5 w-5 text-brand-600" /> Pago</h2>
       <dl className="mt-3 space-y-1 text-sm">
         <div className="flex justify-between text-slate-600"><dt>Total de la orden</dt><dd className="tabular">{formatMoney(op.total)}</dd></div>
@@ -223,6 +228,7 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
   const vehicleText = `${p.vehicle.make} ${p.vehicle.model}${p.vehicle.plate ? ` (placa ${formatPlate(p.vehicle.plate)})` : ""}`;
   const contact = whatsappLink(waNumber, `Hola, les escribo por la orden ${p.orderCode} de mi ${vehicleText}.`);
   const last = p.updates[0];
+  const historyLink = typeof p.history === "string" && /^\/historial\/[A-Z0-9]{24}$/.test(p.history) ? p.history : null;
   // "Tengo una pregunta" abre el WhatsApp del taller con el mensaje listo
   const questionLink = q ? whatsappLink(waNumber, `Hola, tengo una pregunta sobre la ${u ? "actualización de la " : ""}cotización ${q.code} de mi ${vehicleText}.`) : null;
 
@@ -348,6 +354,18 @@ export function PortalView({ portal, token }: { portal: PublicPortal; token: str
         )}
         {p.nextStep && <p className="mt-3 text-sm text-slate-600">Próximo paso: <b>{p.nextStep}</b></p>}
       </section>}
+
+      {/* "Mi historial RAPIFIX": todas las visitas, pagos y próximos mantenimientos (solo si el historial está activo) */}
+      {p.kind !== "quote" && historyLink && (
+        <a href={historyLink} className="flex items-center gap-3 rounded-2xl bg-[#011955] p-4 text-white shadow-[var(--shadow-card)] hover:bg-[#0b2a7a]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10"><History className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-bold">Ver mi historial RAPIFIX</span>
+            <span className="block text-sm text-white/70">Todas las visitas de su vehículo, pagos y próximos mantenimientos.</span>
+          </span>
+          <ChevronRight className="h-5 w-5 shrink-0 text-white/70" />
+        </a>
+      )}
 
       {notice && (
         <div className={cn("rounded-2xl p-4 text-sm font-medium", notice.tone === "ok" ? "bg-emerald-600 text-white" : "bg-red-50 text-red-800")}>{notice.text}</div>

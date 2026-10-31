@@ -1,12 +1,13 @@
 import type { WorkOrderStatus } from "./workOrderStatus";
 
-export const TEMPLATE_VARIABLES = ["cliente", "vehiculo", "placa", "orden", "total", "link", "taller", "servicio", "ultimo", "fecha", "sellos", "plan"] as const;
+export const TEMPLATE_VARIABLES = ["cliente", "vehiculo", "placa", "orden", "total", "link", "historial", "taller", "servicio", "ultimo", "fecha", "sellos", "plan"] as const;
 export type TemplateVars = Partial<Record<(typeof TEMPLATE_VARIABLES)[number], string>>;
 
 /** Reemplaza {{variable}} por su valor. Variables vacías se quitan limpiamente. */
 export function renderTemplate(body: string, vars: TemplateVars): string {
-  // Si no hay link, se quita también la frase que lo introduce ("...aquí: {{link}}")
-  const src = vars.link ? body : body.replace(/[^.!?\n]*:\s*\{\{\s*link\s*\}\}/g, "");
+  // Si no hay link, se quita también la frase que lo introduce ("...aquí: {{link}}"). Igual con {{historial}}.
+  let src = vars.link ? body : body.replace(/[^.!?\n]*:\s*\{\{\s*link\s*\}\}/g, "");
+  if (!vars.historial) src = src.replace(/[^.!?\n]*:\s*\{\{\s*historial\s*\}\}/g, "");
   return src
     .replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => (vars as Record<string, string | undefined>)[k] ?? "")
     .replace(/[ \t]+\n/g, "\n")
@@ -22,6 +23,14 @@ export interface DefaultTemplate {
   status?: WorkOrderStatus;
 }
 
+/** Frase que presenta el link del historial ("Mi historial RAPIFIX") en los avisos de la orden. */
+export const HISTORY_LINE_TEXT = "Aquí puede ver todo el historial de su vehículo:";
+/**
+ * Avisos de la orden que llevan el link del historial al final: vehículo listo y agradecimiento (entrega).
+ * Si el taller editó la plantilla y no puso {{historial}}, la línea se agrega al final (ver withHistoryLine).
+ */
+export const HISTORY_LINE_TEMPLATES = ["listo", "entregado"] as const;
+
 /** Plantillas iniciales (editables desde Configuración en la Fase 6). */
 const FIRMA = "Gracias por su preferencia en *{{taller}}* 🚗";
 
@@ -35,8 +44,8 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   { key: "reparacion", name: "Reparación iniciada", status: "IN_REPAIR", body: `¡Hola {{cliente}}! 🔧\n\nIniciamos la reparación de su *{{vehiculo}}*.\n(Orden {{orden}})\n\nPuede seguir el avance aquí: {{link}}\n\n${FIRMA}` },
   { key: "repuesto", name: "Esperando repuesto", status: "WAITING_PARTS", body: `¡Hola {{cliente}}! 📦\n\nEstamos esperando un repuesto para continuar con su *{{vehiculo}}*.\n(Orden {{orden}})\n\nLe avisamos apenas llegue.\nAvance: {{link}}\n\n${FIRMA}` },
   { key: "calidad", name: "Control de calidad", status: "QUALITY_CONTROL", body: `¡Hola {{cliente}}! 🔍\n\nSu *{{vehiculo}}* está en control de calidad, el último paso antes de la entrega.\n(Orden {{orden}})\n\nAvance: {{link}}\n\n${FIRMA}` },
-  { key: "listo", name: "Vehículo listo", status: "READY", body: `¡Hola {{cliente}}! 🎉\n\n¡Su *{{vehiculo}}* ya está listo para ser retirado!\n(Orden {{orden}})\n\n*Total: {{total}}*\n\nPuede consultar los detalles aquí: {{link}}\n\n${FIRMA}` },
-  { key: "entregado", name: "Agradecimiento", status: "DELIVERED", body: `¡Muchas gracias {{cliente}}! 🙌\n\nFue un gusto atender su *{{vehiculo}}*.\n(Orden {{orden}})\n\nCualquier cosa, estamos para servirle.\n\n${FIRMA}` },
+  { key: "listo", name: "Vehículo listo", status: "READY", body: `¡Hola {{cliente}}! 🎉\n\n¡Su *{{vehiculo}}* ya está listo para ser retirado!\n(Orden {{orden}})\n\n*Total: {{total}}*\n\nPuede consultar los detalles aquí: {{link}}\n\n${HISTORY_LINE_TEXT} {{historial}}\n\n${FIRMA}` },
+  { key: "entregado", name: "Agradecimiento", status: "DELIVERED", body: `¡Muchas gracias {{cliente}}! 🙌\n\nFue un gusto atender su *{{vehiculo}}*.\n(Orden {{orden}})\n\nCualquier cosa, estamos para servirle.\n\n${HISTORY_LINE_TEXT} {{historial}}\n\n${FIRMA}` },
   { key: "recordatorio_entrega", name: "Recordatorio de entrega", body: `¡Hola {{cliente}}! 🚗\n\nLe recordamos que su *{{vehiculo}}* está listo para retirar.\n(Orden {{orden}})\n\n${FIRMA}` },
   { key: "pendiente_retiro", name: "Vehículo pendiente de retiro", body: `¡Hola {{cliente}}! 🚗\n\nSu *{{vehiculo}}* sigue en nuestras instalaciones esperando ser retirado.\n(Orden {{orden}})\n\n¿Cuándo nos visita?\n\n${FIRMA}` },
   { key: "cita_confirmacion", name: "Cita agendada", body: `¡Hola {{cliente}}! 📅\n\nSu cita en *{{taller}}* quedó agendada para *{{fecha}}*.\nVehículo: *{{vehiculo}}* (placa {{placa}})\n\n¿Nos confirma su asistencia?\n\n${FIRMA}` },
@@ -91,6 +100,7 @@ export const TEMPLATE_VARIABLE_LABELS: Record<(typeof TEMPLATE_VARIABLES)[number
   orden: "Número de orden o cotización",
   total: "Total o saldo",
   link: "Link del cliente",
+  historial: "Link del historial del cliente (solo si está activo)",
   taller: "Nombre del taller",
   servicio: "Servicio (mantenimiento)",
   ultimo: "Último servicio (mantenimiento)",
@@ -98,3 +108,21 @@ export const TEMPLATE_VARIABLE_LABELS: Record<(typeof TEMPLATE_VARIABLES)[number
   sellos: "Sellos de lealtad (carwash)",
   plan: "Plan de membresía (carwash)",
 };
+
+const HAS_HISTORY_VAR = /\{\{\s*historial\s*\}\}/;
+
+/** ¿La plantilla necesita el link del historial? (para no buscarlo si no se usa) */
+export function templateUsesHistory(key: string): boolean {
+  return (HISTORY_LINE_TEMPLATES as readonly string[]).includes(key) || HAS_HISTORY_VAR.test(templateBody(key));
+}
+
+/**
+ * Agrega al final "Aquí puede ver todo el historial de su vehículo: {link}" a los avisos de listo y entrega
+ * cuando el historial está activo (`url` no vacío) y la plantilla del taller no lo trae ya
+ * (con {{historial}} o con el mismo link escrito). Sin historial activo devuelve el texto tal cual.
+ */
+export function withHistoryLine(key: string, body: string, rendered: string, url: string | null | undefined): string {
+  if (!url || !(HISTORY_LINE_TEMPLATES as readonly string[]).includes(key)) return rendered;
+  if (HAS_HISTORY_VAR.test(body) || rendered.includes(url)) return rendered;
+  return `${rendered.trimEnd()}\n\n${HISTORY_LINE_TEXT} ${url}`;
+}

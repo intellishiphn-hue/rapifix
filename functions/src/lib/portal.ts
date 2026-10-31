@@ -1,11 +1,12 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
-  catalogCol, col, diffQuotes, lineBeforeCoupon, orderCol, PORTAL_STEPS, publicDiff, quoteCol, RECEPTION_CHECKLIST, STATUS_META,
-  type PublicPortal, type Quote, type WorkOrderStatus,
+  catalogCol, col, diffQuotes, historyLinkState, historyPath, lineBeforeCoupon, orderCol, PORTAL_STEPS, publicDiff, quoteCol, RECEPTION_CHECKLIST, STATUS_META,
+  type HistoryLink, type PublicPortal, type Quote, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { db } from "./admin";
 import { bankList, latestProof } from "./publicWash";
 import { customerCouponsAvailable } from "./coupons";
+import { orderOwner, ownerRef, refreshVisitDetail } from "./history";
 
 const PERCENT: Record<WorkOrderStatus, number> = {
   RECEIVED: 10, INSPECTION: 20, DIAGNOSIS: 35, AWAITING_QUOTE: 40, QUOTE_SENT: 50, AWAITING_APPROVAL: 50,
@@ -37,11 +38,23 @@ function publicUpdate(approved: Quote, rev: Quote | null): PublicPortal["quoteUp
 const asQuote = (snap: FirebaseFirestore.DocumentSnapshot | null) => (snap && snap.exists ? ({ id: snap.id, ...snap.data() } as Quote) : null);
 
 /**
+ * Construye la copia pública y sanitizada de la orden en publicPortal/{token} y, si el dueño tiene
+ * "Mi historial RAPIFIX" activo, rehace también el detalle de esta visita (publicHistory/{token}/visits/{orderId}).
+ * Así cualquier cambio que se ve en el portal (orden, cotización, pagos, comprobantes, fotos, actualizaciones)
+ * llega igual al historial.
+ */
+export async function buildPortal(tid: string, orderId: string): Promise<string | null> {
+  const token = await buildPortalDoc(tid, orderId);
+  await refreshVisitDetail(tid, orderId).catch((err) => console.error("detalle de visita", tid, orderId, err));
+  return token;
+}
+
+/**
  * Construye la copia pública y sanitizada de la orden en publicPortal/{token}.
  * El portal NUNCA lee colecciones internas: solo este documento.
  * No incluye teléfono, identidad, dirección, costos ni notas internas.
  */
-export async function buildPortal(tid: string, orderId: string): Promise<string | null> {
+async function buildPortalDoc(tid: string, orderId: string): Promise<string | null> {
   // Todo se lee y escribe en una transacción: si la orden o la cotización cambian mientras
   // se arma el portal (por ejemplo, el cliente aprueba en ese instante), Firestore la repite
   // con los datos nuevos. Así una actualización vieja nunca pisa una más reciente.
@@ -52,7 +65,9 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
   const token = o.portalToken as string | undefined;
   if (!token) return null;
 
-  const [settings, events, photos, quoteSnap, roki, proofs, couponsAvailable] = await Promise.all([
+  // Historial del dueño (empresa si el vehículo es de flota; si no, el cliente): botón "Ver mi historial RAPIFIX"
+  const owner = orderOwner(o);
+  const [settings, events, photos, quoteSnap, roki, proofs, couponsAvailable, ownerSnap] = await Promise.all([
     tx.get(db.doc(`${col.settings(tid)}/general`)),
     tx.get(orderSnap.ref.collection("events").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(30)),
     tx.get(orderSnap.ref.collection("photos").where("visibleToCustomer", "==", true).orderBy("at", "desc").limit(40)),
@@ -60,8 +75,10 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
     tx.get(db.doc(`${catalogCol.privateConfig(tid)}/roki`)),
     tx.get(db.collection(catalogCol.paymentProofs(tid)).where("orderId", "==", orderId).limit(30)),
     customerCouponsAvailable(tid, "shop", tx),
+    owner ? tx.get(ownerRef(tid, owner)) : Promise.resolve(null),
   ]);
   const s = settings.data() ?? {};
+  const historyLink = (ownerSnap?.get("history") as HistoryLink | undefined) ?? null;
   const onlineEnabled = !!roki.get("enabled") && !!roki.get("secretKey");
   const status = o.status as WorkOrderStatus;
   const step = STATUS_META[status].portalStep; // 0..7, -1 cancelado
@@ -132,6 +149,8 @@ export async function buildPortal(tid: string, orderId: string): Promise<string 
     banks: bankList(s),
     proof: latestProof(proofs.docs),
     couponsAvailable,
+    // Solo si el historial está activo (si se desactiva o cambia, el trigger del cliente rehace los portales)
+    history: historyLinkState(historyLink) === "active" ? historyPath(historyLink!.token!) : null,
     updatedAt: FieldValue.serverTimestamp(),
   };
   tx.set(db.doc(`${quoteCol.portal}/${token}`), portal);

@@ -85,6 +85,11 @@ export function HistoryLinkCard({
             <p className="text-slate-600">
               Un link privado donde {who} ve sus visitas, trabajos, pagos con recibo, lavados y próximos mantenimientos. No vence; lo puede apagar cuando quiera.
             </p>
+            <p className="text-xs text-slate-500">
+              {history && history.enabled === false
+                ? "Lo desactivó el taller: no se vuelve a activar solo. Si lo activa de nuevo, tendrá un link nuevo."
+                : "Se activa solo con la próxima orden de trabajo."}
+            </p>
             <Button icon={<Link2 className="h-4 w-4" />} loading={busy === "enable"} onClick={() => void run("enable")}>Activar link</Button>
           </>
         ) : (
@@ -94,7 +99,7 @@ export function HistoryLinkCard({
               <button type="button" onClick={() => void copy()} className="rounded p-1 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Copiar link"><Copy className="h-4 w-4" /></button>
               <a href={url} target="_blank" rel="noreferrer" className="rounded p-1 text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Abrir el historial"><ExternalLink className="h-4 w-4" /></a>
             </div>
-            {since && <p className="text-xs text-slate-500">Activo desde {since}. Se actualiza solo con cada orden, pago, lavado y mantenimiento.</p>}
+            {since && <p className="text-xs text-slate-500">Activo desde {since}{history?.source === "order" ? " (se activó solo con una orden)" : history?.source === "bulk" ? " (activado con \"Activar a todos\")" : ""}. Se actualiza solo con cada orden, pago, lavado y mantenimiento.</p>}
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" icon={<MessageCircle className="h-4 w-4 text-emerald-600" />} onClick={() => setSending(true)}>Enviar por WhatsApp</Button>
               <Button size="sm" variant="secondary" icon={<Copy className="h-4 w-4" />} onClick={() => void copy()}>Copiar</Button>

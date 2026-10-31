@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
 import { addOrderEvent } from "./api";
 import { EventTimeline } from "./OrderHistory";
 import { WhatsAppComposer } from "./WhatsAppComposer";
-import { messageForStatus, messageFromTemplate, openWhatsApp, PORTAL_ENABLED } from "./whatsapp";
+import { messageForStatus, messageFromTemplate, openWhatsApp, PORTAL_ENABLED, useOrderHistoryUrl } from "./whatsapp";
 
 /**
  * Centro de comunicación: una sola actualización que se puede publicar en el
@@ -46,7 +46,8 @@ export function OrderCommunication({ order, events }: { order: WorkOrder; events
     }
   };
 
-  const suggested = messageForStatus(order, order.status, settings);
+  const historial = useOrderHistoryUrl(order);
+  const suggested = messageForStatus(order, order.status, settings, historial);
 
   return (
     <div className="grid gap-5 p-5 xl:grid-cols-[1fr_380px]">
@@ -78,7 +79,7 @@ export function OrderCommunication({ order, events }: { order: WorkOrder; events
         {suggested && canPost && (
           <Card>
             <CardHeader title="Mensaje sugerido" description="Según el estado actual de la orden." />
-            <div className="p-5"><WhatsAppComposer order={order} initial={suggested} compact /></div>
+            <div className="p-5"><WhatsAppComposer key={historial} order={order} initial={suggested} compact /></div>
           </Card>
         )}
         {canPost && (
@@ -89,7 +90,7 @@ export function OrderCommunication({ order, events }: { order: WorkOrder; events
                 <option value="">Elegir plantilla...</option>
                 {DEFAULT_TEMPLATES.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
               </Select>
-              {template && <WhatsAppComposer order={order} initial={messageFromTemplate(order, template, settings)} compact />}
+              {template && <WhatsAppComposer order={order} key={`${template}-${historial}`} initial={messageFromTemplate(order, template, settings, historial)} compact />}
             </div>
           </Card>
         )}

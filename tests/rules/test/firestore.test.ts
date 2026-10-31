@@ -128,6 +128,9 @@ beforeEach(async () => {
     await s.doc("publicCarwash/rapifix").set({ services: [], plans: [], loyalty: { every: 10, startStamps: 0 } });
     await s.doc("publicWashes/LAVTOKEN23").set({ tid: "rapifix", washId: "w1", code: "LAV-0001", status: "ready", paid: false });
     await s.doc("publicHistory/HISTTOKEN234567890ABCDEFG").set({ v: 1, kind: "customer", active: true, name: "Juan Pérez", vehicles: [] });
+    await s.doc("publicHistory/HISTTOKEN234567890ABCDEFG/visits/ord-1").set({ v: 1, id: "ord-1", code: "OT-1001", total: 100000 });
+    // detalle que quedó bajo un token viejo (el principal ya se borró)
+    await s.doc("publicHistory/VIEJOTOKEN34567890ABCDEFG/visits/ord-1").set({ v: 1, id: "ord-1", code: "OT-1001" });
     await s.doc(`${T}/customers/c-hist`).set({
       ...newCustomer("admin1"), ...meta, history: { token: "HISTTOKEN234567890ABCDEFG", enabled: true, createdAt: fixedTs(), updatedAt: fixedTs(), updatedBy: "admin1" },
     });
@@ -918,6 +921,24 @@ describe("Mi historial RAPIFIX (publicHistory y el link en el cliente)", () => {
     await assertFails(c.update({ history: { token: "OTRO", enabled: true }, updatedBy: "reception1", updatedAt: serverTs() }));
     await assertFails(c.update({ "history.enabled": false, updatedBy: "reception1", updatedAt: serverTs() }));
     await assertFails(db("admin").doc(`${T}/customers/c1`).update({ history: { token: "X", enabled: true }, updatedBy: "admin1", updatedAt: serverTs() }));
+  });
+  it("el detalle de una visita se lee con la ruta exacta mientras el historial exista", async () => {
+    await assertSucceeds(anon().doc(`publicHistory/${TOKEN}/visits/ord-1`).get());
+    await assertFails(anon().doc("publicHistory/VIEJOTOKEN34567890ABCDEFG/visits/ord-1").get());
+  });
+  it("nadie lista los detalles de visita (ni de un historial ni con collectionGroup)", async () => {
+    await assertFails(anon().collection(`publicHistory/${TOKEN}/visits`).get());
+    await assertFails(db("admin").collection(`publicHistory/${TOKEN}/visits`).get());
+    await assertFails(anon().collectionGroup("visits").get());
+    await assertFails(db("admin").collectionGroup("visits").get());
+  });
+  it("nadie escribe detalles de visita desde el navegador", async () => {
+    await assertFails(anon().doc(`publicHistory/${TOKEN}/visits/ord-1`).update({ total: 1 }));
+    await assertFails(anon().doc(`publicHistory/${TOKEN}/visits/nueva`).set({ v: 1 }));
+    for (const r of ["admin", "manager", "reception"] as const) {
+      await assertFails(db(r).doc(`publicHistory/${TOKEN}/visits/ord-1`).set({ v: 1, total: 0 }));
+      await assertFails(db(r).doc(`publicHistory/${TOKEN}/visits/ord-1`).delete());
+    }
   });
   it("las empresas (y su link) siguen siendo solo del servidor", async () => {
     await assertFails(db("admin").doc(`${T}/companies/x1`).set({ name: "x", history: { token: "X", enabled: true } }));

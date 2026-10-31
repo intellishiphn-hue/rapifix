@@ -3,6 +3,7 @@ import { normalizeUnit, type OdometerUnit } from "./odometer";
 import { hnDayKey } from "./operations";
 import { agingSummary, orderDueKey, paymentTermsDetail, paymentTermsLabel, type CompanyTerms } from "./companies";
 import { clampStartStamps, isPlaceholderPlate, membershipWindow, type MembershipStatus, type WashStatus } from "./carwash";
+import { PORTAL_STEPS, STATUS_META, type WorkOrderStatus } from "./workOrderStatus";
 
 /**
  * "Mi historial RAPIFIX": link privado y permanente de un cliente o de una empresa (flotilla).
@@ -52,6 +53,53 @@ export interface HistoryLink {
   createdAt?: unknown;
   updatedAt?: unknown;
   updatedBy?: string;
+  /** cómo se activó: a mano en la ficha, solo al crear una orden, o con "Activar historial a todos" */
+  source?: "manual" | "order" | "bulk";
+  /** el taller lo desactivó a propósito (no se vuelve a activar solo) */
+  disabledAt?: unknown;
+  disabledBy?: string | null;
+}
+
+/**
+ * Estado del link para la activación automática:
+ * - "never": nunca se activó (no hay campo `history`). Se activa solo al crear una orden o con "Activar a todos".
+ * - "active": activo con token.
+ * - "disabled": el taller lo apagó a propósito (`enabled: false`). Nunca se vuelve a activar solo;
+ *   solo a mano desde la ficha. Los links apagados antes de existir `disabledAt` también cuentan como apagados a propósito,
+ *   porque la única forma de quedar en `enabled: false` es "Desactivar".
+ */
+export type HistoryLinkState = "never" | "active" | "disabled";
+
+export function historyLinkState(link: Partial<HistoryLink> | null | undefined): HistoryLinkState {
+  if (!link || typeof link !== "object") return "never";
+  if (link.enabled === false) return "disabled";
+  if (link.enabled === true && typeof link.token === "string" && link.token) return "active";
+  return "never";
+}
+
+/** ¿Se activa solo? Solo si nunca se activó (nunca si el taller lo desactivó). */
+export const shouldAutoEnableHistory = (link: Partial<HistoryLink> | null | undefined) => historyLinkState(link) === "never";
+
+export const historyBulkSchema = z.object({
+  kind: z.enum(HISTORY_KINDS),
+  /** id del último cliente o empresa revisado en el llamado anterior */
+  cursor: z.string().min(1).max(128).nullish(),
+});
+export type HistoryBulkInput = z.infer<typeof historyBulkSchema>;
+export interface HistoryBulkResult {
+  /** activados en este llamado */
+  activated: number;
+  /** ya activos a los que se les armó el detalle de visitas */
+  upgraded: number;
+  scanned: number;
+  /** desactivados a propósito por el taller (no se tocan) */
+  skippedDisabled: number;
+  /** sin órdenes ni lavados (no tienen nada que ver) */
+  noActivity: number;
+  /** total de clientes o empresas (solo en el primer llamado) */
+  total: number | null;
+  cursor: string | null;
+  done: boolean;
 }
 
 export const historyLinkSchema = z.object({
@@ -245,8 +293,16 @@ export interface HistoryLine {
 }
 
 export interface HistoryVisitView {
+  /** id de la orden: abre el detalle en /historial/:token/visita/:id */
+  id: string;
   code: string;
   state: VisitState;
+  /** estado de la orden como lo ve el cliente en su portal (ej. "En reparación") */
+  statusLabel: string;
+  /** avance 0 a 100 (pasos del portal) */
+  progress: number;
+  /** cotización enviada que espera aprobación: "/orden/TOKEN/cotizacion" */
+  quoteLink: string | null;
   inAt: number | null;
   outAt: number | null;
   mileageIn: number | null;
@@ -352,7 +408,7 @@ const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice
 const yearOf = (t: number) => Number(hnDayKey(t).slice(0, 4));
 
 /** Nombres del método de pago para el cliente (sin nombres de terminales ni pasarelas). */
-const METHOD_LABELS: Record<string, string> = {
+export const HISTORY_METHOD_LABELS: Record<string, string> = {
   cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", deposit: "Depósito", online: "Pago en línea", other: "Otro",
 };
 
@@ -364,15 +420,23 @@ export function sortByUrgency<T extends { status: MaintenanceUrgency; dueAt: num
   return [...list].sort((a, b) => URGENCY[a.status] - URGENCY[b.status] || (a.dueAt ?? Infinity) - (b.dueAt ?? Infinity));
 }
 
-function visitState(status: string): VisitState {
+/** Avance de la orden (0 a 100) según los pasos del portal. */
+export function orderProgress(status: string): number {
+  if (status === "READY" || status === "DELIVERED") return 100;
+  const step = STATUS_META[status as WorkOrderStatus]?.portalStep ?? -1;
+  if (step < 0) return 0;
+  return Math.round(((step + 0.5) / PORTAL_STEPS.length) * 100);
+}
+
+export function visitState(status: string): VisitState {
   if (status === "DELIVERED") return "delivered";
   if (status === "READY") return "ready";
   return "in_shop";
 }
 
 /** Cotización aprobada de la orden: la activa si está aprobada; si no, la aprobada más reciente. */
-function approvedQuoteFor(order: RawHistoryOrder, quotes: RawHistoryQuote[]): RawHistoryQuote | null {
-  let out: RawHistoryQuote | null = null;
+export function approvedQuoteFor<Q extends RawHistoryQuote>(order: Pick<RawHistoryOrder, "id" | "activeQuoteId">, quotes: Q[]): Q | null {
+  let out: Q | null = null;
   for (const q of quotes) {
     if (q.status !== "approved" || q.orderId !== order.id) continue;
     if (!out || q.id === order.activeQuoteId || (out.id !== order.activeQuoteId && num(q.createdAt) > num(out.createdAt))) out = q;
@@ -399,9 +463,14 @@ function buildVisit(o: RawHistoryOrder, quotes: RawHistoryQuote[], payments: Raw
   const state = visitState(o.status);
   const outAt = state === "delivered" ? ms(o.deliveredAt) ?? ms(o.statusChangedAt) : null;
   const token = typeof o.portalToken === "string" && o.portalToken && o.portalEnabled !== false ? o.portalToken : null;
+  const waiting = token && state !== "delivered" && quotes.some((x) => x.orderId === o.id && (x.status === "sent" || x.status === "viewed"));
   return {
+    id: o.id,
     code: str(o.code, 30),
     state,
+    statusLabel: STATUS_META[o.status as WorkOrderStatus]?.label ?? "",
+    progress: orderProgress(o.status),
+    quoteLink: waiting ? `/orden/${token}/cotizacion` : null,
     inAt: ms(o.receivedAt) ?? ms(o.createdAt),
     outAt,
     mileageIn: o.mileageIn != null && num(o.mileageIn) > 0 ? num(o.mileageIn) : null,
@@ -416,7 +485,7 @@ function buildVisit(o: RawHistoryOrder, quotes: RawHistoryQuote[], payments: Raw
       .filter((p) => p.orderId === o.id && p.status !== "voided" && num(p.amount) > 0)
       .sort((a, b) => num(a.at) - num(b.at))
       .slice(0, HISTORY_LIMITS.paymentsPerVisit)
-      .map((p) => ({ code: str(p.code, 30), amount: num(p.amount), method: METHOD_LABELS[String(p.method)] ?? "Pago", at: ms(p.at) })),
+      .map((p) => ({ code: str(p.code, 30), amount: num(p.amount), method: HISTORY_METHOD_LABELS[String(p.method)] ?? "Pago", at: ms(p.at) })),
     link: token ? `/orden/${token}` : null,
     linkUntil: token && outAt ? outAt + PORTAL_LINK_DAYS * DAY : null,
   };
@@ -675,6 +744,8 @@ export function fitHistorySize(view: PublicHistory, maxBytes: number = HISTORY_L
 // ---------------------------------------------------------------------------
 const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === "object") : []);
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+export const isHistoryVisitId = (v: unknown): v is string => typeof v === "string" && ID_RE.test(v);
 const link = (v: unknown, prefix: "/orden/" | "/lavado/") => (typeof v === "string" && v.startsWith(prefix) && /^[/A-Za-z0-9]+$/.test(v) && v.length < 80 ? v : null);
 const urgency = (v: unknown): MaintenanceUrgency => (v === "overdue" || v === "due" ? v : "upcoming");
 
@@ -714,7 +785,10 @@ export function parsePublicHistory(raw: unknown): PublicHistory {
         mileage: num(v.mileage), unit: normalizeUnit(v.unit), mileageAt: ms(v.mileageAt),
         maintenance: arr(v.maintenance).map(parseMaint).filter((m) => m.service),
         visits: arr(v.visits).map((x) => ({
+          id: isHistoryVisitId(x.id) ? x.id : "",
           code: str(x.code, 30), state: x.state === "delivered" || x.state === "ready" ? x.state : "in_shop",
+          statusLabel: str(x.statusLabel, 40), progress: Math.min(100, Math.max(0, num(x.progress))),
+          quoteLink: link(x.quoteLink, "/orden/"),
           inAt: ms(x.inAt), outAt: ms(x.outAt), mileageIn: ms(x.mileageIn), mileageOut: ms(x.mileageOut), unit: normalizeUnit(x.unit),
           work: parseLines(x.work), parts: parseLines(x.parts), total: num(x.total), paid: num(x.paid), balance: num(x.balance),
           payments: arr(x.payments).map((p) => ({ code: str(p.code, 30), amount: num(p.amount), method: str(p.method, 40), at: ms(p.at) })),

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { AlertTriangle, ArrowRight, Info } from "lucide-react";
 import {
   formatOdometer, isCreditTerms, isOdometerLower, orderDueKey, paymentTermsLabel, normalizeUnit, odometerFieldLabel, STATUS_META,
-  type OdometerUnit, type WorkOrder, type WorkOrderStatus,
+  templateForStatus, templateUsesHistory, type OdometerUnit, type WorkOrder, type WorkOrderStatus,
 } from "@rapifix/shared";
 import { errorMessage } from "@/lib/errors";
 import { Dialog } from "@/components/ui/Dialog";
@@ -14,7 +14,7 @@ import { useSettings } from "@/features/settings/api";
 import { changeWorkOrderStatus } from "./api";
 import { StatusBadge } from "./StatusBadge";
 import { WhatsAppComposer } from "./WhatsAppComposer";
-import { messageForStatus } from "./whatsapp";
+import { historyUrlForOrder, messageForStatus } from "./whatsapp";
 import { useWaSilentSend } from "@/features/whatsapp/auto";
 import { useAuth } from "@/lib/auth/useAuth";
 import { keyLabel, useCompany } from "@/features/companies/api";
@@ -71,7 +71,9 @@ export function StatusChangeDialog({ order, to, onClose }: { order: WorkOrder; t
         ...(delivering && km !== "" && !kmInvalid ? { mileageOut: kmNum, mileageUnit: unit } : {}),
       });
       toast.success(`Orden ${order.code}: ${STATUS_META[to].label}`);
-      const msg = cancelling ? null : messageForStatus(order, to, settings);
+      const key = templateForStatus(to)?.key;
+      const historial = !cancelling && key && templateUsesHistory(key) ? await historyUrlForOrder(order) : "";
+      const msg = cancelling ? null : messageForStatus(order, to, settings, historial);
       const phone = order.customer.whatsapp || order.customer.phone || "";
       if (msg && !(await silentSend({ phone, name: order.customer.fullName, body: msg, context: "orden", orderId: order.id, orderCode: order.code }))) setMessage(msg);
       else onClose();

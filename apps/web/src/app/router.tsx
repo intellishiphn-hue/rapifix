@@ -13,6 +13,8 @@ const BookingPage = page(() => import("@/features/landing/BookingPage"), "Bookin
 const CarwashPublicPage = page(() => import("@/features/landing/CarwashPage"), "CarwashPage");
 // "Mi historial RAPIFIX": link privado del cliente o de la empresa (sin SDK de Firestore)
 const HistoryPublicPage = page(() => import("@/features/landing/HistoryPage"), "HistoryPage");
+const HistoryVisitPublicPage = page(() => import("@/features/landing/HistoryVisitPage"), "HistoryVisitPage");
+const HistoryReceiptPublicPage = page(() => import("@/features/landing/HistoryVisitPage"), "HistoryReceiptPage");
 const DashboardPage = page(() => import("@/features/dashboard/DashboardPage"), "DashboardPage");
 const CustomersPage = page(() => import("@/features/customers/CustomersPage"), "CustomersPage");
 const CustomerDetailPage = page(() => import("@/features/customers/CustomerDetailPage"), "CustomerDetailPage");
@@ -121,6 +123,8 @@ export const router = createBrowserRouter([
   { path: "/recuperar", element: <ForgotPasswordPage /> },
   // Historial privado del cliente o de la empresa (el documento dice si es cliente o flotilla)
   { path: "/historial/:token", element: <Suspense fallback={<div className="min-h-screen bg-[#f1f4fa]" />}><HistoryPublicPage /></Suspense> },
+  { path: "/historial/:token/visita/:orderId", element: <Suspense fallback={<div className="min-h-screen bg-[#f1f4fa]" />}><HistoryVisitPublicPage /></Suspense> },
+  { path: "/historial/:token/visita/:orderId/recibo/:receipt", element: <Suspense fallback={<div className="min-h-screen bg-[#f1f4fa]" />}><HistoryReceiptPublicPage /></Suspense> },
   // Portal público del cliente (sin cuenta). /aprobar y /seguimiento redirigen al mismo link.
   { path: "/orden/:token", element: <S><PortalPage /></S> },
   { path: "/orden/:token/cotizacion", element: <S><PortalPage /></S> },

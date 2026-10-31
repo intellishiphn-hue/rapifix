@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { CalendarCheck, Clock, Droplets, ExternalLink, FileText, MapPin, MessageCircle, Phone, Search, Wrench } from "lucide-react";
+import { CalendarCheck, ChevronRight, Clock, CreditCard, Droplets, ExternalLink, FileText, MapPin, MessageCircle, Phone, Search, ThumbsUp, Wrench } from "lucide-react";
 import {
-  formatMoney, formatOdometer, historyBookingUrl, historyLinkAlive,
+  formatMoney, formatOdometer, historyBookingUrl, historyLinkAlive, historyVisitPath,
   type HistoryMaintenanceView, type HistoryUpcomingView, type HistoryVehicleView, type HistoryVisitView, type PublicHistory,
 } from "@rapifix/shared";
 import { cn } from "@/lib/cn";
@@ -19,10 +19,10 @@ import { loadPublicHistory, type HistoryLoad } from "./historyData";
 const TZ = "America/Tegucigalpa";
 const fmtDate = new Intl.DateTimeFormat("es-HN", { day: "numeric", month: "short", year: "numeric", timeZone: TZ });
 const fmtShort = new Intl.DateTimeFormat("es-HN", { day: "numeric", month: "short", timeZone: TZ });
-const date = (ms: number | null | undefined) => (ms ? fmtDate.format(ms).replace(/\./g, "") : "");
+export const date = (ms: number | null | undefined) => (ms ? fmtDate.format(ms).replace(/\./g, "") : "");
 const shortDate = (ms: number | null | undefined) => (ms ? fmtShort.format(ms).replace(/\./g, "") : "");
 const yearOf = (ms: number | null) => (ms ? Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: TZ }).format(ms)) : 0);
-const vehicleName = (v: Pick<HistoryVehicleView, "make" | "model" | "year">) => [v.make, v.model, v.year || ""].filter(Boolean).join(" ");
+export const vehicleName = (v: Pick<HistoryVehicleView, "make" | "model" | "year">) => [v.make, v.model, v.year || ""].filter(Boolean).join(" ");
 
 const URGENCY_LABEL = { overdue: "Vencido", due: "Próximo", upcoming: "Programado" } as const;
 const URGENCY_TONE = {
@@ -30,9 +30,9 @@ const URGENCY_TONE = {
   due: "bg-[#fff4d6] text-[#7a4b00] ring-[#f2d189]",
   upcoming: "bg-[#e7efff] text-[#0b3a9e] ring-[#bcd0fb]",
 } as const;
-const VISIT_LABEL = { in_shop: "En el taller", ready: "Listo para retirar", delivered: "Entregado" } as const;
+export const VISIT_LABEL = { in_shop: "En el taller", ready: "Listo para retirar", delivered: "Entregado" } as const;
 
-function useHistoryMeta() {
+export function useHistoryMeta() {
   useEffect(() => {
     const prev = document.title;
     document.title = "Mi historial | RAPIFIX";
@@ -81,7 +81,7 @@ export function HistoryPage() {
 
 /* ---------------------------------------------------------------- Marco */
 
-function TopBar() {
+export function TopBar() {
   const wa = waLink("Hola RAPIFIX, tengo una consulta sobre mi historial.");
   return (
     <header className="bg-[var(--lp-night)]">
@@ -97,7 +97,7 @@ function TopBar() {
   );
 }
 
-function ContactFooter() {
+export function ContactFooter() {
   const wa = waLink("Hola RAPIFIX, tengo una consulta.");
   const tel = telLink();
   return (
@@ -132,7 +132,7 @@ function ContactFooter() {
   );
 }
 
-function LoadingView() {
+export function LoadingView() {
   const bar = "animate-pulse rounded-lg bg-[rgb(1_25_85/0.08)]";
   return (
     <div aria-busy="true" aria-live="polite">
@@ -153,7 +153,7 @@ function LoadingView() {
   );
 }
 
-function MissingView() {
+export function MissingView() {
   const wa = waLink("Hola RAPIFIX, mi enlace del historial ya no funciona. ¿Me pueden enviar uno nuevo?");
   return (
     <div className="mx-auto max-w-[560px] px-4 py-20 text-center sm:px-8">
@@ -165,7 +165,7 @@ function MissingView() {
   );
 }
 
-function ErrorView({ onRetry }: { onRetry: () => void }) {
+export function ErrorView({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="mx-auto max-w-[560px] px-4 py-20 text-center sm:px-8">
       <h1 className="lp-display text-[1.6rem] text-[var(--lp-navy)]">No pudimos cargar tu historial</h1>
@@ -191,6 +191,7 @@ function HistoryView({ data }: { data: PublicHistory }) {
     <>
       <Hero data={data} />
       <div className="mx-auto max-w-[1180px] px-4 sm:px-8">
+        <CurrentOrders data={data} />
         {isCompany && <FleetUpcoming items={data.summary.upcoming} onPick={(plate) => { const v = data.vehicles.find((x) => x.plate === plate); if (v) choose(v.key, true); }} />}
         {!data.vehicles.length ? (
           <div className="mt-8 rounded-[22px] bg-white p-8 text-center shadow-sm">
@@ -256,6 +257,61 @@ function Stat({ label, value, hint, alert, wide }: { label: string; value: strin
       <dd className="lp-display mt-1 truncate text-[clamp(1.15rem,3.2vw,1.6rem)] tabular-nums">{value}</dd>
       {hint && <dd className={cn("mt-0.5 truncate text-xs", alert ? "font-semibold text-[#ff8a8a]" : "text-white/60")}>{hint}</dd>}
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------- En el taller ahora */
+
+/** Órdenes abiertas (en el taller o listas para retirar), arriba y destacadas, con lo que el cliente puede hacer. */
+function CurrentOrders({ data }: { data: PublicHistory }) {
+  const { token = "" } = useParams();
+  const now = Date.now();
+  const open = data.vehicles.flatMap((v) => v.visits.filter((x) => x.state !== "delivered").map((x) => ({ v, x })));
+  if (!open.length) return null;
+  return (
+    <section aria-labelledby="now-title" className="relative z-10 -mt-5 sm:-mt-7">
+      <h2 id="now-title" className="sr-only">En el taller ahora</h2>
+      <ul className="space-y-3">
+        {open.map(({ v, x }) => {
+          const alive = historyLinkAlive(x, now);
+          const ready = x.state === "ready";
+          const canPay = alive && x.link && x.balance > 0 && x.total > 0 && !x.quoteLink;
+          return (
+            <li key={x.id || x.code} className="overflow-hidden rounded-[22px] bg-white shadow-[0_18px_40px_-24px_rgb(1_25_85/0.45)] ring-1 ring-[rgb(234_1_1/0.25)]">
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-3 p-4 sm:p-5">
+                <Plate plate={v.plate} small />
+                <div className="min-w-0 flex-1 basis-[12rem]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--lp-red-ink)]">{ready ? "Listo para retirar" : "En el taller ahora"}</p>
+                  <p className="lp-display mt-0.5 text-[1.2rem] leading-tight text-[var(--lp-navy)]">{vehicleName(v) || "Vehículo"}</p>
+                  <p className="mt-0.5 text-sm text-[var(--lp-mute)]">Orden {x.code}{x.inAt ? `, ingresó el ${date(x.inAt)}` : ""}</p>
+                </div>
+                {x.total > 0 && (
+                  <div className="flex basis-full items-baseline gap-2 sm:block sm:basis-auto sm:shrink-0 sm:text-right">
+                    <p className="text-sm text-[var(--lp-mute)] sm:text-xs">{x.balance > 0 ? "Saldo por pagar" : "Total"}</p>
+                    <p className={cn("lp-display tabular-nums text-[1.15rem]", x.balance > 0 ? "text-[var(--lp-red-ink)]" : "text-[var(--lp-navy)]")}>{formatMoney(x.balance > 0 ? x.balance : x.total)}</p>
+                  </div>
+                )}
+              </div>
+              <div className="px-4 sm:px-5">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-semibold text-[var(--lp-ink)]">{x.statusLabel || VISIT_LABEL[x.state]}</span>
+                  <span className="tabular-nums text-[var(--lp-mute)]">{x.progress}%</span>
+                </div>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--lp-paper)]" role="progressbar" aria-valuenow={x.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Avance de la orden">
+                  <div className={cn("h-full rounded-full", ready ? "bg-[#1faa53]" : "bg-[var(--lp-electric)]")} style={{ width: `${Math.max(4, x.progress)}%` }} />
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 border-t border-[var(--lp-line)] bg-[var(--lp-paper)]/60 p-3 sm:flex sm:flex-wrap sm:px-5">
+                {x.quoteLink && alive && <a href={x.quoteLink} className="lp-btn lp-btn-red col-span-2 !min-h-[44px] !px-4 !text-sm"><ThumbsUp className="h-4 w-4" aria-hidden /> Aprobar cotización</a>}
+                {canPay && <a href={`${x.link}#pago`} className="lp-btn lp-btn-navy col-span-2 !min-h-[44px] !px-4 !text-sm"><CreditCard className="h-4 w-4" aria-hidden /> Pagar</a>}
+                {alive && x.link && <a href={x.link} className="lp-btn lp-btn-line !min-h-[44px] !px-4 !text-sm"><ExternalLink className="h-4 w-4" aria-hidden /> Ver cómo va</a>}
+                {x.id && <Link to={historyVisitPath(token, x.id)} className="lp-btn lp-btn-line !min-h-[44px] !px-4 !text-sm">Detalle <ChevronRight className="h-4 w-4" aria-hidden /></Link>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -396,7 +452,7 @@ function VehicleDetail({ v, fleet }: { v: HistoryVehicleView; fleet: boolean }) 
   );
 }
 
-function Plate({ plate, small }: { plate: string; small?: boolean }) {
+export function Plate({ plate, small }: { plate: string; small?: boolean }) {
   return (
     <span
       className={cn(
@@ -511,6 +567,7 @@ function Visits({ v, now }: { v: HistoryVehicleView; now: number }) {
 }
 
 function VisitCard({ x, now }: { x: HistoryVisitView; now: number }) {
+  const { token = "" } = useParams();
   const open = x.state !== "delivered";
   const alive = historyLinkAlive(x, now);
   const lines = x.work.length + x.parts.length;
@@ -544,7 +601,7 @@ function VisitCard({ x, now }: { x: HistoryVisitView; now: number }) {
             </div>
           )}
         </div>
-        {(x.total > 0 || alive) && (
+        {x.total > 0 && (
           <footer className="border-t border-[var(--lp-line)] px-5 py-3.5">
             {x.total > 0 && <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
               <div><dt className="inline text-[var(--lp-mute)]">Total </dt><dd className="inline font-semibold tabular-nums">{formatMoney(x.total)}</dd></div>
@@ -556,12 +613,21 @@ function VisitCard({ x, now }: { x: HistoryVisitView; now: number }) {
                 {x.payments.map((p) => <li key={p.code}>Recibo {p.code}: {formatMoney(p.amount)} en {p.method.toLowerCase()}{p.at ? `, ${date(p.at)}` : ""}</li>)}
               </ul>
             )}
-            {alive && x.link && (
-              <a href={x.link} className={cn("inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--lp-electric-ink)] underline-offset-4 hover:underline", x.total > 0 && "mt-3")}>
-                <ExternalLink className="h-4 w-4" aria-hidden /> {open ? "Ver cómo va la orden" : "Ver orden y recibo"}
-              </a>
-            )}
           </footer>
+        )}
+        {!x.id && alive && x.link && (
+          <a href={x.link} className="flex min-h-[48px] items-center gap-1.5 border-t border-[var(--lp-line)] px-5 py-3 text-sm font-semibold text-[var(--lp-electric-ink)]">
+            <ExternalLink className="h-4 w-4" aria-hidden /> {open ? "Ver cómo va la orden" : "Ver orden y recibo"}
+          </a>
+        )}
+        {x.id && (
+          <Link
+            to={historyVisitPath(token, x.id)}
+            className="flex min-h-[48px] items-center justify-between gap-3 rounded-b-[22px] border-t border-[var(--lp-line)] px-5 py-3 text-sm font-semibold text-[var(--lp-electric-ink)] hover:bg-[var(--lp-paper)]"
+          >
+            <span>{open ? "Ver detalle y cómo va" : "Ver detalle, fotos y recibos"}</span>
+            <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+          </Link>
         )}
       </article>
     </li>

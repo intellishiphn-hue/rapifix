@@ -461,5 +461,7 @@ export interface PublicPortal {
   proof?: PublicProof | null;
   /** hay cupones que el cliente puede escribir en su link (muestra "¿Tiene un cupón?") */
   couponsAvailable?: boolean;
+  /** "/historial/TOKEN" del cliente o de la empresa, solo si su historial está activo */
+  history?: string | null;
   updatedAt: TimestampLike;
 }

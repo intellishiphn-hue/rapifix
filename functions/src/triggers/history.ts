@@ -1,6 +1,9 @@
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { orderCol } from "@rapifix/shared";
+import { db } from "../lib/admin";
 import { REGION } from "../lib/params";
-import { ownersOfPlate, ownersOfVehicle, ownersOfVehicleId, rebuildHistories, type HistoryOwner } from "../lib/history";
+import { buildPortal } from "../lib/portal";
+import { autoEnableHistories, ownersOfPlate, ownersOfVehicle, ownersOfVehicleId, rebuildHistories, type HistoryOwner } from "../lib/history";
 
 /**
  * "Mi historial RAPIFIX": rehace publicHistory/{token} del cliente y de la empresa cuando cambia algo
@@ -23,6 +26,9 @@ export const onWorkOrderHistory = onDocumentWritten({ document: "tenants/{tid}/w
   const before = e.data?.before.data();
   const after = e.data?.after.data();
   if (!changed(before, after, ORDER_FIELDS)) return;
+  // Orden nueva (cualquier camino): si el cliente o la empresa nunca tuvieron historial, se activa solo.
+  // insertWorkOrder ya lo hace; aquí queda de respaldo (es idempotente).
+  if (!before && after) await autoEnableHistories(e.params.tid, after, "system");
   await rebuildHistories(e.params.tid, [
     customer(before?.customerId), customer(after?.customerId), company(before?.companyId), company(after?.companyId),
   ]);
@@ -88,17 +94,43 @@ export const onVehicleHistory = onDocumentWritten({ document: "tenants/{tid}/veh
   await rebuildHistories(e.params.tid, [...ownersOfVehicle(before), ...ownersOfVehicle(after)]);
 });
 
-/** Nombre del cliente o datos de la empresa que se muestran (nombre y forma de pago). */
+/**
+ * Portales (/orden/:token) que muestran el botón "Ver mi historial RAPIFIX" de este dueño: órdenes abiertas
+ * o entregadas hace menos de 31 días (los demás portales ya vencieron). Se rehacen cuando el link
+ * se activa, cambia o se desactiva.
+ */
+async function rebuildOwnerPortals(tid: string, owner: HistoryOwner) {
+  const field = owner.kind === "company" ? "companyId" : "customerId";
+  const snap = await db.collection(orderCol.workOrders(tid)).where(field, "==", owner.id).limit(2000).get();
+  const since = Date.now() - 31 * 86_400_000;
+  const ids = snap.docs
+    .filter((d) => d.get("portalToken") && d.get("portalEnabled") !== false)
+    // Las órdenes de un vehículo de flota muestran el historial de la empresa, no el del chofer
+    .filter((d) => owner.kind === "company" || !d.get("companyId"))
+    .filter((d) => d.get("isOpen") === true || (d.get("deliveredAt")?.toMillis?.() ?? 0) > since)
+    .map((d) => d.id);
+  for (let i = 0; i < ids.length; i += 4) {
+    await Promise.all(ids.slice(i, i + 4).map((id) => buildPortal(tid, id).catch((err) => console.error("portal", tid, id, err))));
+  }
+}
+
+const LINK_FIELDS = ["history.token", "history.enabled"];
+
+/** Nombre del cliente o datos de la empresa que se muestran (nombre y forma de pago); y el link en los portales. */
 export const onCustomerHistory = onDocumentWritten({ document: "tenants/{tid}/customers/{id}", region: REGION }, async (e) => {
   const before = e.data?.before.data();
   const after = e.data?.after.data();
+  const owner = customer(e.params.id)!;
+  if (after && changed(before, after, LINK_FIELDS)) await rebuildOwnerPortals(e.params.tid, owner);
   if (!after?.history?.enabled || !changed(before, after, ["fullName"])) return;
-  await rebuildHistories(e.params.tid, [customer(e.params.id)]);
+  await rebuildHistories(e.params.tid, [owner]);
 });
 
 export const onCompanyHistory = onDocumentWritten({ document: "tenants/{tid}/companies/{id}", region: REGION }, async (e) => {
   const before = e.data?.before.data();
   const after = e.data?.after.data();
+  const owner = company(e.params.id)!;
+  if (after && changed(before, after, LINK_FIELDS)) await rebuildOwnerPortals(e.params.tid, owner);
   if (!after?.history?.enabled || !changed(before, after, ["name", "paymentTerms", "creditDays", "cutoffDay", "monthlyDueDays"])) return;
-  await rebuildHistories(e.params.tid, [company(e.params.id)]);
+  await rebuildHistories(e.params.tid, [owner]);
 });

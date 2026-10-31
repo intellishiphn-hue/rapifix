@@ -547,6 +547,14 @@ service cloud.firestore {
       allow get: if true;
       allow list: if false;
       allow write: if false;
+
+      // Detalle de cada visita (lo arma el servidor). Solo con la ruta exacta y mientras el historial exista:
+      // al cambiar o desactivar el link se borra el documento principal y el detalle deja de leerse.
+      match /visits/{orderId} {
+        allow get: if exists(/databases/$(database)/documents/publicHistory/$(token));
+        allow list: if false;
+        allow write: if false;
+      }
     }
 
     // Todo lo demás está cerrado por defecto

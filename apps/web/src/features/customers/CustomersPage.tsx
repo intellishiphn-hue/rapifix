@@ -15,6 +15,7 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { useCarwashCustomerIds } from "@/features/carwash/api";
 import { useCustomers, type StatusFilter } from "./api";
 import { CustomerFormDialog } from "./CustomerFormDialog";
+import { BulkHistoryButton } from "@/features/history/BulkHistoryButton";
 
 const PAGE = 25;
 
@@ -39,7 +40,12 @@ export function CustomersPage() {
       <PageHeader
         title="Clientes"
         description="Personas y empresas que traen sus vehículos a RAPIFIX."
-        actions={canWrite && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Nuevo cliente</Button>}
+        actions={
+          <>
+            <BulkHistoryButton kind="customer" />
+            {canWrite && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Nuevo cliente</Button>}
+          </>
+        }
       />
 
       <Card>

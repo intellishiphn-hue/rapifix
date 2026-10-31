@@ -7,6 +7,7 @@ import {
 import { db } from "./admin";
 import type { Caller } from "./guards";
 import { secureToken } from "./token";
+import { autoEnableHistories } from "./history";
 
 export async function resolveTechnicians(tid: string, ids: string[]) {
   const unique = [...new Set(ids)];
@@ -117,5 +118,8 @@ export async function insertWorkOrder(caller: Caller, name: string, p: NewOrderP
   });
 
   await logMileage(vehicleRef, p.reception.mileageIn, "reception", caller, name, `Recepción ${code}`, mileageUnit);
+  // "Mi historial RAPIFIX" siempre activo: si el cliente (o la empresa del vehículo) nunca lo tuvo, se activa ahora.
+  // Si el taller lo desactivó a propósito, no se toca. Nunca hace fallar la orden.
+  await autoEnableHistories(tid, { customerId, companyId: (v.companyId as string | undefined) || null, code }, caller.uid).catch((err) => console.error("historial", err));
   return { orderId: ref.id, code };
 }

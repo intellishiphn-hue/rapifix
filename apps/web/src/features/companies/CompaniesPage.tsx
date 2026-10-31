@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, Skeleton } from "@/components/ui/Feedback";
 import { StatCard } from "@/features/finance/parts";
 import { useCompanies } from "./api";
 import { CompanyFormDialog } from "./CompanyFormDialog";
+import { BulkHistoryButton } from "@/features/history/BulkHistoryButton";
 
 export function TermsBadge({ company }: { company: Pick<Company, "paymentTerms" | "creditDays" | "cutoffDay" | "monthlyDueDays"> }) {
   const tone = company.paymentTerms === "cash" ? "gray" : company.paymentTerms === "credit" ? "blue" : "amber";
@@ -46,7 +47,12 @@ export function CompaniesPage() {
       <PageHeader
         title="Empresas"
         description="Clientes con flota: sus vehículos, órdenes, estado de cuenta y reportes."
-        actions={can("companies.write") && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Nueva empresa</Button>}
+        actions={
+          <>
+            <BulkHistoryButton kind="company" />
+            {can("companies.write") && <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Nueva empresa</Button>}
+          </>
+        }
       />
 
       <div className={cn("mb-5 grid grid-cols-2 gap-3", money ? "lg:grid-cols-4" : "lg:grid-cols-3")}>

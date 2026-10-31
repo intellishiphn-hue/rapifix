@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { STATUS_META, type WorkOrder, type WorkOrderStatus } from "@rapifix/shared";
+import { STATUS_META, templateForStatus, templateUsesHistory, type WorkOrder, type WorkOrderStatus } from "@rapifix/shared";
 import { useAuth } from "@/lib/auth/useAuth";
 import { errorMessage } from "@/lib/errors";
 import { Button } from "@/components/ui/Button";
@@ -9,7 +9,7 @@ import { useSettings } from "@/features/settings/api";
 import { changeWorkOrderStatus } from "./api";
 import { StatusChangeDialog } from "./StatusChangeDialog";
 import { WhatsAppComposer } from "./WhatsAppComposer";
-import { messageForStatus } from "./whatsapp";
+import { historyUrlForOrder, messageForStatus } from "./whatsapp";
 import { useWaSilentSend } from "@/features/whatsapp/auto";
 
 const NEEDS_FORM: WorkOrderStatus[] = ["DELIVERED", "CANCELLED"];
@@ -38,7 +38,10 @@ export function useStatusChange() {
     try {
       await changeWorkOrderStatus({ orderId: order.id, toStatus: to });
       toast.success(`${order.code}: ${STATUS_META[to].label}`);
-      const text = desk ? messageForStatus(order, to, settings) : null;
+      // Listo y entrega llevan al final el link del historial (si está activo)
+      const key = templateForStatus(to)?.key;
+      const historial = desk && key && templateUsesHistory(key) ? await historyUrlForOrder(order) : "";
+      const text = desk ? messageForStatus(order, to, settings, historial) : null;
       // Con "Enviar sin preguntar" el aviso sale solo; si no se puede, se abre el mensaje como siempre.
       const phone = order.customer.whatsapp || order.customer.phone || "";
       if (text && !(await silentSend({ phone, name: order.customer.fullName, body: text, context: "orden", orderId: order.id, orderCode: order.code }))) {
